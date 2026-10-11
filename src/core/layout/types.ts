@@ -99,7 +99,6 @@ export interface LayoutResult {
 }
 
 export interface LayoutConfig {
-  axis: 'x';
   baseTps: number;
   /**
    * 电路层：红石线、中继器、音符盒都在这一层。
@@ -113,8 +112,4 @@ export interface LayoutConfig {
   /** 分线列单侧最多延伸多少行；总和弦容量为 2*dMax + 1 */
   dMax: number;
   trackPitch: number | 'auto';
-  leadInCells: number;
-  maxSegmentCells: number;
-  bridgeTicks: number;
-  maxRegionSize: number;
 }

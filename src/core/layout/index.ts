@@ -23,16 +23,11 @@ import type { TrackModel } from '../midi/types';
 import { buildForcedLayout } from './forced';
 
 export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
-  axis: 'x',
   baseTps: 20,
   circuitY: 1,
   floorY: 0,
   dMax: 14,
   trackPitch: 'auto',
-  leadInCells: 3,
-  maxSegmentCells: 4096,
-  bridgeTicks: 2,
-  maxRegionSize: 32,
 };
 
 export interface LayoutOptions {
