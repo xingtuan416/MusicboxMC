@@ -1,0 +1,13 @@
+# Store every text file with LF in the repository, regardless of the platform
+# that checks it out. This matches .editorconfig (end_of_line = lf) and
+# Prettier (endOfLine: "lf"), and it stops Windows checkouts from showing
+# every file as modified just because of line-ending conversion.
+* text=auto eol=lf
+
+# Binary assets must never be normalised.
+*.png binary
+*.ico binary
+*.jar binary
+*.zip binary
+*.ogg binary
+*.litematic binary
