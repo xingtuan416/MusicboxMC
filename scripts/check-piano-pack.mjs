@@ -78,7 +78,7 @@ function readJson(entries, name) {
   try {
     return JSON.parse(data.toString('utf8').replace(/^\uFEFF/, ''));
   } catch (error) {
-    throw new Error(`${name} 不是合法 JSON：${error.message}`);
+    throw new Error(`${name} 不是合法 JSON：${error.message}`, { cause: error });
   }
 }
 
@@ -88,7 +88,7 @@ function soundName(value) {
   const sounds = value.sounds;
   if (!Array.isArray(sounds) || sounds.length === 0) return null;
   const first = sounds[0];
-  return typeof first === 'string' ? first : first?.name ?? null;
+  return typeof first === 'string' ? first : (first?.name ?? null);
 }
 
 const input = process.argv[2];

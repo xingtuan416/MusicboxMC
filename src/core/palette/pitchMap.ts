@@ -147,17 +147,13 @@ function applyOutOfRange(
     return pick(p < low ? low : high);
   }
   // 'warn' 与 'octave' 都按整数八度平移回可用音域，区别只在上层是否提示用户
-  let shifted = p;
   const octaves = Math.ceil((low - p) / 12);
-  shifted = p + 12 * octaves;
+  let shifted = p + 12 * octaves;
   if (shifted > high) shifted -= 12;
   return pick(shifted);
 }
 
-function selectRegion(
-  midi: number,
-  regions: RegionTable,
-): { region: PitchRegion; note: number } | null {
+function selectRegion(midi: number, regions: RegionTable): { region: PitchRegion; note: number } | null {
   let best: { region: PitchRegion; note: number; distance: number } | null = null;
   for (const region of REGION_PRIORITY) {
     const def = regions[region];

@@ -79,24 +79,21 @@ function registerIpc(): void {
     try {
       return analyzeFile(assertFile(path));
     } catch (e) {
-      throw new Error(`解析失败：${(e as Error).message}`);
+      throw new Error(`解析失败：${(e as Error).message}`, { cause: e });
     }
   });
 
-  ipcMain.handle(
-    'song:generate',
-    (_e, path: unknown, options: GenerateOptions, outputPath: unknown) => {
-      try {
-        const file = assertFile(path);
-        if (typeof outputPath === 'string' && outputPath.length > 0) {
-          return generateToFile(file, outputPath, options ?? {});
-        }
-        return generate(file, options ?? {}).result;
-      } catch (e) {
-        throw new Error(`生成失败：${(e as Error).message}`);
+  ipcMain.handle('song:generate', (_e, path: unknown, options: GenerateOptions, outputPath: unknown) => {
+    try {
+      const file = assertFile(path);
+      if (typeof outputPath === 'string' && outputPath.length > 0) {
+        return generateToFile(file, outputPath, options ?? {});
       }
-    },
-  );
+      return generate(file, options ?? {}).result;
+    } catch (e) {
+      throw new Error(`生成失败：${(e as Error).message}`, { cause: e });
+    }
+  });
 
   ipcMain.handle('shell:reveal', (_e, path: unknown) => {
     if (typeof path === 'string' && existsSync(path)) shell.showItemInFolder(path);

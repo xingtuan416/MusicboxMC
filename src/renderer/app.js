@@ -51,7 +51,7 @@ function banner(kind, text) {
 function resetBanner() {
   bannerState.level = null;
   bannerState.lines = [];
-} 
+}
 
 function hideBanner() {
   resetBanner();
@@ -60,14 +60,15 @@ function hideBanner() {
 
 function updateWorkflowUI(stage, res) {
   const steps = ['stepImport', 'stepSettings', 'stepPreview', 'stepExport'];
-  const stepIndex = {
-    waiting: 0,
-    reading: 0,
-    ready: 1,
-    generating: 2,
-    generated: 3,
-    error: 0,
-  }[stage] ?? 0;
+  const stepIndex =
+    {
+      waiting: 0,
+      reading: 0,
+      ready: 1,
+      generating: 2,
+      generated: 3,
+      error: 0,
+    }[stage] ?? 0;
 
   for (const [index, id] of steps.entries()) {
     const el = $(id);
@@ -164,7 +165,9 @@ function table(headers, rows) {
   const thead = create('thead');
   const hr = create('tr');
   for (const h of headers) {
-    hr.append(create('th', typeof h === 'object' && h.num ? 'num' : null, typeof h === 'object' ? h.label : h));
+    hr.append(
+      create('th', typeof h === 'object' && h.num ? 'num' : null, typeof h === 'object' ? h.label : h),
+    );
   }
   thead.append(hr);
 
@@ -225,7 +228,9 @@ function renderOverview(res) {
     create(
       'p',
       null,
-      res.success ? '投影已经生成，可以打开电路预览检查最终布局。' : '曲目已经读取，可以继续调整参数并生成投影。',
+      res.success
+        ? '投影已经生成，可以打开电路预览检查最终布局。'
+        : '曲目已经读取，可以继续调整参数并生成投影。',
     ),
   );
   const metrics = create('div', 'overview-metrics');
@@ -283,7 +288,11 @@ function renderOverview(res) {
       card(
         `变速段 (${res.tempoSegments.length})`,
         table(
-          [{ label: 'tick', num: true }, { label: '时间 (s)', num: true }, { label: 'BPM', num: true }],
+          [
+            { label: 'tick', num: true },
+            { label: '时间 (s)', num: true },
+            { label: 'BPM', num: true },
+          ],
           res.tempoSegments.map((t) => [t.ticks, t.timeSec.toFixed(3), t.bpm.toFixed(2)]),
         ),
       ),
@@ -306,9 +315,13 @@ function renderOverview(res) {
 
   if (res.success) {
     if (res.playbackMode === 'command') {
-      banner('warn', WARN_TEXT.COMMAND_PLAYBACK_REQUIREMENTS(
-        { chainLength: res.commandPlayback.chainLength, budget: res.commandPlayback.chainBudget },
-      ));
+      banner(
+        'warn',
+        WARN_TEXT.COMMAND_PLAYBACK_REQUIREMENTS({
+          chainLength: res.commandPlayback.chainLength,
+          budget: res.commandPlayback.chainBudget,
+        }),
+      );
       const soundWarning = res.warnings.find((warning) => warning.code === 'COMMAND_SOUND_PRESSURE');
       if (soundWarning) banner('warn', WARN_TEXT.COMMAND_SOUND_PRESSURE(soundWarning));
       const sizeWarning = res.warnings.find((warning) => warning.code === 'COMMAND_STRUCTURE_SIZE');
@@ -339,12 +352,17 @@ function renderOverview(res) {
     );
     if (res.commandPlayback) {
       const coords = (pos) => `${pos.x}, ${pos.y}, ${pos.z}`;
-      box.append(card('播放器控制', kv([
-        ['开始 / 重播坐标', coords(res.commandPlayback.start)],
-        ['停止坐标', coords(res.commandPlayback.stop)],
-        ['坐标基准', '投影原点（未旋转）'],
-        ['计分板命名空间', res.commandPlayback.objective],
-      ])));
+      box.append(
+        card(
+          '播放器控制',
+          kv([
+            ['开始 / 重播坐标', coords(res.commandPlayback.start)],
+            ['停止坐标', coords(res.commandPlayback.stop)],
+            ['坐标基准', '投影原点（未旋转）'],
+            ['计分板命名空间', res.commandPlayback.objective],
+          ]),
+        ),
+      );
     }
 
     box.append(
@@ -366,7 +384,11 @@ function renderOverview(res) {
       card(
         '变速换算表',
         table(
-          [{ label: '倍率', num: true }, { label: 'tick rate', num: true }, { label: '实际时长', num: true }],
+          [
+            { label: '倍率', num: true },
+            { label: 'tick rate', num: true },
+            { label: '实际时长', num: true },
+          ],
           res.speedTable.map((r) => [`${r.factor.toFixed(2)}×`, r.tickRate, fmtDuration(r.durationSec)]),
         ),
       ),
@@ -400,9 +422,12 @@ const WARN_TEXT = {
   COMMAND_STRUCTURE_SIZE: (w) =>
     `命令播放器含 ${w.commandBlocks} 个命令方块，超过安全参考值 ${w.limit}：粘贴与加载会明显变慢，` +
     `命令链每刻的遍历步数也随之增加。建议先排除不必要的音轨或缩短曲目再生成。`,
-  POLYPHONY_EXCEEDED: (w) => `tick ${w.tick}：量化音群 ${w.n} 个音，超过单列容量 ${w.limit}，溢出音符另行处理`,
-  FORCE_MERGE_LEAD_IN: (w) => `强制合并：全曲统一启动等待 ${w.ticks} 游戏刻，峰值 ${w.peakNotes} 音；曲内相对时序不变`,
-  FANOUT_EXPANDED: (w) => `tick ${w.tick}：${w.n} 个音使用 ${w.stages} 级续电分支，单级两侧容量 ${w.limit}；仍为同一主线且同刻发声`,
+  POLYPHONY_EXCEEDED: (w) =>
+    `tick ${w.tick}：量化音群 ${w.n} 个音，超过单列容量 ${w.limit}，溢出音符另行处理`,
+  FORCE_MERGE_LEAD_IN: (w) =>
+    `强制合并：全曲统一启动等待 ${w.ticks} 游戏刻，峰值 ${w.peakNotes} 音；曲内相对时序不变`,
+  FANOUT_EXPANDED: (w) =>
+    `tick ${w.tick}：${w.n} 个音使用 ${w.stages} 级续电分支，单级两侧容量 ${w.limit}；仍为同一主线且同刻发声`,
   OUT_OF_RANGE: (w) =>
     `MIDI ${w.midi} 超出资源包音域 F#1-F#7，处理方式：${OUT_OF_RANGE_ACTION_TEXT[w.action] || w.action}`,
   SEGMENT_HARD_CUT: (w) => `tick ${w.tick}：骨架被迫硬切分段`,
@@ -456,13 +481,7 @@ function renderWarnings(warnings) {
   const counts = new Map();
   for (const w of warnings) counts.set(w.code, (counts.get(w.code) || 0) + 1);
 
-  box.append(
-    create(
-      'p',
-      'hint',
-      [...counts.entries()].map(([c, n]) => `${c}×${n}`).join('　'),
-    ),
-  );
+  box.append(create('p', 'hint', [...counts.entries()].map(([c, n]) => `${c}×${n}`).join('　')));
 
   const shown = warnings.slice(0, 500);
   for (const w of shown) {
@@ -536,7 +555,7 @@ function displayBlockName(block) {
 }
 
 /** 每个格子 38px（96dpi 下约 1cm，用户要求至少 1cm 大）。 */
-const CELL = 38;
+const BASE_CELL = 38;
 /** 左侧行头宽度（显示 Z 行号与所属音轨） */
 const GUTTER = 150;
 /** 顶部刻度尺高度（X 轴 = 时间方向） */
@@ -606,9 +625,10 @@ function renderPreview(res) {
   const hint = $('previewHint');
   const wrap = $('canvasWrap');
   const preview = res && res.preview;
-  $('previewDescription').textContent = res?.playbackMode === 'command'
-    ? '命令播放器 · 立体结构俯视图'
-    : '向右是时间，向下是不同音轨的空间排布。';
+  $('previewDescription').textContent =
+    res?.playbackMode === 'command'
+      ? '命令播放器 · 立体结构俯视图'
+      : '向右是时间，向下是不同音轨的空间排布。';
 
   if (!preview || preview.size.x === 0) {
     canvas.width = 0;
@@ -634,12 +654,13 @@ function renderPreview(res) {
   // Include fixed headers in the area budget, not just the circuit rectangle.
   const cssArea = MAX_CANVAS_AREA / (dpr * dpr);
   const areaB = GUTTER * z + RULER * x;
-  const areaCell = (2 * Math.max(1, cssArea - GUTTER * RULER)) /
+  const areaCell =
+    (2 * Math.max(1, cssArea - GUTTER * RULER)) /
     (areaB + Math.sqrt(areaB * areaB + 4 * x * z * Math.max(1, cssArea - GUTTER * RULER)));
-  const requestedCell = 38 * state.previewScale;
+  const requestedCell = BASE_CELL * state.previewScale;
   // 长曲目自动缩小到安全画布尺寸，避免 canvas.width 超过 Chromium 上限后整块空白。
   const CELL = Math.min(requestedCell, dimensionCell, areaCell);
-  const renderScale = CELL / 38;
+  const renderScale = CELL / BASE_CELL;
   state.previewRenderScale = renderScale;
   const showGrid = $('showGrid').checked;
   const showNotes = $('showNotes').checked;
@@ -696,8 +717,12 @@ function renderPreview(res) {
     ctx.fillRect(0, y, 3, CELL);
     if (region && absoluteZ === region.position.z) {
       const t = trackOf.get(region.trackIndex);
-      const label = res.playbackMode === 'command' ? '命令播放器'
-        : t ? `轨${region.trackIndex + 1} ${t.instrument}` : `轨${region.trackIndex + 1}`;
+      const label =
+        res.playbackMode === 'command'
+          ? '命令播放器'
+          : t
+            ? `轨${region.trackIndex + 1} ${t.instrument}`
+            : `轨${region.trackIndex + 1}`;
       ctx.fillStyle = '#4d4a44';
       ctx.font = '12px system-ui, sans-serif';
       ctx.fillText(label.slice(0, 18), 10, y + CELL / 2);
@@ -718,8 +743,14 @@ function renderPreview(res) {
       ctx.fillRect(px(gx), pz(gz), CELL, CELL);
       ctx.globalAlpha = 1;
       if (base.includes('command_block') && CELL >= 18) {
-        label(ctx, base === 'minecraft:repeating_command_block' ? 'R' : base === 'minecraft:command_block' ? 'I' : 'C',
-          px(gx) + CELL / 2, pz(gz) + CELL / 2, '#ffffff', 'bold 11px system-ui');
+        label(
+          ctx,
+          base === 'minecraft:repeating_command_block' ? 'R' : base === 'minecraft:command_block' ? 'I' : 'C',
+          px(gx) + CELL / 2,
+          pz(gz) + CELL / 2,
+          '#ffffff',
+          'bold 11px system-ui',
+        );
       }
     }
   }
@@ -732,8 +763,12 @@ function renderPreview(res) {
   const linkAt = (gx, gz) => {
     if (gx < 0 || gx >= x || gz < 0 || gz >= z) return false;
     const b = preview.wireCells[gz * x + gx] || preview.noteCells[gz * x + gx];
-    return b === 'minecraft:redstone_wire' || b === 'minecraft:repeater' || b === 'minecraft:note_block' ||
-      b === 'minecraft:stone';
+    return (
+      b === 'minecraft:redstone_wire' ||
+      b === 'minecraft:repeater' ||
+      b === 'minecraft:note_block' ||
+      b === 'minecraft:stone'
+    );
   };
   const linkDirections = (gx, gz) => ({
     left: linkAt(gx - 1, gz),
@@ -759,9 +794,18 @@ function renderPreview(res) {
       ctx.beginPath();
       ctx.moveTo(cx, cy);
       if (directions.right) ctx.lineTo(px(gx + 1) + CELL / 2, cy);
-      if (directions.left) ctx.moveTo(cx, cy), ctx.lineTo(px(gx - 1) + CELL / 2, cy);
-      if (directions.up) ctx.moveTo(cx, cy), ctx.lineTo(cx, pz(gz - 1) + CELL / 2);
-      if (directions.down) ctx.moveTo(cx, cy), ctx.lineTo(cx, pz(gz + 1) + CELL / 2);
+      if (directions.left) {
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(px(gx - 1) + CELL / 2, cy);
+      }
+      if (directions.up) {
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx, pz(gz - 1) + CELL / 2);
+      }
+      if (directions.down) {
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx, pz(gz + 1) + CELL / 2);
+      }
       ctx.stroke();
 
       const degree = Object.values(directions).filter(Boolean).length;
@@ -792,7 +836,14 @@ function renderPreview(res) {
       const cy = y0 + CELL / 2;
       const inset = Math.max(3, CELL * 0.09);
 
-      drawTileShadow(ctx, x0 + inset, y0 + inset, CELL - inset * 2, CELL - inset * 2, Math.max(4, CELL * 0.12));
+      drawTileShadow(
+        ctx,
+        x0 + inset,
+        y0 + inset,
+        CELL - inset * 2,
+        CELL - inset * 2,
+        Math.max(4, CELL * 0.12),
+      );
       fillRoundedRect(
         ctx,
         x0 + inset,
@@ -852,7 +903,14 @@ function renderPreview(res) {
           '#4f4b45',
         );
         ctx.lineWidth = 1;
-        label(ctx, `${delay}t`, cx, y0 + badgeHeight / 2 + Math.max(2, CELL * 0.05), '#fffaf2', `bold ${Math.max(9, CELL * 0.22)}px ui-monospace, monospace`);
+        label(
+          ctx,
+          `${delay}t`,
+          cx,
+          y0 + badgeHeight / 2 + Math.max(2, CELL * 0.05),
+          '#fffaf2',
+          `bold ${Math.max(9, CELL * 0.22)}px ui-monospace, monospace`,
+        );
       }
     }
   }
@@ -874,7 +932,14 @@ function renderPreview(res) {
         const cy = y0 + CELL / 2 + 2;
         const inset = Math.max(3, CELL * 0.08);
 
-        drawTileShadow(ctx, x0 + inset, y0 + inset, CELL - inset * 2, CELL - inset * 2, Math.max(4, CELL * 0.12));
+        drawTileShadow(
+          ctx,
+          x0 + inset,
+          y0 + inset,
+          CELL - inset * 2,
+          CELL - inset * 2,
+          Math.max(4, CELL * 0.12),
+        );
         fillRoundedRect(
           ctx,
           x0 + inset,
@@ -890,14 +955,24 @@ function renderPreview(res) {
         ctx.fillStyle = 'rgba(255, 232, 193, 0.32)';
         ctx.fillRect(x0 + inset + 2, y0 + inset + 3, CELL - inset * 2 - 4, Math.max(2, CELL * 0.07));
         ctx.fillStyle = 'rgba(65, 31, 13, 0.24)';
-        ctx.fillRect(x0 + inset + 2, y0 + CELL - inset - Math.max(4, CELL * 0.13), CELL - inset * 2 - 4, Math.max(2, CELL * 0.07));
+        ctx.fillRect(
+          x0 + inset + 2,
+          y0 + CELL - inset - Math.max(4, CELL * 0.13),
+          CELL - inset * 2 - 4,
+          Math.max(2, CELL * 0.07),
+        );
 
         // 音符记号
         const noteStem = Math.max(9, CELL * 0.3);
         const noteHead = Math.max(4, CELL * 0.13);
         ctx.fillStyle = '#fff6e7';
         ctx.fillRect(cx + CELL * 0.02, cy - noteStem * 0.9, Math.max(2, CELL * 0.07), noteStem);
-        ctx.fillRect(cx + CELL * 0.02, cy - noteStem * 0.9, Math.max(7, CELL * 0.22), Math.max(2, CELL * 0.07));
+        ctx.fillRect(
+          cx + CELL * 0.02,
+          cy - noteStem * 0.9,
+          Math.max(7, CELL * 0.22),
+          Math.max(2, CELL * 0.07),
+        );
         ctx.beginPath();
         ctx.ellipse(cx - CELL * 0.11, cy + CELL * 0.12, noteHead, noteHead * 0.78, -0.2, 0, Math.PI * 2);
         ctx.fill();
@@ -945,7 +1020,9 @@ function renderPreview(res) {
   ctx.lineTo(w, gridY0 + 0.5);
   ctx.stroke();
 
-  const nonEmpty = preview.wireCells.filter(Boolean).length + preview.baseCells.filter(Boolean).length +
+  const nonEmpty =
+    preview.wireCells.filter(Boolean).length +
+    preview.baseCells.filter(Boolean).length +
     (showNotes ? preview.noteCells.filter(Boolean).length : 0);
   const trackCount = res.stats?.outputTrackCount ?? (res.tracks || []).filter((t) => t.noteCount > 0).length;
   $('previewSize').textContent = `${x} × ${z}`;
@@ -995,8 +1072,8 @@ function fitPreview() {
   if (!preview || !preview.size?.x || !wrap) return;
   const availableWidth = Math.max(320, wrap.clientWidth - 40);
   const availableHeight = Math.max(220, wrap.clientHeight - 40);
-  const widthScale = availableWidth / (GUTTER + preview.size.x * 38);
-  const heightScale = availableHeight / (RULER + preview.size.z * 38);
+  const widthScale = availableWidth / (GUTTER + preview.size.x * BASE_CELL);
+  const heightScale = availableHeight / (RULER + preview.size.z * BASE_CELL);
   setPreviewScale(Math.min(1.35, Math.max(0.45, Math.min(widthScale, heightScale))));
 }
 
@@ -1192,7 +1269,8 @@ function bind() {
 
   $('btnSaveAs').addEventListener('click', async () => {
     const current = $('outputPath').value.trim();
-    const suggested = current || (($('filePath').value.split(/[\\/]/).pop() || 'output').replace(/\.midi?$/i, ''));
+    const suggested =
+      current || ($('filePath').value.split(/[\\/]/).pop() || 'output').replace(/\.midi?$/i, '');
     const picked = await api.chooseOutput(suggested.replace(/\.litematic$/i, ''));
     if (picked) {
       $('outputPath').value = picked;
