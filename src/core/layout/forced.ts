@@ -1,6 +1,15 @@
 import { mapPitch, type MappedPitch, type RegionTable } from '../palette/pitchMap';
 import type { BlockResolver } from '../palette/blockTable';
 import {
+  noteBlock,
+  plainBlock,
+  redstoneWire,
+  repeater,
+  type BlockState,
+  type RepeaterFacing,
+} from '../palette/noteBlock';
+import { place } from './placement';
+import {
   chordCapacity,
   gameTickToRedstone,
   GAME_TICKS_PER_REDSTONE_TICK,
@@ -142,27 +151,22 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
     const support = resolve({ slot: 'wireSupport', trackIndex: input.index });
     if (support === 'minecraft:air') throw new Error('强制合并的红石粉和中继器支撑方块不能为空气');
     const key = (pos: Vec3): string => `${pos.x},${pos.y},${pos.z}`;
-    const put = (x: number, y: number, z: number, block: string, props?: Record<string, string>): void => {
-      const placement = { pos: { x, y, z }, block, props };
+    const put = (x: number, y: number, z: number, state: BlockState): void => {
+      const placement = place({ x, y, z }, state);
       if (occupied.has(key(placement.pos))) throw new Error(`强制合并电路坐标冲突：${key(placement.pos)}`);
       occupied.set(key(placement.pos), placement);
       placements.push(placement);
     };
-    const supported = (x: number, z: number, block: string, props?: Record<string, string>): void => {
-      put(x, config.circuitY, z, block, props);
-      put(x, config.floorY, z, support);
+    const supported = (x: number, z: number, state: BlockState): void => {
+      put(x, config.circuitY, z, state);
+      put(x, config.floorY, z, plainBlock(support));
     };
     const wire = (x: number, z: number, main = false): void => {
-      supported(x, z, 'minecraft:redstone_wire', { power: '0' });
+      supported(x, z, redstoneWire(0));
       if (main) steps.push({ kind: 'wire', ticks: 1 });
     };
-    const relay = (x: number, z: number, delay: number, facing: string, main = false): void => {
-      supported(x, z, 'minecraft:repeater', {
-        delay: String(delay),
-        facing,
-        powered: 'false',
-        locked: 'false',
-      });
+    const relay = (x: number, z: number, delay: number, facing: RepeaterFacing, main = false): void => {
+      supported(x, z, repeater(facing, delay));
       if (main) steps.push({ kind: 'repeater', ticks: delay as 1 | 2 | 3 | 4 });
     };
     let x = 0;
@@ -177,7 +181,7 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
       }
       const rootX = x++;
       // Use a dedicated solid feed block, not a sounding note or a user-overridden material.
-      supported(rootX, zBase, 'minecraft:stone');
+      supported(rootX, zBase, plainBlock('minecraft:stone'));
       const rows = [Math.ceil(group.notes.length / 2), Math.floor(group.notes.length / 2)];
       for (let sideIndex = 0; sideIndex < rows.length; sideIndex++) {
         const sign = sideIndex === 0 ? 1 : -1;
@@ -212,12 +216,8 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
         const notePos = { x: noteX, y: config.circuitY, z };
         const blockPos = { x: noteX, y: config.floorY, z };
         const block = resolve({ slot: 'noteBase', trackIndex: input.index, region: note.region });
-        put(notePos.x, notePos.y, notePos.z, 'minecraft:note_block', {
-          instrument: note.instrument,
-          note: String(note.note),
-          powered: 'false',
-        });
-        put(blockPos.x, blockPos.y, blockPos.z, block);
+        put(notePos.x, notePos.y, notePos.z, noteBlock(note.note, note.instrument));
+        put(blockPos.x, blockPos.y, blockPos.z, plainBlock(block));
         notePlacements.push({ notePos, blockPos, note: note.note, block, path });
       });
       taps.push({ id: taps.length, x: rootX, t: group.rt, d: branchDelay, notes: notePlacements });

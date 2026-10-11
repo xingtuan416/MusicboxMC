@@ -11,6 +11,8 @@ import type {
 } from './types';
 import { mapPitch, type NoteBlockInstrument, type PitchRegion, type RegionTable } from '../palette/pitchMap';
 import type { BlockResolver } from '../palette/blockTable';
+import { noteBlock, plainBlock, redstoneWire, repeater } from '../palette/noteBlock';
+import { place } from './placement';
 
 /** 单个音符的时间/音高输入。tick 为游戏刻（默认 20/秒）。 */
 export interface TrackNote {
@@ -363,48 +365,38 @@ export function buildTrack(opts: BuildTrackOptions): {
   const putWire = (x: number, z: number, isMain: boolean): void => {
     // 投影是**未通电的初始状态**：红石粉一律 power=0，等玩家在起点接电后
     // 由游戏自行传播。写 15 会把整条线预点亮（粘贴即满强度，与实际不符）。
-    placements.push({
-      pos: { x, y: opts.config.circuitY, z },
-      block: 'minecraft:redstone_wire',
-      props: { power: '0' },
-    });
-    placements.push({
-      pos: { x, y: opts.config.floorY, z },
-      block: opts.resolve({ slot: 'wireSupport', trackIndex: opts.trackIndex }),
-    });
+    placements.push(place({ x, y: opts.config.circuitY, z }, redstoneWire(0)));
+    placements.push(
+      place(
+        { x, y: opts.config.floorY, z },
+        plainBlock(opts.resolve({ slot: 'wireSupport', trackIndex: opts.trackIndex })),
+      ),
+    );
     if (isMain) mainSteps.push({ kind: 'wire', ticks: 1 });
   };
 
   const putRelay = (x: number, z: number, delay: number, isMain: boolean): void => {
     // 输出必须朝 +X（音符盒侧）。注意 blockstate 语义：facing 是"从输出侧指向
     // 输入侧"的向量，与箭头方向相反 —— 输出朝东 ⇒ facing=west（输入在西侧线列）。
-    placements.push({
-      pos: { x, y: opts.config.circuitY, z },
-      block: 'minecraft:repeater',
-      props: { facing: 'west', delay: String(delay), locked: 'false', powered: 'false' },
-    });
-    placements.push({
-      pos: { x, y: opts.config.floorY, z },
-      block: opts.resolve({ slot: 'wireSupport', trackIndex: opts.trackIndex }),
-    });
+    placements.push(place({ x, y: opts.config.circuitY, z }, repeater('west', delay)));
+    placements.push(
+      place(
+        { x, y: opts.config.floorY, z },
+        plainBlock(opts.resolve({ slot: 'wireSupport', trackIndex: opts.trackIndex })),
+      ),
+    );
     if (isMain) mainSteps.push({ kind: 'repeater', ticks: asDelay(delay) });
   };
 
   const putNote = (x: number, z: number, n: NoteToPlace, path: Vec3[]): PlacedNote => {
     const notePos: Vec3 = { x, y: opts.config.circuitY, z };
-    placements.push({
-      pos: notePos,
-      block: 'minecraft:note_block',
-      props: {
-        instrument: n.instrument,
-        note: String(n.note),
-        powered: 'false',
-      },
-    });
-    placements.push({
-      pos: { x, y: opts.config.floorY, z },
-      block: opts.resolve({ slot: 'noteBase', trackIndex: opts.trackIndex, region: n.region }),
-    });
+    placements.push(place(notePos, noteBlock(n.note, n.instrument)));
+    placements.push(
+      place(
+        { x, y: opts.config.floorY, z },
+        plainBlock(opts.resolve({ slot: 'noteBase', trackIndex: opts.trackIndex, region: n.region })),
+      ),
+    );
     return {
       notePos,
       blockPos: { x, y: opts.config.floorY, z },
