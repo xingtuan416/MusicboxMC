@@ -73,8 +73,6 @@ export type LayoutWarning =
   | { code: 'COMMAND_STRUCTURE_SIZE'; commandBlocks: number; limit: number }
   | { code: 'POLYPHONY_EXCEEDED'; tick: number; n: number; limit: number }
   | { code: 'OUT_OF_RANGE'; midi: number; action: string }
-  | { code: 'SEGMENT_HARD_CUT'; tick: number }
-  | { code: 'LEAD_IN_USED'; tick: number }
   | { code: 'TIMING_ADJUSTED'; tick: number; actual: number }
   /** 密集音群放不下，已改派到新音轨 */
   | { code: 'TRACK_SPLIT'; tick: number; notes: number }

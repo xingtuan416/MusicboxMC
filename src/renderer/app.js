@@ -430,8 +430,6 @@ const WARN_TEXT = {
     `tick ${w.tick}：${w.n} 个音使用 ${w.stages} 级续电分支，单级两侧容量 ${w.limit}；仍为同一主线且同刻发声`,
   OUT_OF_RANGE: (w) =>
     `MIDI ${w.midi} 超出资源包音域 F#1-F#7，处理方式：${OUT_OF_RANGE_ACTION_TEXT[w.action] || w.action}`,
-  SEGMENT_HARD_CUT: (w) => `tick ${w.tick}：骨架被迫硬切分段`,
-  LEAD_IN_USED: (w) => `tick ${w.tick}：用到了骨架前导段（乐曲开头的提前量）`,
   TIMING_ADJUSTED: (w) => `tick ${w.tick} 的音实际在 tick ${w.actual} 触发，偏移 ${w.actual - w.tick} tick`,
   TRACK_SPLIT: (w) => `tick ${w.tick}：${w.notes} 个音密集放不下，已自动拆到新音轨`,
   SPATIAL_DRIFT: (w) => `tick ${w.tick}：该处空间偏差 ${w.drift} 格，超出多轨对齐容差`,
