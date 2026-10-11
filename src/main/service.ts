@@ -15,7 +15,7 @@ import {
 import { formatDuration, speedTable, type SpeedRow } from '../core/tempo/speed';
 import type { BlockOverrides } from '../core/palette/blockTable';
 import { MAX_QUANTIZE_ERROR_MS, secondsToTick } from '../core/tempo/tick';
-import { buildCommandPlayback, type CommandPlaybackInfo } from '../core/command/playback';
+import { buildCommandPlayback, type CommandPlaybackInfo } from '../core/command';
 
 /** Options the renderer process may submit; only existing core capabilities, no new semantics. */
 export interface GenerateOptions {

@@ -7,7 +7,7 @@ import {
   buildCommandPlayback,
   commandChainPosition,
   COMMAND_STRUCTURE_WARNING_BLOCKS,
-} from '../src/core/command/playback';
+} from '../src/core/command';
 import { buildLitematic, parseLitematic, blockIndex, type RegionData } from '../src/core/litematic/build';
 import { TagType, nbt, type NbtCompound } from '../src/core/nbt/tag';
 import { generate, generateToFile } from '../src/main/service';
