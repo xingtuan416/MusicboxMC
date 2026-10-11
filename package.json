@@ -4,6 +4,7 @@
   "private": true,
   "description": "MIDI → Minecraft 红石音乐 .litematic 投影生成器",
   "license": "GPL-3.0-or-later",
+  "author": "xingtuan416",
   "main": "dist/src/main/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
@@ -11,7 +12,9 @@
     "start": "npm run build && electron dist/src/main/index.js",
     "cli": "tsx scripts/cli.ts",
     "resourcepack:check": "node scripts/check-piano-pack.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dist": "npm run build && electron-builder --win --x64",
+    "dist:dir": "npm run build && electron-builder --win --x64 --dir"
   },
   "dependencies": {
     "@tonejs/midi": "^2.0.28"
@@ -20,8 +23,38 @@
     "@rollup/rollup-win32-x64-msvc": "^4.64.0",
     "@types/node": "^22.10.2",
     "electron": "^33.3.1",
+    "electron-builder": "^26.15.3",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
+  },
+  "build": {
+    "appId": "com.musicboxmc.app",
+    "productName": "MusicboxMC",
+    "directories": {
+      "output": "release"
+    },
+    "electronDist": "node_modules/electron/dist",
+    "files": [
+      "dist/**/*",
+      "package.json",
+      "!**/*.map"
+    ],
+    "win": {
+      "icon": "icon.png",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "zip", "arch": ["x64"] }
+      ]
+    },
+    "artifactName": "${productName}-${version}-win-${arch}.${ext}",
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "artifactName": "${productName}-Setup-${version}-win-${arch}.${ext}"
+    }
   }
 }
