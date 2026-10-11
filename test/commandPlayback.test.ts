@@ -24,10 +24,12 @@ function stackedSong(ticks: number[]): SongModel {
 }
 
 /**
- * `frames` 个量化帧、每帧 `notesPerFrame` 个音，帧间隔 3 游戏刻。
+ * `frames` quantised frames with `notesPerFrame` notes each, three game ticks apart.
  *
- * 音高池固定为 48..67，因此不同 `notesPerFrame` 的曲目拥有**完全相同**的音色集合、
- * 帧数与单音色复用槽位，只有音符总数不同 —— 这正是"结构必须与音符数解耦"的对照条件。
+ * The pitch pool is fixed at 48..67, so songs with different `notesPerFrame` share an
+ * **identical** set of voices, frame count and per-voice slot count - only the total
+ * note count differs. That is exactly the control needed to show that the structure
+ * must be independent of the note count.
  */
 function frameSong(frames: number, notesPerFrame: number): SongModel {
   const notes: SongModel['tracks'][number]['notes'] = [];
@@ -216,7 +218,8 @@ describe('command playback', () => {
   });
 
   it('keeps the player proportional to frames/voices/slots instead of the note count', () => {
-    // 20 倍音符、相同帧数/音色集合/复用槽位：播放器规模必须逐项一致。
+    // 20x the notes with identical frames, voices and slots: the player has to match on
+    // every one of them.
     const sparse = buildCommandPlayback(frameSong(400, 1));
     const dense = buildCommandPlayback(frameSong(400, 20));
     expect(sparse.info.playedNotes).toBe(400);
@@ -226,7 +229,8 @@ describe('command playback', () => {
     }
     expect(dense.commandBlockCount).toBe(sparse.commandBlockCount);
     expect(dense.region.size).toEqual(sparse.region.size);
-    // 8000 音符仍然只是个小播放器；历史实现会为每个音符各放一个命令方块。
+    // 8000 notes is still a small player; the per-note compiler put a command block on
+    // every single one.
     expect(dense.commandBlockCount).toBeLessThan(dense.info.playedNotes / 50);
     expect(buildLitematic([dense.region], meta).length).toBeLessThan(32 * 1024);
     expect(dense.warnings.map((warning) => warning.code)).not.toContain('COMMAND_STRUCTURE_SIZE');
@@ -237,7 +241,8 @@ describe('command playback', () => {
     expect(healthy.commandBlockCount).toBeLessThanOrEqual(COMMAND_STRUCTURE_WARNING_BLOCKS);
     expect(healthy.warnings.map((warning) => warning.code)).not.toContain('COMMAND_STRUCTURE_SIZE');
 
-    // 单刻 5000 个音 ⇒ 复用槽位 5000 ⇒ 结构本身失控，但仍是合法结构，只告警不拦截。
+    // 5000 notes on one tick means 5000 reusable slots, so the structure itself is out
+    // of hand - but it is still valid, so warn rather than refuse.
     const oversized = buildCommandPlayback(stackedSong(Array(5000).fill(0)));
     expect(oversized.commandBlockCount).toBeGreaterThan(COMMAND_STRUCTURE_WARNING_BLOCKS);
     expect(oversized.info.playedNotes).toBe(5000);

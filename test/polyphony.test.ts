@@ -13,8 +13,8 @@ import { song } from './helpers/song';
 
 const cfg = { ...DEFAULT_LAYOUT_CONFIG };
 
-describe('branchRow / chordRows（分线列行分配）', () => {
-  it('行分配沿 +1, −1, +2, −2, … 两侧交替', () => {
+describe('branchRow / chordRows (branch row assignment)', () => {
+  it('alternates sides as +1, -1, +2, -2, ...', () => {
     expect([0, 1, 2, 3, 4, 5].map(branchRow)).toEqual([
       { side: 1, row: 1 },
       { side: -1, row: 1 },
@@ -25,7 +25,7 @@ describe('branchRow / chordRows（分线列行分配）', () => {
     ]);
   });
 
-  it('chordRows = 向单侧延伸的行数（ceil((n−1)/2)）', () => {
+  it('computes chordRows as the rows reached to one side, ceil((n-1)/2)', () => {
     expect(chordRows(0)).toBe(0);
     expect(chordRows(1)).toBe(0);
     expect(chordRows(2)).toBe(1);
@@ -34,18 +34,18 @@ describe('branchRow / chordRows（分线列行分配）', () => {
     expect(chordRows(29)).toBe(14);
   });
 
-  it('单列容量来自信号强度物理上限：1 内联 + 两侧 MAX_SIDE_ROWS 行', () => {
+  it('derives column capacity from signal strength: 1 inline plus MAX_SIDE_ROWS rows on each side', () => {
     expect(MAX_SIDE_ROWS).toBe(14);
     expect(MAX_CHORD_NOTES).toBe(2 * MAX_SIDE_ROWS + 1);
   });
 });
 
-describe('chordRowLayout（≤3 音走一跳传导，≥4 音走分支行）', () => {
-  it('n=1：只有内联音', () => {
+describe('chordRowLayout (single hop up to 3 notes, branch rows from 4)', () => {
+  it('n=1: only the inline note', () => {
     expect(chordRowLayout(1)).toEqual([]);
   });
 
-  it('n=2 / n=3：全部是传导行（不放线、不放中继器）', () => {
+  it('n=2 and n=3: all rows are conducted, with no dust and no repeaters', () => {
     expect(chordRowLayout(2)).toEqual([{ side: 1, row: 1, conducted: true }]);
     expect(chordRowLayout(3)).toEqual([
       { side: -1, row: 1, conducted: true },
@@ -56,13 +56,13 @@ describe('chordRowLayout（≤3 音走一跳传导，≥4 音走分支行）', (
     }
   });
 
-  it('n≥4：全部是分支行（各配一个中继器），行序 +1,−1,+2,−2…', () => {
+  it('n>=4: all rows are branch rows with their own repeater, ordered +1,-1,+2,-2, ...', () => {
     const rows = chordRowLayout(4);
     expect(rows.every((r) => !r.conducted)).toBe(true);
     expect(rows.map((r) => r.side * r.row)).toEqual([1, -1, 2]);
   });
 
-  it('单侧行数不超过 chordRows（Z 跨度不变）', () => {
+  it('never exceeds chordRows on one side, keeping the Z span unchanged', () => {
     for (let n = 2; n <= 29; n++) {
       const rows = chordRowLayout(n);
       expect(Math.max(...rows.map((r) => r.row))).toBe(chordRows(n));
@@ -71,8 +71,8 @@ describe('chordRowLayout（≤3 音走一跳传导，≥4 音走分支行）', (
   });
 });
 
-describe('和弦容量与 overflow 拆轨', () => {
-  it('MAX_CHORD_NOTES 音的和弦放在单轨上，不产生容量告警', () => {
+describe('chord capacity and overflow splitting', () => {
+  it('fits a chord of MAX_CHORD_NOTES on one track without a capacity warning', () => {
     const notes = Array.from({ length: MAX_CHORD_NOTES }, (_, i) => ({
       tick: 0,
       midi: 48 + (i % 12),
@@ -84,7 +84,7 @@ describe('和弦容量与 overflow 拆轨', () => {
     expect(nb).toBe(MAX_CHORD_NOTES);
   });
 
-  it('超容量的部分改派新轨（TRACK_SPLIT），音符不丢', () => {
+  it('moves the surplus to a new track (TRACK_SPLIT) without losing notes', () => {
     const notes = Array.from({ length: MAX_CHORD_NOTES + 5 }, (_, i) => ({
       tick: 0,
       midi: 48 + (i % 12),
@@ -99,7 +99,7 @@ describe('和弦容量与 overflow 拆轨', () => {
     expect(nb).toBe(notes.length);
   });
 
-  it('collectOverflow=false 时超容量部分被截断并告警（不抛错）', () => {
+  it('truncates and warns instead of throwing when collectOverflow is false', () => {
     const notes = Array.from({ length: MAX_CHORD_NOTES + 3 }, (_, i) => ({
       tick: 0,
       midi: 48 + (i % 12),
@@ -119,8 +119,8 @@ describe('和弦容量与 overflow 拆轨', () => {
   });
 });
 
-describe('音组归并与音域处理', () => {
-  it('同一红刻内的音符合为一组（tick 1 与 2 均量化到 rt 1）', () => {
+describe('grouping notes and handling out-of-range pitches', () => {
+  it('merges notes within one redstone tick (ticks 1 and 2 both quantise to rt 1)', () => {
     const res = layout(
       song([
         { tick: 1, midi: 60 },
@@ -133,8 +133,8 @@ describe('音组归并与音域处理', () => {
     expect(nb).toBe(2);
   });
 
-  it('outOfRange=drop：超出音域的音丢弃并告警，其余照常落位', () => {
-    // 默认 F#1..F#7 为 MIDI 30..102；midi 10 超出全部音区
+  it('outOfRange=drop: drops out-of-range notes with a warning and places the rest', () => {
+    // The default range F#1..F#7 is MIDI 30..102, so MIDI 10 is outside every region.
     const res = buildTrack({
       trackIndex: 0,
       zBase: 0,
@@ -152,7 +152,7 @@ describe('音组归并与音域处理', () => {
     expect(nb).toBe(1);
   });
 
-  it('outOfRange=warn：超出音域时八度移调并提示', () => {
+  it('outOfRange=warn: shifts by octaves and reports it', () => {
     const res = buildTrack({
       trackIndex: 0,
       zBase: 0,
@@ -171,7 +171,7 @@ describe('音组归并与音域处理', () => {
     });
   });
 
-  it('outOfRange=octave：超出音域时八度移调但不产生普通告警', () => {
+  it('outOfRange=octave: shifts by octaves without an ordinary warning', () => {
     const res = buildTrack({
       trackIndex: 0,
       zBase: 0,
@@ -186,7 +186,7 @@ describe('音组归并与音域处理', () => {
     expect(res.warnings.some((w) => w.code === 'OUT_OF_RANGE')).toBe(false);
   });
 
-  it('outOfRange=clamp：超出音域时改用最近可用音并提示', () => {
+  it('outOfRange=clamp: uses the nearest available pitch and reports it', () => {
     const res = buildTrack({
       trackIndex: 0,
       zBase: 0,

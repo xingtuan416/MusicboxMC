@@ -1,20 +1,21 @@
 import type { NoteEvent, SongModel, TrackModel } from '../../src/core/midi/types';
 
 /**
- * 测试用的 SongModel 构造器。
+ * SongModel builders for tests.
  *
- * 十个测试文件原本各自手写一份 SongModel / TrackModel / NoteEvent 的字面量，
- * 内容几乎相同，改一次模型就要改十处。这里集中一次，各测试只描述自己关心的
- * 那部分：音轨、音符、乐器。
+ * Ten test files used to hand-write their own SongModel / TrackModel / NoteEvent
+ * literals, all nearly identical, so changing the model meant ten edits. It lives here
+ * once, and each test describes only what it cares about: tracks, notes, instruments.
  *
- * 约定：`tick` 是游戏刻（20/秒），与布局层的时间基准一致；时值与力度固定为
- * 0.1s / 1.0，因为生成器不使用 MIDI 的时值与力度。
+ * Convention: `tick` is in game ticks (20 per second), matching the layout layer's
+ * time base. Duration and velocity are fixed at 0.1s / 1.0 because the generator uses
+ * neither.
  */
 
 export const TEST_TPS = 20;
 
 export interface NoteSpec {
-  /** 触发时刻（游戏刻） */
+  /** Trigger time, in game ticks. */
   tick: number;
   midi: number;
 }
@@ -24,7 +25,7 @@ export interface TrackSpec {
   instrument?: string;
   percussion?: boolean;
   name?: string;
-  /** 覆盖音轨编号；缺省按数组下标。 */
+  /** Override the track index; defaults to the array position. */
   index?: number;
 }
 
@@ -34,7 +35,7 @@ export interface SongSpec {
   durationSec?: number;
 }
 
-/** 展开成完整的音符事件。 */
+/** Expand the shorthand into full note events. */
 function toEvents(notes: NoteSpec[], channel: number): NoteEvent[] {
   return notes.map((note) => ({
     midi: note.midi,
@@ -45,7 +46,7 @@ function toEvents(notes: NoteSpec[], channel: number): NoteEvent[] {
   }));
 }
 
-/** 完整形态：逐轨给出音符、乐器与打击乐标记。 */
+/** Full form: notes, instrument and percussion flag per track. */
 export function buildSong(spec: SongSpec): SongModel {
   return {
     name: spec.name ?? 'test-song',
@@ -69,45 +70,49 @@ export function buildSong(spec: SongSpec): SongModel {
   };
 }
 
-/** 最常见形态：一条钢琴轨。 */
+/** The common case: a single piano track. */
 export function song(notes: NoteSpec[], overrides: Partial<SongSpec> = {}): SongModel {
   return buildSong({ ...overrides, tracks: [{ notes }] });
 }
 
-/** 多轨，每轨只给音符（音高/时间），不带乐器信息。 */
+/** Several tracks, each given notes only, with no instrument information. */
 export function songOfTracks(tracks: NoteSpec[][], overrides: Partial<SongSpec> = {}): SongModel {
   return buildSong({ ...overrides, tracks: tracks.map((notes) => ({ notes })) });
 }
 
-/** 多轨，每轨可单独指定乐器与打击乐标记。 */
+/** Several tracks, each with its own instrument and percussion flag. */
 export function songOfSpecs(tracks: TrackSpec[], overrides: Partial<SongSpec> = {}): SongModel {
   return buildSong({ ...overrides, tracks });
 }
 
 export interface DenseSongOptions {
-  /** 音轨数，缺省 12。 */
+  /** Number of tracks; defaults to 12. */
   tracks?: number;
   durationSec?: number;
-  /** 全曲音符总数，缺省 40000。 */
+  /** Total notes in the song; defaults to 40000. */
   notes?: number;
-  /** 音高范围（半音数），缺省 48。 */
+  /** Pitch span in semitones; defaults to 48. */
   pitchSpan?: number;
-  /** 低音区起点，缺省 36。 */
+  /** Lowest MIDI pitch used; defaults to 36. */
   baseMidi?: number;
-  /** 突发和弦的数量，缺省 200。 */
+  /** Number of burst chords; defaults to 200. */
   bursts?: number;
-  /** 每个突发和弦的音数，缺省 60。 */
+  /** Notes per burst chord; defaults to 60. */
   burstSize?: number;
 }
 
 /**
- * 密集曲目夹具：多轨、长时长、数万音符，且含大量同刻和弦。
+ * A dense fixture: many tracks, a long duration, tens of thousands of notes and a lot
+ * of simultaneous chords.
  *
- * 生成器真正吃力的输入是"音符远多于时刻"的密集谱面，而不是某首具体的曲子；
- * 关键特征是**突发和弦**（几十个音落在同一游戏刻），它决定和弦容量、分支深度
- * 与命令播放的峰值压力。这里按确定性方式合成一份同等量级的输入，因此测试
- * **不依赖任何外部 MIDI 文件**，在别人的机器和 CI 上都会照常运行 —— 依赖
- * 本地文件的测试会静默跳过，等于作者本地跑的测试比贡献者多。
+ * What the generator actually struggles with is a dense score where notes greatly
+ * outnumber moments, not any particular song. The defining feature is the **burst
+ * chord** - dozens of notes landing on one game tick - because it drives chord
+ * capacity, branch depth and command playback peak pressure. This synthesises an
+ * input of comparable scale deterministically, so the tests **depend on no external
+ * MIDI file** and run the same on anyone's machine and in CI. A test that depends on
+ * a local file skips silently, which means the author runs more tests than a
+ * contributor does.
  */
 export function denseSong(options: DenseSongOptions = {}): SongModel {
   const trackCount = options.tracks ?? 12;
@@ -129,7 +134,8 @@ export function denseSong(options: DenseSongOptions = {}): SongModel {
     placed += 1;
   };
 
-  // 突发和弦：均匀散布在全曲，模拟密集段落的同刻音群。
+  // Burst chords, spread evenly through the song, standing in for the simultaneous
+  // note clusters of a dense passage.
   for (let b = 0; b < bursts && placed < burstNotes; b++) {
     const tick = Math.floor(((b + 0.5) * totalTicks) / bursts);
     for (let k = 0; k < burstSize && placed < burstNotes; k++) {
@@ -137,7 +143,7 @@ export function denseSong(options: DenseSongOptions = {}): SongModel {
     }
   }
 
-  // 其余音符均匀铺开，保证整曲都有内容而不是只有几处尖峰。
+  // Spread the rest evenly so the song has content throughout rather than a few spikes.
   for (let i = 0; i < spreadNotes; i++) {
     push(Math.floor((i * totalTicks) / spreadNotes), baseMidi + ((i * 7) % pitchSpan));
   }

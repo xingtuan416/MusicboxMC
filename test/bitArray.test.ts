@@ -8,7 +8,7 @@ describe('bitArray', () => {
     const signed = packLongArray(indices, bits).map((value) => BigInt.asIntN(64, value));
     expect([...unpackLongArray(signed, indices.length, bits)]).toEqual(indices);
   });
-  it('位宽 = max(2, ceil(log2(paletteSize)))', () => {
+  it('bit width = max(2, ceil(log2(paletteSize)))', () => {
     expect(requiredBits(1)).toBe(2);
     expect(requiredBits(2)).toBe(2);
     expect(requiredBits(3)).toBe(2);
@@ -21,7 +21,7 @@ describe('bitArray', () => {
     expect(requiredBits(257)).toBe(9);
   });
 
-  it('round-trip 在小结构上稳定', () => {
+  it('round-trips stably on small structures', () => {
     const indices = Array.from({ length: 27 }, (_, i) => i % 9);
     const bits = requiredBits(9);
     const longs = packLongArray(indices, bits);
@@ -29,7 +29,7 @@ describe('bitArray', () => {
     expect([...back]).toEqual(indices);
   });
 
-  it('跨 64 位边界的紧密打包正确（3 位 × 100）', () => {
+  it('packs tightly across the 64-bit boundary (3 bits x 100)', () => {
     const bits = 3;
     const indices = Array.from({ length: 100 }, (_, i) => i % 8);
     const longs = packLongArray(indices, bits);
@@ -37,8 +37,8 @@ describe('bitArray', () => {
     expect([...unpackLongArray(longs, 100, bits)]).toEqual(indices);
   });
 
-  it('每个条目连续跨越字边界（紧密，非对齐）', () => {
-    // bits=3 时条目 21 起始位 = 63，跨第 0/1 个字
+  it('lets entries span word boundaries contiguously (tight, not aligned)', () => {
+    // With bits=3, entry 21 starts at bit 63 and spans words 0 and 1.
     const bits = 3;
     const indices = new Array(30).fill(0);
     indices[21] = 7;
@@ -47,17 +47,18 @@ describe('bitArray', () => {
     expect(back[21]).toBe(7);
     expect(back[20]).toBe(0);
     expect(back[22]).toBe(0);
-    // 紧密打包下 30*3=90 位只需 2 个 long（对齐打包也要 2 个，但低位组合不同）
+    // Packed tightly, 30*3=90 bits need only 2 longs. Word-aligned packing also needs 2,
+    // but the low bits combine differently.
     expect(longs).toHaveLength(2);
   });
 
-  it('2 位宽（最小）round-trip', () => {
+  it('round-trips at the minimum width of 2 bits', () => {
     const indices = [0, 1, 2, 3, 3, 2, 1, 0, 1, 3];
     const longs = packLongArray(indices, 2);
     expect([...unpackLongArray(longs, indices.length, 2)]).toEqual(indices);
   });
 
-  it('最大索引值不越界', () => {
+  it('keeps the largest index in range', () => {
     for (const paletteSize of [2, 5, 17, 100, 257]) {
       const bits = requiredBits(paletteSize);
       const maxVal = paletteSize - 1;

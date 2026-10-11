@@ -5,7 +5,7 @@ import { song } from './helpers/song';
 
 const cfg = { ...DEFAULT_LAYOUT_CONFIG };
 
-/** 单音 / 三音和弦 / 五音和弦 / 混合间隔，覆盖内联与分支行两类几何 */
+/** Single notes, 3-note and 5-note chords and mixed spacing, covering both inline and branch-row geometry. */
 const CASES: Array<Array<{ tick: number; midi: number }>> = [
   [{ tick: 0, midi: 60 }],
   [
@@ -22,7 +22,7 @@ const CASES: Array<Array<{ tick: number; midi: number }>> = [
   ],
 ];
 
-/** 某轨电路层（y=circuitY）上 (x, z 相对 zBase) 处的方块 */
+/** The block on a track's circuit layer (y = circuitY) at (x, z relative to zBase). */
 function at(
   res: ReturnType<typeof layout>,
   trackIdx: number,
@@ -33,8 +33,8 @@ function at(
   return tr.placements.find((p) => p.pos.x === x && p.pos.y === cfg.circuitY && p.pos.z === tr.zBase + zRel);
 }
 
-describe('音符电路几何（新拓扑：音符盒内联主线，分支行中继器直接供电）', () => {
-  it('音符盒正上方必须是空气，否则不发声', () => {
+describe('note circuit geometry (note blocks inline on the main line, branch repeaters powered directly)', () => {
+  it('leaves air directly above every note block, or it cannot sound', () => {
     for (const notes of CASES) {
       const res = layout(song(notes), { config: cfg, regions: DEFAULT_REGIONS });
       for (const tr of res.tracks) {
@@ -47,7 +47,7 @@ describe('音符电路几何（新拓扑：音符盒内联主线，分支行中�
     }
   });
 
-  it('电路层每个方块下方必须有支撑（红石线/中继器/音符盒都不悬空）', () => {
+  it('supports every circuit-layer block, so no dust, repeater or note block floats', () => {
     for (const notes of CASES) {
       const res = layout(song(notes), { config: cfg, regions: DEFAULT_REGIONS });
       for (const tr of res.tracks) {
@@ -60,7 +60,7 @@ describe('音符电路几何（新拓扑：音符盒内联主线，分支行中�
     }
   });
 
-  it('全部中继器 facing=west（输入朝 −X 线列，输出朝 +X 音符盒）且档位 1–4', () => {
+  it('faces every repeater west (input from the -X line, output to the +X note block) with delay 1-4', () => {
     for (const notes of CASES) {
       const res = layout(song(notes), { config: cfg, regions: DEFAULT_REGIONS });
       for (const tr of res.tracks) {
@@ -75,23 +75,26 @@ describe('音符电路几何（新拓扑：音符盒内联主线，分支行中�
     }
   });
 
-  it('单音主线：[中继器][音符盒] 沿 +X（不需要分线列，输入取自背后的方块）', () => {
-    // 首组 rt=0 → 整轨 +1 红刻前导；组 1 占 x=0..1，全程无红石粉
+  it('lays a single note as [repeater][note block] along +X, with no branch column and input from the block behind', () => {
+    // First group at rt 0, so the whole track gets the +1 redstone tick lead-in; group 1
+    // occupies x=0..1 and there is no dust anywhere.
     const res = layout(song([{ tick: 0, midi: 60 }]), { config: cfg, regions: DEFAULT_REGIONS });
     expect(at(res, 0, 0, 0)?.block).toBe('minecraft:repeater');
     expect(at(res, 0, 1, 0)?.block).toBe('minecraft:note_block');
     expect(res.tracks[0]!.placements.some((p) => p.block === 'minecraft:redstone_wire')).toBe(false);
   });
 
-  it('起始那格红石粉保留（首组有前置中继器时作为接电点）', () => {
-    // 首音 rt=5（tick 10）→ 组前有中继器 ⇒ 先铺一格起始线给玩家接电源
+  it('keeps the starting dust cell as the power connection point when the first group has repeaters ahead of it', () => {
+    // First note at rt 5 (tick 10), so there are repeaters ahead of the group and a
+    // starting dust cell is laid for the player to apply power to.
     const res = layout(song([{ tick: 10, midi: 60 }]), { config: cfg, regions: DEFAULT_REGIONS });
     expect(at(res, 0, 0, 0)?.block).toBe('minecraft:redstone_wire');
     expect(res.tracks[0]!.placements.filter((p) => p.block === 'minecraft:redstone_wire')).toHaveLength(1);
   });
 
-  it('≤3 个音：只用一个中继器充能内联（中间）那个，相邻行由一跳传导点亮', () => {
-    // 三音和弦：内联行 + 上下相邻行，只有一个中继器、一条线
+  it('for up to 3 notes powers only the inline one and lights the neighbours by a single hop', () => {
+    // 3-note chord: the inline row plus the rows above and below it, with a single
+    // repeater and a single dust cell.
     const res = layout(
       song([
         { tick: 0, midi: 60 },
@@ -100,23 +103,23 @@ describe('音符电路几何（新拓扑：音符盒内联主线，分支行中�
       ]),
       { config: cfg, regions: DEFAULT_REGIONS },
     );
-    // 主线行：中继器 → 音符盒（无分线列）
+    // Main row: repeater -> note block, with no branch column.
     expect(at(res, 0, 0, 0)?.block).toBe('minecraft:repeater');
-    // 三行都是音符盒（内联 + 上下传导行）
+    // All three rows hold note blocks: the inline one plus the two conducted rows.
     for (const zRel of [-1, 0, 1]) {
       expect(at(res, 0, 1, zRel)?.block).toBe('minecraft:note_block');
     }
-    // 传导行不放线、不放中继器
+    // Conducted rows carry neither dust nor repeaters.
     for (const zRel of [-1, 1]) {
       expect(at(res, 0, 0, zRel)).toBeUndefined();
     }
-    // 整轨只有 1 个中继器、0 格红石粉
+    // The whole track has exactly one repeater and zero dust cells.
     const tr = res.tracks[0]!;
     expect(tr.placements.filter((p) => p.block === 'minecraft:repeater')).toHaveLength(1);
     expect(tr.placements.filter((p) => p.block === 'minecraft:redstone_wire')).toHaveLength(0);
   });
 
-  it('2 个音同样走传导：1 个中继器 + 相邻两格音符盒', () => {
+  it('treats 2 notes the same way: one repeater and two adjacent note blocks', () => {
     const res = layout(
       song([
         { tick: 0, midi: 60 },
@@ -131,12 +134,12 @@ describe('音符电路几何（新拓扑：音符盒内联主线，分支行中�
     expect(repeaters).toBe(1);
   });
 
-  it('≥4 个音：回到分支模式，每个额外音各占一行、各配一个中继器', () => {
+  it('switches to branch mode from 4 notes up, giving each extra note its own row and repeater', () => {
     const res4 = layout(song([60, 64, 67, 69].map((midi) => ({ tick: 0, midi }))), {
       config: cfg,
       regions: DEFAULT_REGIONS,
     });
-    // 分支行 -1 / +1 / +2 各带线与中继器
+    // Branch rows -1, +1 and +2 each carry dust and a repeater.
     for (const zRel of [-1, 0, 1, 2]) {
       expect(at(res4, 0, 2, zRel)?.block).toBe('minecraft:note_block');
       expect(at(res4, 0, 0, zRel)?.block).toBe('minecraft:redstone_wire');
@@ -147,7 +150,7 @@ describe('音符电路几何（新拓扑：音符盒内联主线，分支行中�
     expect(repeaters).toBe(4);
   });
 
-  it('红石线显式写入四向连接状态，避免投影加载后退化为小点', () => {
+  it('writes dust connections explicitly so the schematic does not load as unconnected dots', () => {
     const res = layout(song([60, 64, 67, 69].map((midi) => ({ tick: 0, midi }))), {
       config: cfg,
       regions: DEFAULT_REGIONS,
@@ -164,7 +167,7 @@ describe('音符电路几何（新拓扑：音符盒内联主线，分支行中�
     });
   });
 
-  it('投影是未通电的初始状态：红石粉一律 power=0，中继器/音符盒 powered=false', () => {
+  it('writes an unpowered schematic: dust at power=0, repeaters and note blocks powered=false', () => {
     for (const notes of CASES) {
       const res = layout(song(notes), { config: cfg, regions: DEFAULT_REGIONS });
       for (const tr of res.tracks) {
@@ -177,7 +180,7 @@ describe('音符电路几何（新拓扑：音符盒内联主线，分支行中�
     }
   });
 
-  it('音符数守恒：不凭空丢音、不凭空多音（截断上限内）', () => {
+  it('conserves the note count, inventing none and losing none within the truncation limit', () => {
     for (const notes of CASES) {
       const res = layout(song(notes), { config: cfg, regions: DEFAULT_REGIONS });
       const nb = res.tracks.reduce(
@@ -188,7 +191,7 @@ describe('音符电路几何（新拓扑：音符盒内联主线，分支行中�
     }
   });
 
-  it('音符盒显式写入资源包所需的 instrument blockstate', () => {
+  it('writes the instrument blockstate the resource pack needs', () => {
     const res = layout(
       song([
         { tick: 0, midi: 30 },

@@ -12,7 +12,7 @@ import { readNbt } from '../src/core/nbt/reader';
 import { TagType, nbt } from '../src/core/nbt/tag';
 
 describe('NBT writer/reader round-trip', () => {
-  it('各标签类型可往返', () => {
+  it('round-trips every tag type', () => {
     const root = nbt.compound({
       b: nbt.byte(-5),
       s: nbt.short(-300),
@@ -44,7 +44,7 @@ describe('NBT writer/reader round-trip', () => {
   });
 });
 
-describe('litematic 组装与回读', () => {
+describe('litematic assembly and read-back', () => {
   const region: RegionData = {
     position: { x: 0, y: 0, z: 0 },
     size: { x: 4, y: 3, z: 2 },
@@ -72,7 +72,7 @@ describe('litematic 组装与回读', () => {
     ],
   };
 
-  it('生成的文件可回读，且 palette[0] 是 air', () => {
+  it('reads back a generated file with air as palette[0]', () => {
     const buf = buildLitematic([region], {
       name: 'Test',
       author: 'MusicboxMC',
@@ -91,7 +91,7 @@ describe('litematic 组装与回读', () => {
     expect(r.palette[0]!.name).toBe('minecraft:air');
   });
 
-  it('方块坐标与状态在回读后一致', () => {
+  it('preserves block coordinates and states through a round trip', () => {
     const buf = buildLitematic([region], {
       name: 'T',
       author: 'A',
@@ -111,11 +111,11 @@ describe('litematic 组装与回读', () => {
     expect(at(0, 1, 0).properties?.note).toBe('12');
     expect(at(0, 0, 0).name).toBe('minecraft:grass_block');
     expect(at(1, 2, 0).properties?.delay).toBe('4');
-    // 未放置处为 air
+    // Anything not placed stays as air.
     expect(at(3, 0, 1).name).toBe('minecraft:air');
   });
 
-  it('超出区域尺寸的方块坐标会报错', () => {
+  it('rejects block coordinates outside the region size', () => {
     expect(() =>
       buildLitematic([{ ...region, blocks: [{ x: 99, y: 0, z: 0, state: { name: 'minecraft:stone' } }] }], {
         name: 'x',

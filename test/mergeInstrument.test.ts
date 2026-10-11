@@ -4,10 +4,10 @@ import { DEFAULT_REGIONS } from '../src/core/palette/pitchMap';
 import { songOfSpecs } from './helpers/song';
 
 /**
- * 同乐器并轨（可选功能，默认关闭）
+ * Merging tracks that share an instrument (opt-in, off by default).
  *
- * 乐器相同的 MIDI 轨合并成一条主线：这些音本来就落在同一条线上，
- * 不再有跨轨 X 漂移；打击乐单独归一类。
+ * MIDI tracks with the same instrument merge onto one main line: those notes now sit
+ * on the same line, so cross-track X drift cannot happen. Percussion is its own class.
  */
 
 const cfg = { ...DEFAULT_LAYOUT_CONFIG };
@@ -19,8 +19,8 @@ function noteBlocks(res: ReturnType<typeof layout>): number {
   );
 }
 
-describe('同乐器并轨', () => {
-  it('默认关闭：每轨一条线', () => {
+describe('merging tracks that share an instrument', () => {
+  it('is off by default: one line per track', () => {
     const res = layout(
       songOfSpecs([
         { instrument: 'Acoustic Grand Piano', notes: [{ tick: 0, midi: 60 }] },
@@ -32,7 +32,7 @@ describe('同乐器并轨', () => {
     expect(noteBlocks(res)).toBe(2);
   });
 
-  it('开启：同乐器的两轨合并为一条主线，音符守恒', () => {
+  it('merges two tracks with the same instrument onto one line, conserving notes', () => {
     const res = layout(
       songOfSpecs([
         { instrument: 'Acoustic Grand Piano', notes: [{ tick: 0, midi: 60 }] },
@@ -44,7 +44,7 @@ describe('同乐器并轨', () => {
     expect(noteBlocks(res)).toBe(2);
   });
 
-  it('不同乐器不合并', () => {
+  it('does not merge different instruments', () => {
     const res = layout(
       songOfSpecs([
         { instrument: 'Acoustic Grand Piano', notes: [{ tick: 0, midi: 60 }] },
@@ -55,7 +55,7 @@ describe('同乐器并轨', () => {
     expect(res.tracks).toHaveLength(2);
   });
 
-  it('打击乐单独归为一类，不与旋律音色混', () => {
+  it('keeps percussion in its own class, apart from melodic instruments', () => {
     const res = layout(
       songOfSpecs([
         { instrument: 'Acoustic Grand Piano', notes: [{ tick: 0, midi: 60 }] },
@@ -64,12 +64,12 @@ describe('同乐器并轨', () => {
       ]),
       { config: cfg, regions: DEFAULT_REGIONS, mergeSameInstrument: true },
     );
-    // 旋律一条 + 打击乐合并成一条
+    // One line for the melody plus one for percussion
     expect(res.tracks).toHaveLength(2);
     expect(noteBlocks(res)).toBe(3);
   });
 
-  it('合并后同刻音变为和弦（走同一分线列），超容量仍按既有规则拆轨且不丢音', () => {
+  it('turns simultaneous notes into a chord on one branch column, splitting past capacity without losing notes', () => {
     const notes = Array.from({ length: 40 }, (_, i) => ({ tick: 0, midi: 48 + (i % 12) }));
     const res = layout(
       songOfSpecs([
@@ -82,12 +82,13 @@ describe('同乐器并轨', () => {
         mergeSameInstrument: true,
       },
     );
-    // 80 音同刻 → 单列容量 29 → 拆成多条线，但音符不丢
+    // 80 notes on one tick against a column capacity of 29: split across several lines,
+    // with no note lost
     expect(res.tracks.length).toBeGreaterThanOrEqual(3);
     expect(noteBlocks(res)).toBe(80);
   });
 
-  it('合并后该轨沿用组内第一个原轨的 index', () => {
+  it('keeps the index of the first original track in the merged group', () => {
     const res = layout(
       songOfSpecs([
         { instrument: 'Piano', notes: [{ tick: 0, midi: 60 }] },

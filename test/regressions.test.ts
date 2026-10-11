@@ -7,8 +7,8 @@ import { DEFAULT_REGIONS } from '../src/core/palette/pitchMap';
 import { TagType } from '../src/core/nbt/tag';
 import { songOfSpecs } from './helpers/song';
 
-describe('回归：布局参数与合轨空间', () => {
-  it('outOfRange=drop 从布局入口生效', () => {
+describe('regression: layout options and merged track space', () => {
+  it('applies outOfRange=drop from the layout entry point', () => {
     const result = layout(
       songOfSpecs([
         {
@@ -35,7 +35,7 @@ describe('回归：布局参数与合轨空间', () => {
     });
   });
 
-  it('dMax 限制单轨和弦容量', () => {
+  it('limits a single track to its chord capacity via dMax', () => {
     const result = layout(
       songOfSpecs([
         {
@@ -61,7 +61,7 @@ describe('回归：布局参数与合轨空间', () => {
     expect(noteBlocks).toBe(7);
   });
 
-  it('合轨后按合并后的最大和弦深度计算轨距，不发生 Z 重叠', () => {
+  it('sizes track spacing from the merged chord depth, with no Z overlap', () => {
     const result = layout(
       songOfSpecs([
         {
@@ -90,8 +90,8 @@ describe('回归：布局参数与合轨空间', () => {
   });
 });
 
-describe('回归：Litematic 元数据', () => {
-  it('EnclosingSize 使用区域包围盒，TotalBlocks 不统计 air', () => {
+describe('regression: litematic metadata', () => {
+  it('derives EnclosingSize from the region bounds and excludes air from TotalBlocks', () => {
     const raw = buildLitematic(
       [
         {

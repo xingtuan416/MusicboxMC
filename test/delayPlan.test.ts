@@ -6,7 +6,7 @@ import { song } from './helpers/song';
 
 const cfg = { ...DEFAULT_LAYOUT_CONFIG };
 
-/** 主线行（z = zBase）上按 X 排序的中继器档位序列 */
+/** Repeater delays along the main row (z = zBase), ordered by X. */
 function mainRepeaterDelays(res: ReturnType<typeof layout>, trackIdx = 0): number[] {
   const tr = res.tracks[trackIdx]!;
   return tr.placements
@@ -15,15 +15,16 @@ function mainRepeaterDelays(res: ReturnType<typeof layout>, trackIdx = 0): numbe
     .map((p) => Number(p.props?.delay));
 }
 
-describe('gameTickToRedstone（红刻量化：1 红刻 = 2 游刻 = 0.1s）', () => {
-  it('四舍五入到 0.1s 网格', () => {
+describe('gameTickToRedstone (redstone-tick quantisation: 1 rt = 2 game ticks = 0.1s)', () => {
+  it('rounds onto the 0.1s grid', () => {
     expect([0, 1, 2, 3, 4, 5, 9, 10].map(gameTickToRedstone)).toEqual([0, 1, 1, 2, 2, 3, 5, 5]);
   });
 });
 
-describe('组间隔 → 中继器档位分解（红石粉 0 延迟，只有中继器计延迟）', () => {
-  it('间隔 ≤4 红刻：单个末级中继器承担全部间隔', () => {
-    // rt 0 与 rt 4（tick 0 与 8），整轨 +1 红刻前导：组 1 R1、组 2 R4
+describe('group gap -> repeater delay breakdown (dust has no delay, only repeaters do)', () => {
+  it('gap <= 4 rt: a single final repeater carries the whole gap', () => {
+    // rt 0 and rt 4 (ticks 0 and 8) with the song-wide +1 redstone tick lead-in:
+    // group 1 R1, group 2 R4
     const res = layout(
       song([
         { tick: 0, midi: 60 },
@@ -34,9 +35,10 @@ describe('组间隔 → 中继器档位分解（红石粉 0 延迟，只有中�
     expect(mainRepeaterDelays(res)).toEqual([1, 4]);
   });
 
-  it('间隔 >4 红刻：前置串联中继器（贪心 4 档）+ 末级中继器', () => {
-    // rt 5 与 rt 10（tick 10 与 20），无前导：组 1 R(4+1)？gap=5 → rest=1,R4；
-    // 组 2 gap=5 → rest=1,R4。主线档位序列 [1, 4, 1, 4]
+  it('gap > 4 rt: chained pre-group repeaters (greedy 4s) plus the final repeater', () => {
+    // rt 5 and rt 10 (ticks 10 and 20), no lead-in: group 1 has gap 5, so rest 1 and the
+    // final repeater is R4;
+    // group 2 also has gap 5, so rest 1 and R4. Main-line delays [1, 4, 1, 4]
     const res = layout(
       song([
         { tick: 10, midi: 60 },
@@ -47,7 +49,7 @@ describe('组间隔 → 中继器档位分解（红石粉 0 延迟，只有中�
     expect(mainRepeaterDelays(res)).toEqual([1, 4, 1, 4]);
   });
 
-  it('中继器档位总和 == 末组红刻 + 全曲前导（累计时序守恒）', () => {
+  it('repeater delays sum to the last group rt plus the lead-in (cumulative timing holds)', () => {
     const ticks = [10, 23, 47, 100, 101, 260];
     const res = layout(song(ticks.map((t, i) => ({ tick: t, midi: 54 + (i % 5) }))), {
       config: cfg,
@@ -61,8 +63,8 @@ describe('组间隔 → 中继器档位分解（红石粉 0 延迟，只有中�
   });
 });
 
-describe('量化误差（不承诺零误差，但必须守恒且 ≤1 游刻/音）', () => {
-  it('placed 全部落在红刻网格：actual = 2·(rt + base)', () => {
+describe('quantisation error (not zero, but bounded at 1 game tick per note and conserved)', () => {
+  it('every placed entry lands on the redstone grid: actual = 2*(rt + base)', () => {
     const ticks = [0, 3, 7, 20, 55];
     const res = layout(song(ticks.map((t, i) => ({ tick: t, midi: 54 + (i % 5) }))), {
       config: cfg,
@@ -70,11 +72,11 @@ describe('量化误差（不承诺零误差，但必须守恒且 ≤1 游刻/音
     });
     for (const p of res.placed) {
       const rt = gameTickToRedstone(p.tick);
-      expect(p.actual - 2 * rt).toBe(2); // 首组 rt=0 → 全曲 base=1
+      expect(p.actual - 2 * rt).toBe(2); // first group at rt 0, so the song-wide base is 1
     }
   });
 
-  it('首组 rt=0：整轨 +1 红刻前导，报一条 TIMING_ADJUSTED', () => {
+  it('first group at rt 0: the track gets the +1 redstone tick lead-in and one TIMING_ADJUSTED', () => {
     const res = layout(song([{ tick: 0, midi: 60 }]), {
       config: cfg,
       regions: DEFAULT_REGIONS,
@@ -84,7 +86,7 @@ describe('量化误差（不承诺零误差，但必须守恒且 ≤1 游刻/音
     expect(ta).toHaveLength(1);
   });
 
-  it('首组 rt≥1：无前导、无告警，actual == 原始游刻', () => {
+  it('first group at rt >= 1: no lead-in, no warning, actual equals the original game tick', () => {
     const res = layout(song([{ tick: 10, midi: 60 }]), {
       config: cfg,
       regions: DEFAULT_REGIONS,
@@ -93,7 +95,7 @@ describe('量化误差（不承诺零误差，但必须守恒且 ≤1 游刻/音
     expect(res.warnings.some((w) => w.code === 'TIMING_ADJUSTED')).toBe(false);
   });
 
-  it('相邻组实际触发差 == 2·(红刻差)，随机谱面 200 次', () => {
+  it('adjacent groups differ by 2*(redstone tick difference), over 200 random scores', () => {
     for (let seed = 0; seed < 200; seed++) {
       let t = 0;
       const notes = [];

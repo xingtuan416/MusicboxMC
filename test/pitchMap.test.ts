@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_REGIONS, mapPitch } from '../src/core/palette/pitchMap';
 
-describe('钢琴全音域资源包音高映射', () => {
-  it('覆盖 F#1 到 F#7（MIDI 30 到 102），并在采样中心使用 note=12', () => {
+describe('pitch mapping for the full-range piano resource pack', () => {
+  it('covers F#1 to F#7 (MIDI 30 to 102) and uses note=12 at the sample centre', () => {
     const expected = [
       [30, 'A', 'bass', 0],
       [42, 'A', 'bass', 12],
@@ -21,7 +21,7 @@ describe('钢琴全音域资源包音高映射', () => {
     }
   });
 
-  it('重叠音区优先使用距离采样中心最近的槽位', () => {
+  it('picks the region closest to the sample centre where regions overlap', () => {
     expect(mapPitch(47).region).toBe('A');
     expect(mapPitch(48).region).toBe('B');
     expect(mapPitch(59).region).toBe('B');
@@ -32,7 +32,7 @@ describe('钢琴全音域资源包音高映射', () => {
     expect(mapPitch(84).region).toBe('E');
   });
 
-  it('F#1 以下与 F#7 以上按策略处理', () => {
+  it('applies the chosen policy below F#1 and above F#7', () => {
     expect(mapPitch(29, DEFAULT_REGIONS, 'drop').dropped).toBe(true);
     expect(mapPitch(103, DEFAULT_REGIONS, 'drop').dropped).toBe(true);
 

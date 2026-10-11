@@ -5,11 +5,11 @@ import { layout } from '../src/core/layout/index';
 import { DEFAULT_REGIONS } from '../src/core/palette/pitchMap';
 import { song } from './helpers/song';
 
-/** 造一个指定 (tick, midi) 的 SongModel，不经过 MIDI 解析。 */
+/** Build a SongModel from explicit (tick, midi) pairs, bypassing MIDI parsing. */
 
 describe('sliceRegions', () => {
-  it('region 内所有方块坐标均非负且落在 size 内', () => {
-    // 3 音和弦会沿 ±Z 展开支线，历史 bug 就是这里产生负 z
+  it('keeps every block coordinate non-negative and inside the region size', () => {
+    // A 3-note chord fans out along +/-Z, which is where negative Z used to leak out.
     const res = layout(
       song([
         { tick: 0, midi: 60 },
@@ -36,7 +36,7 @@ describe('sliceRegions', () => {
     }
   });
 
-  it('切片可直接喂给 buildLitematic 而不抛越界', () => {
+  it('feeds slices straight into buildLitematic without an out-of-bounds error', () => {
     const res = layout(
       song([
         { tick: 0, midi: 60 },
@@ -66,7 +66,8 @@ describe('sliceRegions', () => {
     const parsed = parseLitematic(buf);
     expect(parsed.regions).toHaveLength(slices.length);
 
-    // 回读后音符盒数量必须与切片一致，不能丢音符
+    // Reading the file back must yield the same note block count as the slice: no note
+    // may be lost.
     const expected = slices.reduce(
       (s, sl) => s + sl.blocks.filter((b) => b.block === 'minecraft:note_block').length,
       0,
@@ -81,8 +82,8 @@ describe('sliceRegions', () => {
     expect(actual).toBe(3);
   });
 
-  it('多条音轨（密集拆轨）切片互不重叠且音符总数守恒', () => {
-    // 制造密集段落，触发 layout() 的自动拆轨
+  it('gives split tracks non-overlapping slices and conserves the total note count', () => {
+    // Create a dense passage to trigger layout()'s automatic track splitting.
     const notes: Array<{ tick: number; midi: number }> = [];
     for (let i = 0; i < 14; i++) {
       for (const m of [60, 64, 67]) notes.push({ tick: i, midi: m });
@@ -94,11 +95,12 @@ describe('sliceRegions', () => {
       (s, sl) => s + sl.blocks.filter((b) => b.block === 'minecraft:note_block').length,
       0,
     );
-    // layout 允许截断超上限的组，但不得凭空多出音符
+    // layout() may truncate a group past the limit, but must never invent notes.
     expect(noteCount).toBeGreaterThan(0);
     expect(noteCount).toBeLessThanOrEqual(notes.length);
 
-    // 每个 region 的 z 区间不应与另一个完全重合（否则说明坐标没平移好）
+    // No region's Z range may coincide exactly with another's, which would mean the
+    // translation to region-local coordinates went wrong.
     const zRanges = slices.map((s) => [s.position.z, s.position.z + s.size.z] as const);
     for (let i = 0; i < zRanges.length; i++) {
       for (let j = i + 1; j < zRanges.length; j++) {
@@ -110,7 +112,7 @@ describe('sliceRegions', () => {
     }
   });
 
-  it('回读的方块落在与原布局相同的相对位置', () => {
+  it('reads blocks back at the same relative positions as the original layout', () => {
     const res = layout(
       song([
         { tick: 0, midi: 60 },

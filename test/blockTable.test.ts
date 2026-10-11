@@ -9,26 +9,26 @@ import {
 
 const base = { global: DEFAULT_BLOCK_TABLE };
 
-describe('blockTable 选方块解析层', () => {
-  it('无覆盖时回落到全局默认', () => {
+describe('blockTable material resolver', () => {
+  it('falls back to the global default when nothing overrides it', () => {
     const r = createBlockResolver(base);
     expect(r({ slot: 'wireSupport' })).toBe(DEFAULT_BLOCK_TABLE.wireSupport);
     expect(r({ slot: 'noteBase' })).toBe(DEFAULT_BLOCK_TABLE.noteBase);
     expect(r({ slot: 'floor' })).toBe(DEFAULT_BLOCK_TABLE.floor);
   });
 
-  it('默认值本身可按音区给（垫底方块本来就分音区）', () => {
+  it('supports per-region defaults, since base blocks already differ by region', () => {
     const r = createBlockResolver({
       global: DEFAULT_BLOCK_TABLE,
       regions: { A: { noteBase: 'minecraft:dirt' }, C: { noteBase: 'minecraft:bedrock' } },
     });
     expect(r({ slot: 'noteBase', region: 'A' })).toBe('minecraft:dirt');
     expect(r({ slot: 'noteBase', region: 'C' })).toBe('minecraft:bedrock');
-    // 没给音区默认的仍回落全局
+    // A slot with no region default still falls back to the global default.
     expect(r({ slot: 'noteBase', region: 'B' })).toBe(DEFAULT_BLOCK_TABLE.noteBase);
   });
 
-  it('音轨级覆盖生效，且不影响其它音轨', () => {
+  it('applies a track-level override without affecting other tracks', () => {
     const r = createBlockResolver(base, {
       tracks: { 0: { wireSupport: 'minecraft:stone' } },
     });
@@ -37,7 +37,7 @@ describe('blockTable 选方块解析层', () => {
     expect(r({ slot: 'wireSupport' })).toBe(DEFAULT_BLOCK_TABLE.wireSupport);
   });
 
-  it('覆盖优先于默认，且音区覆盖 > 音轨覆盖', () => {
+  it('prefers overrides to defaults, with region overrides above track overrides', () => {
     const r = createBlockResolver(
       { global: DEFAULT_BLOCK_TABLE, regions: { A: { noteBase: 'minecraft:dirt' } } },
       {
@@ -45,29 +45,29 @@ describe('blockTable 选方块解析层', () => {
         regions: { A: { noteBase: 'minecraft:obsidian' } },
       },
     );
-    // 音区覆盖赢过音轨覆盖
+    // A region override beats a track override.
     expect(r({ slot: 'noteBase', trackIndex: 0, region: 'A' })).toBe('minecraft:obsidian');
-    // 音区没覆盖的槽位走音轨覆盖
+    // A slot the region does not override falls through to the track override.
     expect(r({ slot: 'wireSupport', trackIndex: 0, region: 'A' })).toBe(DEFAULT_BLOCK_TABLE.wireSupport);
-    // 音区覆盖赢过音区默认
+    // A region override beats a region default.
     expect(r({ slot: 'noteBase', region: 'A' })).toBe('minecraft:obsidian');
   });
 
-  it('允许把任意位置解析成空气', () => {
+  it('allows resolving any slot to air', () => {
     const r = createBlockResolver(base, { regions: { C: { wireSupport: AIR } } });
     const got = r({ slot: 'wireSupport', region: 'C' });
     expect(got).toBe(AIR);
     expect(isAir(got)).toBe(true);
   });
 
-  it('覆盖表不必写全，缺的槽位逐级回落', () => {
+  it('lets an override table be partial, falling back slot by slot', () => {
     const partial: Partial<BlockTable> = { floor: 'minecraft:bedrock' };
     const r = createBlockResolver(base, { tracks: { 2: partial } });
     expect(r({ slot: 'floor', trackIndex: 2 })).toBe('minecraft:bedrock');
     expect(r({ slot: 'noteBase', trackIndex: 2 })).toBe(DEFAULT_BLOCK_TABLE.noteBase);
   });
 
-  it('isAir 只认 minecraft:air', () => {
+  it('recognises only minecraft:air as air', () => {
     expect(isAir(AIR)).toBe(true);
     expect(isAir('minecraft:dirt')).toBe(false);
   });

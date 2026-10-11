@@ -7,13 +7,17 @@ import { sliceRegions } from '../src/core/layout/regions';
 import { songOfTracks } from './helpers/song';
 
 /**
- * 布局验收：结构与音符守恒。
+ * Layout acceptance: structure and note conservation.
  *
- * 这里**不做**红石时序仿真。红石粉的传播、被中继器充能的音符盒给相邻红石粉
- * 供电、以及相邻组的网络隔离，都需要游戏内实测确认；用简化模型去断言时序只会
- * 给出虚假的安全感。因此自动化验收只锁两类与实现无关的不变量：
- *   1. 结构不变量：音符数守恒、跨轨不重叠、可导出合法 .litematic；
- *   2. 时序不变量：placed 的相对时序与 MIDI 红刻量化严格一致（含跨轨）。
+ * This suite deliberately does **not** simulate redstone timing. Dust propagation, a
+ * powered note block feeding the dust next to it, and the network isolation between
+ * adjacent groups all need in-game verification; asserting timing against a
+ * simplified model would only give false confidence. So the automated acceptance
+ * checks two invariants that hold regardless of those unknowns:
+ *   1. structure: note count is conserved, tracks do not overlap, a valid .litematic
+ *      can be exported;
+ *   2. timing: the relative order in `placed` matches MIDI redstone-tick quantisation
+ *      exactly, across tracks as well.
  */
 
 const cfg = { ...DEFAULT_LAYOUT_CONFIG };
@@ -25,8 +29,8 @@ function noteBlockCount(res: ReturnType<typeof layout>): number {
   );
 }
 
-describe('布局验收：结构与音符守恒', () => {
-  it('单音/和弦/密集谱面：音符数守恒', () => {
+describe('layout acceptance: structure and note conservation', () => {
+  it('conserves the note count for single notes, chords and dense scores', () => {
     const cases = [
       [{ tick: 0, midi: 60 }],
       [60, 64, 67].map((midi) => ({ tick: 0, midi })),
@@ -39,7 +43,7 @@ describe('布局验收：结构与音符守恒', () => {
     }
   });
 
-  it('所有轨的 Z 区间互不重叠（含 overflow 拆出的新轨）', () => {
+  it('gives every track a non-overlapping Z range, including tracks split off by overflow', () => {
     const res = layout(
       songOfTracks([
         Array.from({ length: 35 }, (_, i) => ({ tick: 0, midi: 48 + (i % 12) })),
@@ -60,7 +64,7 @@ describe('布局验收：结构与音符守恒', () => {
     }
   });
 
-  it('可导出合法 .litematic（region 坐标非负、音符盒不丢）', () => {
+  it('exports a valid .litematic with non-negative region coordinates and no lost note blocks', () => {
     const res = layout(
       songOfTracks([
         [{ tick: 0, midi: 60 }],
@@ -96,22 +100,23 @@ describe('布局验收：结构与音符守恒', () => {
   });
 });
 
-describe('布局验收：时序不变量', () => {
-  it('跨轨相对时序守恒：轨 A 首音 rt0、轨 B 首音 rt10，实际差必须为 20 游刻', () => {
-    // 锁住"全曲统一前导"：中继器最小 1 档使 rt0 的音只能 1 红刻后发声，
-    // 前导必须全曲统一，否则不同轨的首音偏移会互相不一致。
+describe('layout acceptance: timing invariants', () => {
+  it('preserves cross-track relative timing: track A starts at rt 0 and B at rt 10, so the difference must be 20 game ticks', () => {
+    // Lock down the song-wide lead-in: a repeater's minimum delay means a note at rt 0
+    // cannot sound before one redstone tick in, and that offset has to be identical on
+    // every track or their first notes end up misaligned.
     const res = layout(songOfTracks([[{ tick: 0, midi: 60 }], [{ tick: 20, midi: 62 }]]), {
       config: cfg,
       regions: DEFAULT_REGIONS,
     });
     const a = res.placed.find((p) => p.trackIndex === 0)!;
     const b = res.placed.find((p) => p.trackIndex === 1)!;
-    expect(a.actual).toBe(2); // rt 0 + 全曲前导 1 红刻
-    expect(b.actual).toBe(22); // rt 10 + 同一前导
+    expect(a.actual).toBe(2); // rt 0 plus the song-wide lead-in of 1 redstone tick
+    expect(b.actual).toBe(22); // rt 10 plus the same lead-in
     expect(b.actual - a.actual).toBe(20);
   });
 
-  it('随机谱面：每轨相邻组 actual 差 == 2·(红刻差)', () => {
+  it('keeps adjacent groups 2*(redstone tick difference) apart on random scores', () => {
     for (let seed = 0; seed < 100; seed++) {
       const notes = [];
       let t = seed % 4;
@@ -129,10 +134,10 @@ describe('布局验收：时序不变量', () => {
     }
   });
 
-  it('和弦组只报一条 placed，触发红刻 == 量化红刻', () => {
+  it('reports one placed entry per chord group, firing on its quantised redstone tick', () => {
     const notes = [60, 64, 67, 70].map((midi) => ({ tick: 12, midi }));
     const res = layout(songOfTracks([notes]), { config: cfg, regions: DEFAULT_REGIONS });
     expect(res.placed).toHaveLength(1);
-    expect(res.placed[0]!.actual).toBe(12); // rt 6（tick 12）；首组 rt≥1 → 无前导
+    expect(res.placed[0]!.actual).toBe(12); // rt 6 (tick 12); first group at rt >= 1, so no lead-in
   });
 });

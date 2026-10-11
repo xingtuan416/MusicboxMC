@@ -3,11 +3,12 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * 告警码的"声明 / 发出 / 展示"三处必须对齐。
+ * A warning code has to line up in three places: declared, emitted and displayed.
  *
- * 历史问题：`SEGMENT_HARD_CUT` 与 `LEAD_IN_USED` 在类型里声明、在界面上写了
- * 文案，但全仓库没有任何一处发出它们 —— 界面等于在承诺一个生成器永远给不出
- * 的诊断。TypeScript 看不到这种缺口，所以这里直接扫描源码把它锁住。
+ * This went wrong before: `SEGMENT_HARD_CUT` and `LEAD_IN_USED` were declared in the
+ * type and had translated text in the UI, but nothing anywhere emitted them - the
+ * interface was promising a diagnostic the generator could never produce. TypeScript
+ * cannot see that gap, so this test scans the sources and locks it down.
  */
 
 const TYPES_FILE = 'src/core/layout/types.ts';
