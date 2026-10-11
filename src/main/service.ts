@@ -15,6 +15,7 @@ import {
 import { formatDuration, speedTable, type SpeedRow } from '../core/tempo/speed';
 import type { BlockOverrides } from '../core/palette/blockTable';
 import { MAX_QUANTIZE_ERROR_MS, secondsToTick } from '../core/tempo/tick';
+import { buildCommandPlayback, type CommandPlaybackInfo } from '../core/command/playback';
 
 /** 渲染进程可提交的参数。只暴露 core 层已有能力，不引入新语义。 */
 export interface GenerateOptions {
@@ -27,6 +28,12 @@ export interface GenerateOptions {
   blocks?: BlockOverrides;
   /** 同乐器并轨：乐器相同的音轨合并成一条主线（打击乐单独一类） */
   mergeSameInstrument?: boolean;
+  /** One connected spine per instrument, with song-wide branch-delay compensation. */
+  forceMergeSameInstrument?: boolean;
+  /** Independent opt-in backend: all retained notes use per-player playsound commands. */
+  commandPlayback?: boolean;
+  /** Expected world maxCommandChainLength; defaults to the Java 1.20.4 default. */
+  commandChainBudget?: number;
   speedPresets?: number[];
   author?: string;
 }
@@ -66,6 +73,8 @@ export interface PreviewData {
   wireCells: string[];
   /** 与 wireCells 同长度：中继器的档位（1–4），非中继器为 '' */
   repeaterDelays: string[];
+  /** Direction of repeater input, matching Minecraft facing blockstate. */
+  repeaterFacings: string[];
   /** 音符盒 */
   noteCells: string[];
   /** 地板（垫底方块） */
@@ -102,6 +111,10 @@ export interface GenerateResult extends AnalyzeResult {
   outputPath?: string;
   /** 投影字节数 */
   bytes: number;
+  /** Backend actually used for this generation, not the current UI setting. */
+  playbackMode?: 'redstone' | 'command';
+  /** Command-mode controls, score namespace and execution budgets. */
+  commandPlayback?: CommandPlaybackInfo;
   /** 需要在前端提示的、超出资源包音域（F#1-F#7）的音符数 */
   outOfRangeNotes: number;
   stats: {
@@ -110,6 +123,12 @@ export interface GenerateResult extends AnalyzeResult {
     circuitBlocks: number;
     regionCount: number;
     elapsedMs: number;
+    /** Actual generated spines, not the original MIDI track count. */
+    outputTrackCount: number;
+    /** Uniform startup compensation, in game ticks. */
+    startupDelayTicks: number;
+    /** Zero in redstone mode. Command mode emits no note blocks. */
+    commandBlockCount?: number;
   };
   speedTable: SpeedRow[];
   warnings: LayoutWarning[];
@@ -126,6 +145,7 @@ const EMPTY_PREVIEW: PreviewData = {
   origin: { x: 0, z: 0 },
   wireCells: EMPTY_LAYER,
   repeaterDelays: EMPTY_LAYER,
+  repeaterFacings: EMPTY_LAYER,
   noteCells: EMPTY_LAYER,
   baseCells: EMPTY_LAYER,
   blocks: [],
@@ -181,13 +201,14 @@ function toRegionData(slices: ReturnType<typeof sliceRegions>): RegionData[] {
 }
 
 /** 预览按方块类型分层：线 / 音符盒 / 地板。 */
-function buildPreview(slices: ReturnType<typeof sliceRegions>): PreviewData {
+function buildPreview(slices: ReturnType<typeof sliceRegions>, topDown = false): PreviewData {
   if (slices.length === 0) {
     return {
       size: { x: 0, y: 0, z: 0 },
       origin: { x: 0, z: 0 },
       wireCells: EMPTY_LAYER,
       repeaterDelays: EMPTY_LAYER,
+      repeaterFacings: EMPTY_LAYER,
       noteCells: EMPTY_LAYER,
       baseCells: EMPTY_LAYER,
       blocks: [],
@@ -212,8 +233,10 @@ function buildPreview(slices: ReturnType<typeof sliceRegions>): PreviewData {
   // 行优先 index = z * width + x
   const wireCells = new Array<string>(width * depth).fill('');
   const repeaterDelays = new Array<string>(width * depth).fill('');
+  const repeaterFacings = new Array<string>(width * depth).fill('');
   const noteCells = new Array<string>(width * depth).fill('');
   const baseCells = new Array<string>(width * depth).fill('');
+  const baseHeights = topDown ? new Array<number>(width * depth).fill(-Infinity) : [];
 
   for (const s of slices) {
     for (const b of s.blocks) {
@@ -227,24 +250,81 @@ function buildPreview(slices: ReturnType<typeof sliceRegions>): PreviewData {
           : b.block === 'minecraft:note_block'
             ? noteCells
             : baseCells;
-      // 同格只可能有一个方块（布局保证不重叠），无需覆盖规则
-      if (layer[idx] === '') layer[idx] = b.block;
+      // Command mode is vertically packed; show its topmost block at each X/Z.
+      if (layer === baseCells && topDown) {
+        if (b.pos.y >= baseHeights[idx]!) {
+          layer[idx] = b.block;
+          baseHeights[idx] = b.pos.y;
+        }
+      } else if (layer[idx] === '') layer[idx] = b.block;
       if (layer === wireCells && b.block === 'minecraft:repeater') {
         repeaterDelays[idx] = b.props?.delay ?? '';
+        repeaterFacings[idx] = b.props?.facing ?? 'west';
       }
     }
   }
 
-  const all = [...wireCells, ...noteCells, ...baseCells].filter((c) => c !== '');
+  const blocks = new Set<string>();
+  for (const layer of [wireCells, noteCells, baseCells]) {
+    for (const cell of layer) if (cell) blocks.add(cell);
+  }
   return {
     size: { x: width, y: maxY, z: depth },
     origin: { x: minX, z: minZ },
     wireCells,
     repeaterDelays,
+    repeaterFacings,
     noteCells,
     baseCells,
-    blocks: [...new Set(all)].sort(),
+    blocks: [...blocks].sort(),
   };
+}
+
+function generateCommands(
+  song: SongModel, base: AnalyzeResult, options: GenerateOptions, start: number,
+): { result: GenerateResult; buffer: Buffer | null } {
+  const presets = options.speedPresets ?? DEFAULT_PRESETS;
+  const baseTps = options.baseTps ?? DEFAULT_LAYOUT_CONFIG.baseTps;
+  try {
+    const compiled = buildCommandPlayback(song, options);
+    const region = compiled.region;
+    const buffer = buildLitematic([region], {
+      name: song.name || base.file, author: options.author ?? 'MusicboxMC',
+      description: `MusicboxMC command playback / ${compiled.info.playedNotes} notes / ${compiled.totalTicks} game ticks`,
+      dataVersion: MC_1_20_4_DATA_VERSION, version: LITEMATIC_VERSION_1_20_4,
+    });
+    // Commands are vertically packed; the preview shows their top-down footprint.
+    const slice = {
+      trackIndex: -1, position: region.position, size: region.size,
+      blocks: region.blocks.filter((block) => block.state.name !== 'minecraft:air').map((block) => ({
+        pos: { x: block.x, y: block.y, z: block.z }, block: block.state.name, props: block.state.properties,
+      })),
+    };
+    return {
+      buffer,
+      result: {
+        ...base, success: true, bytes: buffer.length, playbackMode: 'command', commandPlayback: compiled.info,
+        outOfRangeNotes: compiled.warnings.filter((warning) => warning.code === 'OUT_OF_RANGE').length,
+        stats: {
+          tickCount: compiled.totalTicks, noteBlockCount: 0, commandBlockCount: compiled.commandBlockCount,
+          circuitBlocks: slice.blocks.length, regionCount: 1, elapsedMs: Date.now() - start,
+          outputTrackCount: 1, startupDelayTicks: 0,
+        },
+        speedTable: speedTable(song.durationSec, presets, baseTps), warnings: compiled.warnings,
+        regions: [{
+          name: 'region_0', trackIndex: -1, position: region.position, size: region.size, blockCount: slice.blocks.length,
+        }],
+        preview: buildPreview([slice], true),
+      },
+    };
+  } catch (error) {
+    const result = failure({
+      base, durationSec: song.durationSec, presets, baseTps,
+      error: `命令播放生成失败：${(error as Error).message}`,
+    });
+    result.playbackMode = 'command';
+    return { result, buffer: null };
+  }
 }
 
 /** 只解析，不生成电路。用于导入后立刻显示文件信息。 */
@@ -266,6 +346,7 @@ function layoutOptions(options: GenerateOptions) {
     transpose: options.transpose,
     blocks: options.blocks,
     mergeSameInstrument: options.mergeSameInstrument,
+    forceMergeSameInstrument: options.forceMergeSameInstrument,
   };
 }
 
@@ -285,7 +366,10 @@ function failure(ctx: FailureContext): GenerateResult {
     error: ctx.error,
     bytes: 0,
     outOfRangeNotes: 0,
-    stats: { tickCount: 0, noteBlockCount: 0, circuitBlocks: 0, regionCount: 0, elapsedMs: 0 },
+    stats: {
+      tickCount: 0, noteBlockCount: 0, circuitBlocks: 0, regionCount: 0, elapsedMs: 0,
+      outputTrackCount: 0, startupDelayTicks: 0,
+    },
     speedTable: speedTable(ctx.durationSec, ctx.presets, ctx.baseTps),
     warnings: [],
     regions: [],
@@ -307,6 +391,7 @@ export function generate(
 
   const song = parseMidi(readFileSync(path));
   const base = analyze(song, path);
+  if (options.commandPlayback) return generateCommands(song, base, options, start);
 
   const included = song.tracks.filter(
     (t) => t.notes.length > 0 && !(options.excludeTracks ?? []).includes(t.index),
@@ -384,6 +469,7 @@ export function generate(
     result: {
       ...base,
       success: true,
+      playbackMode: 'redstone',
       bytes: buffer.length,
       outOfRangeNotes,
       stats: {
@@ -392,6 +478,8 @@ export function generate(
         circuitBlocks: result.tracks.reduce((s, t) => s + t.placements.length, 0),
         regionCount: slices.length,
         elapsedMs: Date.now() - start,
+        outputTrackCount: result.tracks.length,
+        startupDelayTicks: result.startupDelayTicks ?? 0,
       },
       speedTable: speedTable(song.durationSec, presets, baseTps),
       warnings: result.warnings,

@@ -122,16 +122,35 @@
                 才按上方策略处理。
               </small>
             </label>
-            <label class="switch-row">
-              <span>
-                <span class="label">合并同乐器音轨</span>
-                <small>相同乐器合成一条主线；同时发声且自然位置相差不超过 10 格的不同音轨会自动共轴。</small>
-              </span>
+            <div class="switch-row">
+              <span class="label">全部使用命令方块播放</span>
               <label class="switch">
-                <input id="mergeSameInstrument" type="checkbox" />
+                <input id="commandPlayback" type="checkbox" aria-label="全部使用命令方块播放" />
                 <span class="switch-ui" aria-hidden="true"></span>
               </label>
+            </div>
+            <label class="field hidden command-settings" id="commandBudgetField">
+              <span class="label">命令链预算</span>
+              <input id="commandChainBudget" type="number" min="1" max="65536" step="1" value="65536" />
             </label>
+            <div class="switch-row">
+              <span>
+                <span class="label">合并同乐器音轨</span>
+              </span>
+              <label class="switch">
+                <input id="mergeSameInstrument" type="checkbox" aria-label="合并同乐器音轨" />
+                <span class="switch-ui" aria-hidden="true"></span>
+              </label>
+            </div>
+            <div class="switch-row merge-suboption hidden" id="forceMergeRow">
+              <span>
+                <span class="label">开启强制合并</span>
+              </span>
+              <label class="switch">
+                <input id="forceMergeSameInstrument" type="checkbox" aria-label="开启强制合并" disabled />
+                <span class="switch-ui" aria-hidden="true"></span>
+              </label>
+            </div>
           </section>
 
           <section class="control-section">
@@ -213,7 +232,7 @@
                   <div class="preview-heading">
                     <p class="eyebrow">CIRCUIT VIEW</p>
                     <h3>电路预览</h3>
-                    <p class="preview-subtitle">向右是时间，向下是不同音轨的空间排布。</p>
+                    <p class="preview-subtitle" id="previewDescription">向右是时间，向下是不同音轨的空间排布。</p>
                   </div>
                   <div class="preview-actions" aria-label="预览工具">
                     <div class="preview-toggle">

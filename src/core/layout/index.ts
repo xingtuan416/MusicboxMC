@@ -20,6 +20,7 @@ import {
 } from '../palette/blockTable';
 import { secondsToTick } from '../tempo/tick';
 import type { TrackModel } from '../midi/types';
+import { buildForcedLayout } from './forced';
 
 export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
   axis: 'x',
@@ -53,6 +54,8 @@ export interface LayoutOptions {
    * 默认 false —— 每轨一条线。合并后的 transpose / 方块覆盖沿用组内第一个原轨。
    */
   mergeSameInstrument?: boolean;
+  /** Opt-in: one connected time spine per instrument; takes precedence over legacy merging. */
+  forceMergeSameInstrument?: boolean;
 }
 
 /** 归并键：打击乐单独一类，其余按乐器名。 */
@@ -170,6 +173,11 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   }
 
   // 合轨会增加同刻音符数量，必须先合轨再计算轨距和首音前导。
+  if (opts.forceMergeSameInstrument) {
+    return buildForcedLayout(mergeByInstrument(inputs), {
+      config, regions, resolve, transpose: opts.transpose, outOfRange: opts.outOfRange,
+    });
+  }
   const trackInputs = opts.mergeSameInstrument ? mergeByInstrument(inputs) : inputs;
   const maxSideRows = Math.max(1, Math.min(14, Math.floor(config.dMax)));
   const maxChordNotes = chordCapacity(config.dMax);

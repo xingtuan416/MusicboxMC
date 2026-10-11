@@ -197,9 +197,12 @@ function collectOptions() {
   }
   return {
     baseTps: Number($('baseTps').value) || 20,
-    dMax: Number($('dMax').value) || 3,
+    dMax: Number($('dMax').value) || 14,
     outOfRange: $('outOfRange').value,
     mergeSameInstrument: $('mergeSameInstrument').checked,
+    forceMergeSameInstrument: $('mergeSameInstrument').checked && $('forceMergeSameInstrument').checked,
+    commandPlayback: $('commandPlayback').checked,
+    commandChainBudget: Number($('commandChainBudget').value),
     excludeTracks: excluded,
     author: $('author').value || 'MusicboxMC',
   };
@@ -291,7 +294,9 @@ function renderOverview(res) {
     banner('err', `生成失败：${res.error}`);
   } else if (res.success) {
     const parts = [
-      `生成成功：${res.stats.noteBlockCount} 个音符盒 / ${res.stats.circuitBlocks} 个电路方块`,
+      res.playbackMode === 'command'
+        ? `生成成功：${res.commandPlayback.playedNotes} 个播放音符 / ${res.stats.commandBlockCount} 个命令方块`
+        : `生成成功：${res.stats.noteBlockCount} 个音符盒 / ${res.stats.circuitBlocks} 个电路方块`,
       `${res.stats.regionCount} 个区域`,
       `${fmtBytes(res.bytes)}`,
       `${res.stats.elapsedMs}ms`,
@@ -300,20 +305,47 @@ function renderOverview(res) {
   }
 
   if (res.success) {
+    if (res.playbackMode === 'command') {
+      banner('warn', WARN_TEXT.COMMAND_PLAYBACK_REQUIREMENTS(
+        { chainLength: res.commandPlayback.chainLength, budget: res.commandPlayback.chainBudget },
+      ));
+      const soundWarning = res.warnings.find((warning) => warning.code === 'COMMAND_SOUND_PRESSURE');
+      if (soundWarning) banner('warn', WARN_TEXT.COMMAND_SOUND_PRESSURE(soundWarning));
+      const sizeWarning = res.warnings.find((warning) => warning.code === 'COMMAND_STRUCTURE_SIZE');
+      if (sizeWarning) banner('warn', WARN_TEXT.COMMAND_STRUCTURE_SIZE(sizeWarning));
+    }
+    const startup = (res.warnings || []).find((w) => w.code === 'FORCE_MERGE_LEAD_IN');
+    if (startup) banner('warn', WARN_TEXT.FORCE_MERGE_LEAD_IN(startup));
     box.append(
       card(
         '生成统计',
         kv([
           ['总 tick 数', res.stats.tickCount],
+          ['播放方式', res.playbackMode === 'command' ? '命令方块' : '红石音符盒'],
           ['音符盒', res.stats.noteBlockCount],
+          ['命令方块', res.stats.commandBlockCount],
+          ['播放音符', res.commandPlayback?.playedNotes],
+          ['峰值同刻音符', res.commandPlayback?.peakNotes],
+          ['命令链步骤', res.commandPlayback?.chainLength],
           ['电路方块', res.stats.circuitBlocks],
           ['区域数', res.stats.regionCount],
+          [res.playbackMode === 'command' ? '播放器' : '输出主线', res.stats.outputTrackCount],
+          ['启动等待', `${res.stats.startupDelayTicks || 0} 游戏刻`],
           ['投影大小', fmtBytes(res.bytes)],
           ['耗时', `${res.stats.elapsedMs}ms`],
           ['输出路径', res.outputPath],
         ]),
       ),
     );
+    if (res.commandPlayback) {
+      const coords = (pos) => `${pos.x}, ${pos.y}, ${pos.z}`;
+      box.append(card('播放器控制', kv([
+        ['开始 / 重播坐标', coords(res.commandPlayback.start)],
+        ['停止坐标', coords(res.commandPlayback.stop)],
+        ['坐标基准', '投影原点（未旋转）'],
+        ['计分板命名空间', res.commandPlayback.objective],
+      ])));
+    }
 
     box.append(
       card(
@@ -361,7 +393,16 @@ function fmtDuration(sec) {
 /* ---------------- 告警渲染 ---------------- */
 
 const WARN_TEXT = {
-  POLYPHONY_EXCEEDED: (w) => `tick ${w.tick}：同 tick ${w.n} 个音，超过上限 ${w.limit}，已截断`,
+  COMMAND_PLAYBACK_REQUIREMENTS: (w) =>
+    `命令播放：${w.chainLength} 个链步骤，预算 ${w.budget}。需要启用命令方块、保留方块实体 NBT，并加载整个结构；世界 maxCommandChainLength 必须大于链步骤数。`,
+  COMMAND_SOUND_PRESSURE: (w) =>
+    `峰值同刻 ${w.peakNotes} 个声音：命令不会排队或丢音，但客户端声音池可能不足，无法保证每个声音都能听到。`,
+  COMMAND_STRUCTURE_SIZE: (w) =>
+    `命令播放器含 ${w.commandBlocks} 个命令方块，超过安全参考值 ${w.limit}：粘贴与加载会明显变慢，` +
+    `命令链每刻的遍历步数也随之增加。建议先排除不必要的音轨或缩短曲目再生成。`,
+  POLYPHONY_EXCEEDED: (w) => `tick ${w.tick}：量化音群 ${w.n} 个音，超过单列容量 ${w.limit}，溢出音符另行处理`,
+  FORCE_MERGE_LEAD_IN: (w) => `强制合并：全曲统一启动等待 ${w.ticks} 游戏刻，峰值 ${w.peakNotes} 音；曲内相对时序不变`,
+  FANOUT_EXPANDED: (w) => `tick ${w.tick}：${w.n} 个音使用 ${w.stages} 级续电分支，单级两侧容量 ${w.limit}；仍为同一主线且同刻发声`,
   OUT_OF_RANGE: (w) =>
     `MIDI ${w.midi} 超出资源包音域 F#1-F#7，处理方式：${OUT_OF_RANGE_ACTION_TEXT[w.action] || w.action}`,
   SEGMENT_HARD_CUT: (w) => `tick ${w.tick}：骨架被迫硬切分段`,
@@ -383,7 +424,10 @@ function warnSeverity(code) {
     code === 'TIMING_ADJUSTED' ||
     code === 'TRACK_SPLIT' ||
     code === 'POLYPHONY_EXCEEDED' ||
-    code === 'SPATIAL_DRIFT'
+    code === 'SPATIAL_DRIFT' ||
+    code === 'COMMAND_SOUND_PRESSURE' ||
+    code === 'COMMAND_STRUCTURE_SIZE' ||
+    code === 'COMMAND_PLAYBACK_REQUIREMENTS'
   ) {
     return 'warn';
   }
@@ -437,6 +481,9 @@ function renderWarnings(warnings) {
 /* ---------------- 预览渲染 ---------------- */
 
 const BLOCK_COLORS = {
+  'minecraft:command_block': '#bd885c',
+  'minecraft:chain_command_block': '#599c89',
+  'minecraft:repeating_command_block': '#9475a5',
   'minecraft:redstone_wire': '#c74e4a',
   'minecraft:repeater': '#a3a19b',
   'minecraft:note_block': '#a86839',
@@ -471,6 +518,9 @@ function shortName(block) {
 
 function displayBlockName(block) {
   const names = {
+    'minecraft:command_block': '脉冲命令方块',
+    'minecraft:chain_command_block': '连锁命令方块',
+    'minecraft:repeating_command_block': '循环命令方块',
     'minecraft:redstone_wire': '红石线',
     'minecraft:repeater': '中继器',
     'minecraft:note_block': '音符盒',
@@ -495,6 +545,7 @@ const RULER = 28;
 const HEAD_BG = '#e9e7e2';
 /** Chromium 对单个 canvas 维度有限制；为长曲目预留安全余量。 */
 const MAX_CANVAS_PIXELS = 30000;
+const MAX_CANVAS_AREA = 16000000;
 
 /** 每个区域一个颜色，用于行头的音轨色条。 */
 const REGION_COLORS = ['#c97962', '#c29a65', '#879b79', '#ad8971', '#c58f9c', '#7d9690', '#aa9161'];
@@ -555,6 +606,9 @@ function renderPreview(res) {
   const hint = $('previewHint');
   const wrap = $('canvasWrap');
   const preview = res && res.preview;
+  $('previewDescription').textContent = res?.playbackMode === 'command'
+    ? '命令播放器 · 立体结构俯视图'
+    : '向右是时间，向下是不同音轨的空间排布。';
 
   if (!preview || preview.size.x === 0) {
     canvas.width = 0;
@@ -573,10 +627,18 @@ function renderPreview(res) {
   const { x, z } = preview.size;
   const dpr = window.devicePixelRatio || 1;
   const maxCssWidth = Math.max(640, MAX_CANVAS_PIXELS / Math.max(1, dpr));
-  const maxCell = (maxCssWidth - GUTTER) / Math.max(1, x);
+  const dimensionCell = Math.min(
+    (maxCssWidth - GUTTER) / Math.max(1, x),
+    (maxCssWidth - RULER) / Math.max(1, z),
+  );
+  // Include fixed headers in the area budget, not just the circuit rectangle.
+  const cssArea = MAX_CANVAS_AREA / (dpr * dpr);
+  const areaB = GUTTER * z + RULER * x;
+  const areaCell = (2 * Math.max(1, cssArea - GUTTER * RULER)) /
+    (areaB + Math.sqrt(areaB * areaB + 4 * x * z * Math.max(1, cssArea - GUTTER * RULER)));
   const requestedCell = 38 * state.previewScale;
   // 长曲目自动缩小到安全画布尺寸，避免 canvas.width 超过 Chromium 上限后整块空白。
-  const CELL = Math.max(1, Math.min(requestedCell, maxCell));
+  const CELL = Math.min(requestedCell, dimensionCell, areaCell);
   const renderScale = CELL / 38;
   state.previewRenderScale = renderScale;
   const showGrid = $('showGrid').checked;
@@ -604,7 +666,7 @@ function renderPreview(res) {
   ctx.fillRect(0, 0, w, RULER);
   ctx.font = '10px ui-monospace, monospace';
   ctx.fillStyle = '#716d64';
-  ctx.fillText('X →（时间）', 8, RULER / 2);
+  ctx.fillText(res.playbackMode === 'command' ? 'X（立体命令链）' : 'X →（时间）', 8, RULER / 2);
   const step = 10;
   for (let gx = 0; gx <= x; gx += step) {
     const cx = px(gx);
@@ -634,7 +696,8 @@ function renderPreview(res) {
     ctx.fillRect(0, y, 3, CELL);
     if (region && absoluteZ === region.position.z) {
       const t = trackOf.get(region.trackIndex);
-      const label = t ? `轨${region.trackIndex + 1} ${t.instrument}` : `轨${region.trackIndex + 1}`;
+      const label = res.playbackMode === 'command' ? '命令播放器'
+        : t ? `轨${region.trackIndex + 1} ${t.instrument}` : `轨${region.trackIndex + 1}`;
       ctx.fillStyle = '#4d4a44';
       ctx.font = '12px system-ui, sans-serif';
       ctx.fillText(label.slice(0, 18), 10, y + CELL / 2);
@@ -650,10 +713,14 @@ function renderPreview(res) {
     for (let gx = 0; gx < x; gx++) {
       const base = preview.baseCells[gz * x + gx];
       if (!base) continue;
-      ctx.globalAlpha = 0.22;
+      ctx.globalAlpha = base.includes('command_block') ? 1 : 0.22;
       ctx.fillStyle = colorOf(base, preview);
       ctx.fillRect(px(gx), pz(gz), CELL, CELL);
       ctx.globalAlpha = 1;
+      if (base.includes('command_block') && CELL >= 18) {
+        label(ctx, base === 'minecraft:repeating_command_block' ? 'R' : base === 'minecraft:command_block' ? 'I' : 'C',
+          px(gx) + CELL / 2, pz(gz) + CELL / 2, '#ffffff', 'bold 11px system-ui');
+      }
     }
   }
 
@@ -665,7 +732,8 @@ function renderPreview(res) {
   const linkAt = (gx, gz) => {
     if (gx < 0 || gx >= x || gz < 0 || gz >= z) return false;
     const b = preview.wireCells[gz * x + gx] || preview.noteCells[gz * x + gx];
-    return b === 'minecraft:redstone_wire' || b === 'minecraft:repeater' || b === 'minecraft:note_block';
+    return b === 'minecraft:redstone_wire' || b === 'minecraft:repeater' || b === 'minecraft:note_block' ||
+      b === 'minecraft:stone';
   };
   const linkDirections = (gx, gz) => ({
     left: linkAt(gx - 1, gz),
@@ -680,6 +748,11 @@ function renderPreview(res) {
   for (let gz = 0; gz < z; gz++) {
     for (let gx = 0; gx < x; gx++) {
       if (!wireAt(gx, gz)) continue;
+      if (CELL < 8) {
+        ctx.fillStyle = '#c74e4a';
+        ctx.fillRect(px(gx), pz(gz), CELL, CELL);
+        continue;
+      }
       const cx = px(gx) + CELL / 2;
       const cy = pz(gz) + CELL / 2;
       const directions = linkDirections(gx, gz);
@@ -710,6 +783,11 @@ function renderPreview(res) {
       if (preview.wireCells[gz * x + gx] !== 'minecraft:repeater') continue;
       const x0 = px(gx);
       const y0 = pz(gz);
+      if (CELL < 8) {
+        ctx.fillStyle = '#777975';
+        ctx.fillRect(x0, y0, CELL, CELL);
+        continue;
+      }
       const cx = x0 + CELL / 2;
       const cy = y0 + CELL / 2;
       const inset = Math.max(3, CELL * 0.09);
@@ -726,6 +804,12 @@ function renderPreview(res) {
         '#a3a19b',
       );
 
+      const facing = (preview.repeaterFacings || [])[gz * x + gx] || 'west';
+      const rotation = { west: 0, north: Math.PI / 2, east: Math.PI, south: -Math.PI / 2 }[facing] || 0;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(rotation);
+      ctx.translate(-cx, -cy);
       // 输入输出端点
       ctx.fillStyle = '#bd4d49';
       ctx.beginPath();
@@ -751,6 +835,7 @@ function renderPreview(res) {
       ctx.lineTo(x0 + CELL * 0.65, cy + CELL * 0.11);
       ctx.closePath();
       ctx.fill();
+      ctx.restore();
 
       const delay = (preview.repeaterDelays || [])[gz * x + gx] || '';
       if (delay) {
@@ -780,6 +865,11 @@ function renderPreview(res) {
         if (preview.noteCells[idx] !== 'minecraft:note_block') continue;
         const x0 = px(gx);
         const y0 = pz(gz);
+        if (CELL < 8) {
+          ctx.fillStyle = '#a86839';
+          ctx.fillRect(x0, y0, CELL, CELL);
+          continue;
+        }
         const cx = x0 + CELL / 2;
         const cy = y0 + CELL / 2 + 2;
         const inset = Math.max(3, CELL * 0.08);
@@ -857,15 +947,17 @@ function renderPreview(res) {
 
   const nonEmpty = preview.wireCells.filter(Boolean).length + preview.baseCells.filter(Boolean).length +
     (showNotes ? preview.noteCells.filter(Boolean).length : 0);
-  const trackCount = (res.tracks || []).filter((t) => t.noteCount > 0).length;
+  const trackCount = res.stats?.outputTrackCount ?? (res.tracks || []).filter((t) => t.noteCount > 0).length;
   $('previewSize').textContent = `${x} × ${z}`;
   $('previewRegions').textContent = String((res.regions || []).length);
   $('previewTracks').textContent = String(trackCount);
   $('previewBlocks').textContent = String(nonEmpty);
   hint.textContent =
-    `一行 = 一个 Z 行，一列 = 一格 X（向右为时间）　·　${x}×${z} 格　·　` +
-    `${trackCount} 条音轨 / ${(res.regions || []).length} 个区域　·　可见方块 ${nonEmpty} 个` +
-    (renderScale < state.previewScale - 0.005 ? '　·　长曲目已自动缩小预览' : '');
+    res.playbackMode === 'command'
+      ? `${res.regions[0].size.x}×${res.regions[0].size.y}×${res.regions[0].size.z} 格 · 命令播放器 · 俯视图`
+      : `一行 = 一个 Z 行，一列 = 一格 X（向右为时间）　·　${x}×${z} 格　·　` +
+        `${trackCount} 条音轨 / ${(res.regions || []).length} 个区域　·　可见方块 ${nonEmpty} 个` +
+        (renderScale < state.previewScale - 0.005 ? '　·　长曲目已自动缩小预览' : '');
 
   // 图例
   const legend = $('legend');
@@ -877,7 +969,9 @@ function renderPreview(res) {
     item.append(sw, document.createTextNode(displayBlockName(block)));
     legend.append(item);
   }
-  legend.append(create('span', 'legend-note', '红石线 · 中继器档位 · 音符盒底色代表音色'));
+  if (res.playbackMode !== 'command') {
+    legend.append(create('span', 'legend-note', '红石线 · 中继器档位 · 音符盒底色代表音色'));
+  }
 
   wrap.scrollTop = 0;
   wrap.scrollLeft = 0;
@@ -983,12 +1077,13 @@ async function doAnalyze() {
       updateWorkflowUI('generating', res);
       const previewRes = await api.generate(path, collectOptions());
       state.generated = previewRes;
+      if (!previewRes.success) renderOverview(previewRes);
       renderWarnings(previewRes.warnings || []);
       renderPreview(previewRes);
       updateWorkflowUI(previewRes.success ? 'ready' : 'error', previewRes);
       if (previewRes.success) {
         log(
-          `预览准备完成：${previewRes.stats.noteBlockCount} 音符盒 / ${previewRes.stats.regionCount} 个区域`,
+          `预览准备完成：${previewRes.playbackMode === 'command' ? `${previewRes.stats.commandBlockCount} 命令方块` : `${previewRes.stats.noteBlockCount} 音符盒`} / ${previewRes.stats.regionCount} 个区域`,
         );
       } else {
         log(`预览准备失败：${previewRes.error || '未知错误'}`);
@@ -1047,7 +1142,7 @@ async function doGenerate() {
     renderPreview(res);
     updateWorkflowUI(res.success ? 'generated' : 'error', res);
     log(
-      `生成${res.success ? '成功' : '失败'}：${res.success ? `${res.stats.noteBlockCount} 音符盒 / ${fmtBytes(res.bytes)} / ${res.stats.elapsedMs}ms` : res.error}`,
+      `生成${res.success ? '成功' : '失败'}：${res.success ? `${res.playbackMode === 'command' ? `${res.stats.commandBlockCount} 命令方块` : `${res.stats.noteBlockCount} 音符盒`} / ${fmtBytes(res.bytes)} / ${res.stats.elapsedMs}ms` : res.error}`,
     );
     if (res.outputPath) log(`已保存：${res.outputPath}`);
   } catch (e) {
@@ -1074,6 +1169,19 @@ function switchTab(name) {
 /* ---------------- 绑定 ---------------- */
 
 function bind() {
+  const syncPlaybackSettings = () => {
+    const command = $('commandPlayback').checked;
+    const merge = $('mergeSameInstrument').checked;
+    if (!merge) $('forceMergeSameInstrument').checked = false;
+    $('forceMergeRow').classList.toggle('hidden', !merge);
+    $('forceMergeSameInstrument').disabled = !merge || command;
+    $('mergeSameInstrument').disabled = command;
+    $('dMax').disabled = command;
+    $('commandBudgetField').classList.toggle('hidden', !command);
+  };
+  $('mergeSameInstrument').addEventListener('change', syncPlaybackSettings);
+  $('commandPlayback').addEventListener('change', syncPlaybackSettings);
+  syncPlaybackSettings();
   $('btnBrowse').addEventListener('click', doBrowse);
   $('btnAnalyze').addEventListener('click', doAnalyze);
   $('btnGenerate').addEventListener('click', doGenerate);

@@ -72,9 +72,11 @@ export function unpackLongArray(
     const startOffset = start & 63;
     const endWord = (start + bits - 1) >>> 6;
 
-    let value = longs[startWord]! >> BigInt(startOffset);
+    // NBT reads signed longs. Normalize before shifting across a word boundary,
+    // otherwise the sign bit fills the following palette entry with ones.
+    let value = BigInt.asUintN(64, longs[startWord]!) >> BigInt(startOffset);
     if (endWord !== startWord) {
-      value |= longs[endWord]! << BigInt(64 - startOffset);
+      value |= BigInt.asUintN(64, longs[endWord]!) << BigInt(64 - startOffset);
     }
     out[i] = Number(value & mask);
   }

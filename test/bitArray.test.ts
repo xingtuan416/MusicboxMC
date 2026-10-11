@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { packLongArray, requiredBits, unpackLongArray } from '../src/core/litematic/bitArray';
 
 describe('bitArray', () => {
+  it('signed NBT longs preserve entries crossing the sign bit', () => {
+    const indices = Array.from({ length: 500 }, (_, i) => (i * 17) % 90);
+    const bits = requiredBits(90);
+    const signed = packLongArray(indices, bits).map((value) => BigInt.asIntN(64, value));
+    expect([...unpackLongArray(signed, indices.length, bits)]).toEqual(indices);
+  });
   it('位宽 = max(2, ceil(log2(paletteSize)))', () => {
     expect(requiredBits(1)).toBe(2);
     expect(requiredBits(2)).toBe(2);

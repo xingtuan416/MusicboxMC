@@ -12,6 +12,8 @@ export interface RegionData {
   size: { x: number; y: number; z: number };
   /** 区域内方块，坐标相对区域原点 */
   blocks: Array<{ x: number; y: number; z: number; state: BlockState }>;
+  /** Block entities use region-local x/y/z, as required by Litematica. */
+  tileEntities?: NbtCompound[];
 }
 
 export interface LitematicMeta {
@@ -48,6 +50,20 @@ interface PackedRegion {
 function buildRegion(region: RegionData): PackedRegion {
   const { x: sx, y: sy, z: sz } = region.size;
   const volume = sx * sy * sz;
+  const blockPositions = region.tileEntities?.length
+    ? new Set(region.blocks.map((block) => `${block.x},${block.y},${block.z}`)) : new Set<string>();
+  const entityPositions = new Set<string>();
+  for (const entity of region.tileEntities ?? []) {
+    const pos = ['x', 'y', 'z'].map((axis) => getInt(entity, axis));
+    if (pos.some((value, i) => value < 0 || value >= [sx, sy, sz][i]!)) {
+      throw new Error('方块实体坐标越界');
+    }
+    if (!blockPositions.has(pos.join(','))) {
+      throw new Error('方块实体缺少对应方块');
+    }
+    if (entityPositions.has(pos.join(','))) throw new Error('方块实体坐标重复');
+    entityPositions.add(pos.join(','));
+  }
 
   // 调色板：ID 0 必须是 minecraft:air
   const palette: BlockState[] = [{ name: 'minecraft:air' }];
@@ -95,7 +111,7 @@ function buildRegion(region: RegionData): PackedRegion {
       ['Size', nbtIntVec3(sx, sy, sz)],
       ['BlockStatePalette', nbt.list(TagType.Compound, paletteList)],
       ['BlockStates', nbt.longArray(longs)],
-      ['TileEntities', nbt.list(TagType.Compound, [])],
+      ['TileEntities', nbt.list(TagType.Compound, region.tileEntities ?? [])],
       ['Entities', nbt.list(TagType.Compound, [])],
       ['PendingBlockTicks', nbt.list(TagType.Compound, [])],
       ['PendingFluidTicks', nbt.list(TagType.Compound, [])],
@@ -180,6 +196,8 @@ export interface ParsedRegion {
   palette: BlockState[];
   /** 解包后的 palette 索引，按 (x,y,z) → 可用 blockIndex 查询 */
   indices: Uint32Array;
+  /** Raw region-local block entities, preserved for export roundtrip verification. */
+  tileEntities: NbtCompound[];
 }
 
 export interface ParsedLitematic {
@@ -252,8 +270,10 @@ export function parseLitematic(buf: Buffer): ParsedLitematic {
     const volume = Math.abs(size.x) * Math.abs(size.y) * Math.abs(size.z);
     const bits = requiredBits(palette.length);
     const indices = unpackLongArray(statesTag.value, volume, bits);
-
-    regions.push({ name, position, size, palette, indices });
+    const entitiesTag = regionTag.value.get('TileEntities');
+    const tileEntities = entitiesTag?.type === TagType.List
+      ? entitiesTag.value.filter((entry): entry is NbtCompound => entry.type === TagType.Compound) : [];
+    regions.push({ name, position, size, palette, indices, tileEntities });
   }
 
   return { version, dataVersion, metadata, regions };

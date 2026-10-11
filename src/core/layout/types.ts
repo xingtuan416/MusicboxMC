@@ -62,6 +62,16 @@ export interface TrackSkeleton {
 }
 
 export type LayoutWarning =
+  | { code: 'COMMAND_PLAYBACK_REQUIREMENTS'; chainLength: number; budget: number }
+  | { code: 'COMMAND_SOUND_PRESSURE'; peakNotes: number }
+  /**
+   * 命令播放器的方块总数超过安全参考值：粘贴/加载会明显变慢。
+   *
+   * 健康结构只随「帧数 + 音色数 + 复用槽位数」增长，与音符总数无关；
+   * 历史实现曾按音符逐个放命令方块（Rush E 46291 音 → 46308 块），
+   * 该告警就是为拦截这一类回归而设。
+   */
+  | { code: 'COMMAND_STRUCTURE_SIZE'; commandBlocks: number; limit: number }
   | { code: 'POLYPHONY_EXCEEDED'; tick: number; n: number; limit: number }
   | { code: 'OUT_OF_RANGE'; midi: number; action: string }
   | { code: 'SEGMENT_HARD_CUT'; tick: number }
@@ -69,6 +79,10 @@ export type LayoutWarning =
   | { code: 'TIMING_ADJUSTED'; tick: number; actual: number }
   /** 密集音群放不下，已改派到新音轨 */
   | { code: 'TRACK_SPLIT'; tick: number; notes: number }
+  /** Song-wide startup compensation in game ticks; music-relative timing is unchanged. */
+  | { code: 'FORCE_MERGE_LEAD_IN'; ticks: number; peakNotes: number; sectionCapacity: number }
+  /** One chord's bus was extended with renewed power, not split into playback tracks. */
+  | { code: 'FANOUT_EXPANDED'; tick: number; n: number; limit: number; stages: number }
   /** 该处无法用红石线补齐跟上共享 X 参考线：报告时间与格数偏差，不改时值、不丢音 */
   | { code: 'SPATIAL_DRIFT'; tick: number; drift: number };
 
@@ -78,6 +92,8 @@ export interface LayoutResult {
   /** 全图最小 x/y/z（用于把坐标平移到 litematic 的局部坐标系） */
   min: Vec3;
   totalTicks: number;
+  /** Uniform startup latency in game ticks for the opt-in forced layout. */
+  startupDelayTicks?: number;
   warnings: LayoutWarning[];
   /** 每个已放置音群的期望 tick 与实际触发 tick（按音轨顺序） */
   placed: Array<{ trackIndex: number; zBase: number; tick: number; actual: number }>;
