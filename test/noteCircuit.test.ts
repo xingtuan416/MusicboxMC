@@ -1,36 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_LAYOUT_CONFIG, layout } from '../src/core/layout/index';
 import { DEFAULT_REGIONS } from '../src/core/palette/pitchMap';
-import type { SongModel } from '../src/core/midi/types';
+import { song } from './helpers/song';
 
 const cfg = { ...DEFAULT_LAYOUT_CONFIG };
-
-function song(notes: Array<{ tick: number; midi: number }>): SongModel {
-  return {
-    name: 't',
-    ppq: 480,
-    durationSec: 4,
-    baseBpm: 120,
-    tempos: [{ ticks: 0, timeSec: 0, bpm: 120 }],
-    timeSignature: null,
-    tracks: [
-      {
-        index: 0,
-        name: 'p',
-        channel: 0,
-        instrument: 'acoustic grand piano',
-        percussion: false,
-        notes: notes.map((n) => ({
-          midi: n.midi,
-          timeSec: n.tick / cfg.baseTps,
-          durationSec: 0.1,
-          velocity: 1,
-          channel: 0,
-        })),
-      },
-    ],
-  };
-}
 
 /** 单音 / 三音和弦 / 五音和弦 / 混合间隔，覆盖内联与分支行两类几何 */
 const CASES: Array<Array<{ tick: number; midi: number }>> = [

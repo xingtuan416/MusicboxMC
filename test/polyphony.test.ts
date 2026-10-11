@@ -9,36 +9,9 @@ import {
   MAX_CHORD_NOTES,
   MAX_SIDE_ROWS,
 } from '../src/core/layout/track';
-import type { SongModel } from '../src/core/midi/types';
+import { song } from './helpers/song';
 
 const cfg = { ...DEFAULT_LAYOUT_CONFIG };
-
-function song(notes: Array<{ tick: number; midi: number }>): SongModel {
-  return {
-    name: 't',
-    ppq: 480,
-    durationSec: 4,
-    baseBpm: 120,
-    tempos: [{ ticks: 0, timeSec: 0, bpm: 120 }],
-    timeSignature: null,
-    tracks: [
-      {
-        index: 0,
-        name: 'p',
-        channel: 0,
-        instrument: 'acoustic grand piano',
-        percussion: false,
-        notes: notes.map((n) => ({
-          midi: n.midi,
-          timeSec: n.tick / cfg.baseTps,
-          durationSec: 0.1,
-          velocity: 1,
-          channel: 0,
-        })),
-      },
-    ],
-  };
-}
 
 describe('branchRow / chordRows（分线列行分配）', () => {
   it('行分配沿 +1, −1, +2, −2, … 两侧交替', () => {

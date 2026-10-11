@@ -9,30 +9,20 @@ import { parseMidi } from '../src/core/midi/parse';
 import type { SongModel } from '../src/core/midi/types';
 import { generate, generateToFile } from '../src/main/service';
 import { parseLitematic } from '../src/core/litematic/build';
+import { buildSong } from './helpers/song';
 
-function song(specs: Array<{ instrument?: string; percussion?: boolean; ticks: number[] }>): SongModel {
-  return {
+function multiTrackSong(
+  specs: Array<{ instrument?: string; percussion?: boolean; ticks: number[] }>,
+): SongModel {
+  return buildSong({
     name: 'dense',
-    ppq: 480,
-    baseBpm: 120,
     durationSec: 2000,
-    tempos: [{ ticks: 0, timeSec: 0, bpm: 120 }],
-    timeSignature: null,
-    tracks: specs.map((spec, index) => ({
-      index,
-      channel: spec.percussion ? 9 : index,
+    tracks: specs.map((spec) => ({
       instrument: spec.instrument ?? 'piano',
-      percussion: spec.percussion ?? false,
-      name: `track-${index}`,
-      notes: spec.ticks.map((tick, i) => ({
-        midi: 48 + (i % 36),
-        timeSec: tick / 20,
-        durationSec: 0.1,
-        velocity: 1,
-        channel: index,
-      })),
+      percussion: spec.percussion,
+      notes: spec.ticks.map((tick, i) => ({ tick, midi: 48 + (i % 36) })),
     })),
-  };
+  });
 }
 
 const countNotes = (result: ReturnType<typeof layout>): number =>
@@ -43,7 +33,7 @@ const countNotes = (result: ReturnType<typeof layout>): number =>
 
 describe('forced instrument merge', () => {
   it('globally groups interleaved instruments and arbitrary gaps, preserving exclusions and first indices', () => {
-    const source = song([
+    const source = multiTrackSong([
       { ticks: [0] },
       { instrument: 'violin', ticks: [4] },
       { ticks: [20000] },
@@ -60,7 +50,9 @@ describe('forced instrument merge', () => {
   it.each([1, 3, 14, 15, 28, 29, 30, 80, 470, 616])(
     'preserves %i same-time notes on one connected spine',
     (n) => {
-      const result = layout(song([{ ticks: Array(n).fill(0) }]), { forceMergeSameInstrument: true });
+      const result = layout(multiTrackSong([{ ticks: Array(n).fill(0) }]), {
+        forceMergeSameInstrument: true,
+      });
       expect(result.tracks).toHaveLength(1);
       expect(countNotes(result)).toBe(n);
       expect(result.placed).toHaveLength(1);
@@ -79,7 +71,7 @@ describe('forced instrument merge', () => {
 
   it('uses one global compensation with dense adjacent groups and multiple instruments', () => {
     const result = layout(
-      song([
+      multiTrackSong([
         { ticks: [...Array(80).fill(0), ...Array(30).fill(2), 4, 21] },
         { instrument: 'violin', ticks: [0, 2, 3, 4, 200] },
       ]),
@@ -100,7 +92,7 @@ describe('forced instrument merge', () => {
   });
 
   it('legacy behavior is unchanged; forcing takes precedence if both options reach the API', () => {
-    const source = song([{ ticks: Array(80).fill(0) }, { ticks: [0] }]);
+    const source = multiTrackSong([{ ticks: Array(80).fill(0) }, { ticks: [0] }]);
     expect(layout(source).tracks.length).toBeGreaterThan(1);
     expect(layout(source, { mergeSameInstrument: true }).tracks).toHaveLength(3);
     const forced = layout(source, { forceMergeSameInstrument: true, mergeSameInstrument: true });
@@ -109,7 +101,7 @@ describe('forced instrument merge', () => {
   });
 
   it('applies first-track transpose, block overrides and drop policy before planning', () => {
-    const source = song([{ ticks: [0] }, { ticks: [2] }]);
+    const source = multiTrackSong([{ ticks: [0] }, { ticks: [2] }]);
     source.tracks[0]!.notes[0]!.midi = 10;
     source.tracks[1]!.notes[0]!.midi = 60;
     const result = layout(source, {
@@ -126,20 +118,20 @@ describe('forced instrument merge', () => {
   });
 
   it('rejects unsafe fanout instead of discarding or independently splitting notes', () => {
-    expect(() => layout(song([{ ticks: Array(617).fill(0) }]), { forceMergeSameInstrument: true })).toThrow(
-      '未生成投影',
-    );
     expect(() =>
-      layout(song([{ ticks: [0] }]), {
+      layout(multiTrackSong([{ ticks: Array(617).fill(0) }]), { forceMergeSameInstrument: true }),
+    ).toThrow('未生成投影');
+    expect(() =>
+      layout(multiTrackSong([{ ticks: [0] }]), {
         forceMergeSameInstrument: true,
         blocks: { tracks: { 0: { wireSupport: 'minecraft:air' } } },
       }),
     ).toThrow('不能为空气');
-    const dropped = song([{ ticks: [0] }]);
+    const dropped = multiTrackSong([{ ticks: [0] }]);
     dropped.tracks[0]!.notes[0]!.midi = 10;
     expect(layout(dropped, { forceMergeSameInstrument: true, outOfRange: 'drop' }).tracks).toHaveLength(0);
     expect(() =>
-      layout(song([{ ticks: [0] }]), {
+      layout(multiTrackSong([{ ticks: [0] }]), {
         forceMergeSameInstrument: true,
         config: { baseTps: Infinity },
       }),
@@ -153,7 +145,7 @@ describe('forced instrument merge', () => {
       const ticks = Array.from({ length: 12 }, (_, i) =>
         Array.from({ length: 1 + ((i * 17) % n) }, () => i * 2 + (i % 3 === 0 ? 1 : 0)),
       ).flat();
-      const result = layout(song([{ ticks }, { instrument: 'violin', ticks: [0, 100] }]), {
+      const result = layout(multiTrackSong([{ ticks }, { instrument: 'violin', ticks: [0, 100] }]), {
         forceMergeSameInstrument: true,
         config: { dMax, trackPitch: 1 },
       });
@@ -169,7 +161,7 @@ describe('forced instrument merge', () => {
   );
 
   it('detects actual miswiring rather than trusting planned actual timestamps', () => {
-    const result = layout(song([{ ticks: Array(80).fill(0) }]), { forceMergeSameInstrument: true });
+    const result = layout(multiTrackSong([{ ticks: Array(80).fill(0) }]), { forceMergeSameInstrument: true });
     const track = result.tracks[0]!;
     const relay = track.placements.find(
       (p) => p.block === 'minecraft:repeater' && p.props?.facing === 'north',

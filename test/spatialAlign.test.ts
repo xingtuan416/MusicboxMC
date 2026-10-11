@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_LAYOUT_CONFIG, layout } from '../src/core/layout/index';
 import { DEFAULT_REGIONS } from '../src/core/palette/pitchMap';
 import { ALIGN_TOLERANCE_CELLS, gameTickToRedstone } from '../src/core/layout/track';
-import type { SongModel } from '../src/core/midi/types';
+import { songOfTracks } from './helpers/song';
 
 /**
  * 多轨空间对齐（多轨空间对齐目标.md）
@@ -13,31 +13,6 @@ import type { SongModel } from '../src/core/midi/types';
  */
 
 const cfg = { ...DEFAULT_LAYOUT_CONFIG };
-
-function song(tracks: Array<Array<{ tick: number; midi: number }>>): SongModel {
-  return {
-    name: 't',
-    ppq: 480,
-    durationSec: 60,
-    baseBpm: 120,
-    tempos: [{ ticks: 0, timeSec: 0, bpm: 120 }],
-    timeSignature: null,
-    tracks: tracks.map((notes, i) => ({
-      index: i,
-      name: `t${i}`,
-      channel: i,
-      instrument: 'acoustic grand piano',
-      percussion: false,
-      notes: notes.map((n) => ({
-        midi: n.midi,
-        timeSec: n.tick / cfg.baseTps,
-        durationSec: 0.1,
-        velocity: 1,
-        channel: i,
-      })),
-    })),
-  };
-}
 
 /** 某轨各音组的（曲中红刻, 音符列 X）。taps[].x 是分线列，音符列在其 +2 处 */
 function noteXs(res: ReturnType<typeof layout>, trackIdx: number): Array<{ rt: number; x: number }> {
@@ -64,7 +39,7 @@ describe('多轨空间对齐：X 由曲中时刻决定', () => {
       if (rt % 2 === 0) aNotes.push({ tick: rt * 2, midi: 60 });
       if (rt % 40 === 0) bNotes.push({ tick: rt * 2, midi: 67 });
     }
-    const res = layout(song([aNotes, bNotes]), { config: cfg, regions: DEFAULT_REGIONS });
+    const res = layout(songOfTracks([aNotes, bNotes]), { config: cfg, regions: DEFAULT_REGIONS });
 
     const a = noteXs(res, 0);
     const b = noteXs(res, 1);
@@ -97,7 +72,7 @@ describe('多轨空间对齐：X 由曲中时刻决定', () => {
     for (let rt = 1; rt <= 20; rt += 2) bNotes.push({ tick: rt * 2, midi: 67 });
     for (let rt = 220; rt <= 240; rt += 2) bNotes.push({ tick: rt * 2, midi: 67 });
 
-    const res = layout(song([aNotes, bNotes]), { config: cfg, regions: DEFAULT_REGIONS });
+    const res = layout(songOfTracks([aNotes, bNotes]), { config: cfg, regions: DEFAULT_REGIONS });
     const a = noteXs(res, 0);
     const b = noteXs(res, 1);
 
@@ -123,7 +98,7 @@ describe('多轨空间对齐：X 由曲中时刻决定', () => {
     const bNotes = [];
     for (let rt = 1; rt <= 20; rt += 4) bNotes.push({ tick: rt * 2, midi: 67 });
 
-    const res = layout(song([aNotes, bNotes]), { config: cfg, regions: DEFAULT_REGIONS });
+    const res = layout(songOfTracks([aNotes, bNotes]), { config: cfg, regions: DEFAULT_REGIONS });
     const a = noteXs(res, 0);
     const b = noteXs(res, 1);
 
@@ -143,7 +118,7 @@ describe('多轨空间对齐：X 由曲中时刻决定', () => {
     const bNotes = [];
     for (let rt = 4; rt <= 60; rt += 20) bNotes.push({ tick: rt * 2, midi: 67 });
 
-    const res = layout(song([aNotes, bNotes]), { config: cfg, regions: DEFAULT_REGIONS });
+    const res = layout(songOfTracks([aNotes, bNotes]), { config: cfg, regions: DEFAULT_REGIONS });
 
     // 每轨相邻音组的实际触发差 == 2·红刻差（补齐没有改变任何时刻）
     for (const trackIdx of [0, 1]) {
@@ -161,7 +136,7 @@ describe('多轨空间对齐：X 由曲中时刻决定', () => {
 
   it('同刻两轨的自然位置在 10 格内时，音符列强制共用 X 轴', () => {
     const res = layout(
-      song([
+      songOfTracks([
         [5, 10, 15, 20].map((rt) => ({ tick: rt * 2, midi: 60 })),
         [10, 20].map((rt) => ({ tick: rt * 2, midi: 67 })),
       ]),
@@ -178,7 +153,7 @@ describe('多轨空间对齐：X 由曲中时刻决定', () => {
     // 密集轨在 rt=20 已经走得更远，稀疏轨的自然位置差超过旧窗口；
     // 只要当前组的红石线槽位放得下，仍应把同刻音符列补到同一 X。
     const res = layout(
-      song([
+      songOfTracks([
         [2, 4, 6, 8, 10, 12, 14, 16, 18, 20].map((rt) => ({
           tick: rt * 2,
           midi: 60,
@@ -198,7 +173,7 @@ describe('多轨空间对齐：X 由曲中时刻决定', () => {
   it('单轨曲目不产生多余补齐（参考线就是它自己）', () => {
     const notes = [];
     for (let rt = 1; rt <= 50; rt += 5) notes.push({ tick: rt * 2, midi: 60 });
-    const res = layout(song([notes]), { config: cfg, regions: DEFAULT_REGIONS });
+    const res = layout(songOfTracks([notes]), { config: cfg, regions: DEFAULT_REGIONS });
     const tr = res.tracks[0]!;
     const maxX = Math.max(...tr.placements.map((p) => p.pos.x));
     // 首组 gap=1（首音 rt1）→ 中继器+音符盒 = 2 格；

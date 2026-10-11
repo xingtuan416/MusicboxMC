@@ -2,36 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_LAYOUT_CONFIG, layout } from '../src/core/layout/index';
 import { DEFAULT_REGIONS } from '../src/core/palette/pitchMap';
 import { gameTickToRedstone } from '../src/core/layout/track';
-import type { SongModel } from '../src/core/midi/types';
+import { song } from './helpers/song';
 
 const cfg = { ...DEFAULT_LAYOUT_CONFIG };
-
-function song(notes: Array<{ tick: number; midi: number }>): SongModel {
-  return {
-    name: 't',
-    ppq: 480,
-    durationSec: 8,
-    baseBpm: 120,
-    tempos: [{ ticks: 0, timeSec: 0, bpm: 120 }],
-    timeSignature: null,
-    tracks: [
-      {
-        index: 0,
-        name: 'p',
-        channel: 0,
-        instrument: 'acoustic grand piano',
-        percussion: false,
-        notes: notes.map((n) => ({
-          midi: n.midi,
-          timeSec: n.tick / cfg.baseTps,
-          durationSec: 0.1,
-          velocity: 1,
-          channel: 0,
-        })),
-      },
-    ],
-  };
-}
 
 /** 主线行（z = zBase）上按 X 排序的中继器档位序列 */
 function mainRepeaterDelays(res: ReturnType<typeof layout>, trackIdx = 0): number[] {

@@ -4,7 +4,7 @@ import { DEFAULT_REGIONS } from '../src/core/palette/pitchMap';
 import { gameTickToRedstone } from '../src/core/layout/track';
 import { buildLitematic } from '../src/core/litematic/build';
 import { sliceRegions } from '../src/core/layout/regions';
-import type { SongModel } from '../src/core/midi/types';
+import { songOfTracks } from './helpers/song';
 
 /**
  * 布局验收（不依赖 core/sim）。
@@ -17,31 +17,6 @@ import type { SongModel } from '../src/core/midi/types';
  */
 
 const cfg = { ...DEFAULT_LAYOUT_CONFIG };
-
-function song(tracks: Array<Array<{ tick: number; midi: number }>>): SongModel {
-  return {
-    name: 't',
-    ppq: 480,
-    durationSec: 8,
-    baseBpm: 120,
-    tempos: [{ ticks: 0, timeSec: 0, bpm: 120 }],
-    timeSignature: null,
-    tracks: tracks.map((notes, i) => ({
-      index: i,
-      name: `t${i}`,
-      channel: i,
-      instrument: 'acoustic grand piano',
-      percussion: false,
-      notes: notes.map((n) => ({
-        midi: n.midi,
-        timeSec: n.tick / cfg.baseTps,
-        durationSec: 0.1,
-        velocity: 1,
-        channel: i,
-      })),
-    })),
-  };
-}
 
 function noteBlockCount(res: ReturnType<typeof layout>): number {
   return res.tracks.reduce(
@@ -59,14 +34,14 @@ describe('布局验收：结构与音符守恒', () => {
       Array.from({ length: 35 }, (_, i) => ({ tick: 0, midi: 48 + (i % 12) })),
     ];
     for (const notes of cases) {
-      const res = layout(song([notes]), { config: cfg, regions: DEFAULT_REGIONS });
+      const res = layout(songOfTracks([notes]), { config: cfg, regions: DEFAULT_REGIONS });
       expect(noteBlockCount(res)).toBe(notes.length);
     }
   });
 
   it('所有轨的 Z 区间互不重叠（含 overflow 拆出的新轨）', () => {
     const res = layout(
-      song([
+      songOfTracks([
         Array.from({ length: 35 }, (_, i) => ({ tick: 0, midi: 48 + (i % 12) })),
         [{ tick: 4, midi: 60 }],
       ]),
@@ -87,7 +62,7 @@ describe('布局验收：结构与音符守恒', () => {
 
   it('可导出合法 .litematic（region 坐标非负、音符盒不丢）', () => {
     const res = layout(
-      song([
+      songOfTracks([
         [{ tick: 0, midi: 60 }],
         [
           { tick: 0, midi: 64 },
@@ -125,7 +100,7 @@ describe('布局验收：时序不变量', () => {
   it('跨轨相对时序守恒：轨 A 首音 rt0、轨 B 首音 rt10，实际差必须为 20 游刻', () => {
     // 锁住"全曲统一前导"：中继器最小 1 档使 rt0 的音只能 1 红刻后发声，
     // 前导必须全曲统一，否则不同轨的首音偏移会互相不一致。
-    const res = layout(song([[{ tick: 0, midi: 60 }], [{ tick: 20, midi: 62 }]]), {
+    const res = layout(songOfTracks([[{ tick: 0, midi: 60 }], [{ tick: 20, midi: 62 }]]), {
       config: cfg,
       regions: DEFAULT_REGIONS,
     });
@@ -144,7 +119,7 @@ describe('布局验收：时序不变量', () => {
         notes.push({ tick: t, midi: 54 + ((seed + i) % 9) });
         t += 1 + ((seed * 11 + i * 7) % 23);
       }
-      const res = layout(song([notes]), { config: cfg, regions: DEFAULT_REGIONS });
+      const res = layout(songOfTracks([notes]), { config: cfg, regions: DEFAULT_REGIONS });
       const placed = [...res.placed].sort((a, b) => a.tick - b.tick);
       expect(placed.length).toBeGreaterThan(0);
       for (let i = 1; i < placed.length; i++) {
@@ -156,7 +131,7 @@ describe('布局验收：时序不变量', () => {
 
   it('和弦组只报一条 placed，触发红刻 == 量化红刻', () => {
     const notes = [60, 64, 67, 70].map((midi) => ({ tick: 12, midi }));
-    const res = layout(song([notes]), { config: cfg, regions: DEFAULT_REGIONS });
+    const res = layout(songOfTracks([notes]), { config: cfg, regions: DEFAULT_REGIONS });
     expect(res.placed).toHaveLength(1);
     expect(res.placed[0]!.actual).toBe(12); // rt 6（tick 12）；首组 rt≥1 → 无前导
   });

@@ -14,32 +14,14 @@ import { parseMidi } from '../src/core/midi/parse';
 import { generate, generateToFile } from '../src/main/service';
 import type { SongModel } from '../src/core/midi/types';
 import { mapPitch } from '../src/core/palette/pitchMap';
+import { buildSong } from './helpers/song';
 
-function song(ticks: number[]): SongModel {
-  return {
+function stackedSong(ticks: number[]): SongModel {
+  return buildSong({
     name: 'command-test',
-    ppq: 480,
-    baseBpm: 120,
     durationSec: 10,
-    tempos: [],
-    timeSignature: null,
-    tracks: [
-      {
-        index: 0,
-        name: 'piano',
-        channel: 0,
-        percussion: false,
-        instrument: 'piano',
-        notes: ticks.map((tick, i) => ({
-          midi: 48 + (i % 24),
-          timeSec: tick / 20,
-          durationSec: 0.1,
-          velocity: 1,
-          channel: 0,
-        })),
-      },
-    ],
-  };
+    tracks: [{ instrument: 'piano', notes: ticks.map((tick, i) => ({ tick, midi: 48 + (i % 24) })) }],
+  });
 }
 
 /**
@@ -62,7 +44,7 @@ function frameSong(frames: number, notesPerFrame: number): SongModel {
     }
   }
   return {
-    ...song([]),
+    ...stackedSong([]),
     tracks: [{ index: 0, name: 'piano', channel: 0, percussion: false, instrument: 'piano', notes }],
   };
 }
@@ -139,7 +121,7 @@ describe('command playback', () => {
   it.each([1, 31, 32, 470, 617])(
     'retains %i simultaneous notes without redstone limits or per-note delays',
     (n) => {
-      const result = buildCommandPlayback(song(Array(n).fill(0)));
+      const result = buildCommandPlayback(stackedSong(Array(n).fill(0)));
       const commands = result.region.tileEntities!.filter(
         (entity) => text(entity, 'id') === 'minecraft:command_block',
       );
@@ -162,7 +144,7 @@ describe('command playback', () => {
       [0, 0, 1, 2, 7],
       [5, 5, 6, 20],
     ]) {
-      const result = buildCommandPlayback(song(ticks));
+      const result = buildCommandPlayback(stackedSong(ticks));
       const entities = result.region.tileEntities!;
       const commands = entities
         .filter((entity) => text(entity, 'id') === 'minecraft:command_block')
@@ -183,7 +165,7 @@ describe('command playback', () => {
   });
 
   it('exports a physical chain whose facings follow all horizontal/vertical turns', () => {
-    const result = buildCommandPlayback(song(Array(2300).fill(0)));
+    const result = buildCommandPlayback(stackedSong(Array(2300).fill(0)));
     const blocks = new Map(result.region.blocks.map((block) => [`${block.x},${block.y},${block.z}`, block]));
     const move: Record<string, [number, number, number]> = {
       east: [1, 0, 0],
@@ -207,7 +189,7 @@ describe('command playback', () => {
 
   it('reuses slots over multiple frames without deduplicating same-voice multiplicity', () => {
     const ticks = Array.from({ length: 1800 }, (_, i) => Math.floor(i / 70) * 3);
-    const result = buildCommandPlayback(song(ticks));
+    const result = buildCommandPlayback(stackedSong(ticks));
     const parsed = parseLitematic(buildLitematic([result.region], meta)).regions[0]!;
     const heard = scheduledNotes(parsed.tileEntities, result.totalTicks);
     expect(heard.map((note) => note.tick)).toEqual(ticks);
@@ -220,7 +202,7 @@ describe('command playback', () => {
     ).toBe(1800);
     const sort = (notes: typeof heard) =>
       notes.map((note) => `${note.tick}|${note.sound}|${note.pitch}`).sort();
-    const expected = song(ticks).tracks[0]!.notes.map((note) => {
+    const expected = stackedSong(ticks).tracks[0]!.notes.map((note) => {
       const mapped = mapPitch(note.midi);
       return {
         tick: Math.round(note.timeSec * 20),
@@ -252,12 +234,12 @@ describe('command playback', () => {
   });
 
   it('warns before export when the command structure itself is oversized', () => {
-    const healthy = buildCommandPlayback(song(Array(2300).fill(0)));
+    const healthy = buildCommandPlayback(stackedSong(Array(2300).fill(0)));
     expect(healthy.commandBlockCount).toBeLessThanOrEqual(COMMAND_STRUCTURE_WARNING_BLOCKS);
     expect(healthy.warnings.map((warning) => warning.code)).not.toContain('COMMAND_STRUCTURE_SIZE');
 
     // 单刻 5000 个音 ⇒ 复用槽位 5000 ⇒ 结构本身失控，但仍是合法结构，只告警不拦截。
-    const oversized = buildCommandPlayback(song(Array(5000).fill(0)));
+    const oversized = buildCommandPlayback(stackedSong(Array(5000).fill(0)));
     expect(oversized.commandBlockCount).toBeGreaterThan(COMMAND_STRUCTURE_WARNING_BLOCKS);
     expect(oversized.info.playedNotes).toBe(5000);
     expect(oversized.warnings).toContainEqual({
@@ -268,7 +250,7 @@ describe('command playback', () => {
   });
 
   it('preserves mapping, octave transposition, exclusions and drop policy without changing the legacy layout', () => {
-    const source = song([0, 1]);
+    const source = stackedSong([0, 1]);
     source.tracks[0]!.notes[0]!.midi = 10;
     source.tracks.push({ ...source.tracks[0]!, index: 1, notes: [source.tracks[0]!.notes[1]!] });
     const result = buildCommandPlayback(source, {
@@ -286,20 +268,20 @@ describe('command playback', () => {
   });
 
   it('validates timing, per-world chain budgets and sound pressure', () => {
-    expect(() => buildCommandPlayback(song([0]), { baseTps: Infinity })).toThrow('TPS');
-    expect(() => buildCommandPlayback(song([0]), { commandChainBudget: 3 })).toThrow('预算');
-    const minimum = buildCommandPlayback(song([0])).info.chainLength + 1;
-    expect(() => buildCommandPlayback(song([0]), { commandChainBudget: minimum })).not.toThrow();
-    expect(() => buildCommandPlayback(song([NaN]))).toThrow('计分板');
-    expect(() => buildCommandPlayback(song([2147483647]))).toThrow('计分板');
-    expect(buildCommandPlayback(song(Array(32).fill(0))).warnings).toContainEqual({
+    expect(() => buildCommandPlayback(stackedSong([0]), { baseTps: Infinity })).toThrow('TPS');
+    expect(() => buildCommandPlayback(stackedSong([0]), { commandChainBudget: 3 })).toThrow('预算');
+    const minimum = buildCommandPlayback(stackedSong([0])).info.chainLength + 1;
+    expect(() => buildCommandPlayback(stackedSong([0]), { commandChainBudget: minimum })).not.toThrow();
+    expect(() => buildCommandPlayback(stackedSong([NaN]))).toThrow('计分板');
+    expect(() => buildCommandPlayback(stackedSong([2147483647]))).toThrow('计分板');
+    expect(buildCommandPlayback(stackedSong(Array(32).fill(0))).warnings).toContainEqual({
       code: 'COMMAND_SOUND_PRESSURE',
       peakNotes: 32,
     });
   });
 
   it('roundtrips all command/sign NBT and rejects orphaned, duplicate or out-of-bounds entities', () => {
-    const result = buildCommandPlayback(song([0, 1, 1]));
+    const result = buildCommandPlayback(stackedSong([0, 1, 1]));
     const parsed = parseLitematic(buildLitematic([result.region], meta)).regions[0]!;
     expect(parsed.tileEntities).toEqual(result.region.tileEntities);
     for (const entity of parsed.tileEntities) {

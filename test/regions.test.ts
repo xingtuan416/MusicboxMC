@@ -3,35 +3,9 @@ import { sliceRegions } from '../src/core/layout/regions';
 import { buildLitematic, parseLitematic, blockIndex } from '../src/core/litematic/build';
 import { layout } from '../src/core/layout/index';
 import { DEFAULT_REGIONS } from '../src/core/palette/pitchMap';
-import type { SongModel } from '../src/core/midi/types';
+import { song } from './helpers/song';
 
 /** 造一个指定 (tick, midi) 的 SongModel，不经过 MIDI 解析。 */
-function song(notes: Array<{ tick: number; midi: number }>): SongModel {
-  return {
-    name: 'test',
-    ppq: 480,
-    durationSec: 1,
-    baseBpm: 120,
-    tempos: [{ ticks: 0, timeSec: 0, bpm: 120 }],
-    timeSignature: null,
-    tracks: [
-      {
-        index: 0,
-        name: 'p',
-        channel: 0,
-        instrument: 'acoustic grand piano',
-        percussion: false,
-        notes: notes.map((n) => ({
-          midi: n.midi,
-          timeSec: n.tick / 20,
-          durationSec: 0.1,
-          velocity: 1,
-          channel: 0,
-        })),
-      },
-    ],
-  };
-}
 
 describe('sliceRegions', () => {
   it('region 内所有方块坐标均非负且落在 size 内', () => {

@@ -2,46 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { gunzipSync } from 'node:zlib';
 import { readNbt } from '../src/core/nbt/reader';
 import { buildLitematic } from '../src/core/litematic/build';
-import { DEFAULT_LAYOUT_CONFIG, layout } from '../src/core/layout/index';
-import type { SongModel } from '../src/core/midi/types';
+import { layout } from '../src/core/layout/index';
 import { DEFAULT_REGIONS } from '../src/core/palette/pitchMap';
 import { TagType } from '../src/core/nbt/tag';
-
-function song(
-  tracks: Array<{
-    index: number;
-    instrument: string;
-    notes: Array<{ tick: number; midi: number }>;
-  }>,
-): SongModel {
-  return {
-    name: 'regression',
-    ppq: 480,
-    durationSec: 2,
-    baseBpm: 120,
-    tempos: [{ ticks: 0, timeSec: 0, bpm: 120 }],
-    timeSignature: null,
-    tracks: tracks.map((t) => ({
-      index: t.index,
-      name: `track-${t.index}`,
-      channel: t.index,
-      instrument: t.instrument,
-      percussion: false,
-      notes: t.notes.map((n) => ({
-        midi: n.midi,
-        timeSec: n.tick / DEFAULT_LAYOUT_CONFIG.baseTps,
-        durationSec: 0.1,
-        velocity: 1,
-        channel: t.index,
-      })),
-    })),
-  };
-}
+import { songOfSpecs } from './helpers/song';
 
 describe('回归：布局参数与合轨空间', () => {
   it('outOfRange=drop 从布局入口生效', () => {
     const result = layout(
-      song([
+      songOfSpecs([
         {
           index: 0,
           instrument: 'Piano',
@@ -68,7 +37,7 @@ describe('回归：布局参数与合轨空间', () => {
 
   it('dMax 限制单轨和弦容量', () => {
     const result = layout(
-      song([
+      songOfSpecs([
         {
           index: 0,
           instrument: 'Piano',
@@ -94,7 +63,7 @@ describe('回归：布局参数与合轨空间', () => {
 
   it('合轨后按合并后的最大和弦深度计算轨距，不发生 Z 重叠', () => {
     const result = layout(
-      song([
+      songOfSpecs([
         {
           index: 0,
           instrument: 'Piano',
