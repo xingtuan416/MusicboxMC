@@ -11,6 +11,7 @@ import { mapPitch, type NoteBlockInstrument, type PitchRegion, type RegionTable 
 import type { BlockResolver } from '../palette/blockTable';
 import { noteBlock, plainBlock, redstoneWire, repeater } from '../palette/noteBlock';
 import { place } from './placement';
+import { applyWireConnections } from './wiring';
 
 /** One note's timing and pitch. `tick` is in game ticks (20 per second by default). */
 export interface TrackNote {
@@ -559,7 +560,7 @@ export function buildTrack(opts: BuildTrackOptions): {
     first = false;
   }
 
-  finalizeWireConnections(placements);
+  applyWireConnections(placements);
 
   return {
     track: {
@@ -572,56 +573,4 @@ export function buildTrack(opts: BuildTrackOptions): {
     overflow,
     placed,
   };
-}
-
-/**
- * A dust block's connections are part of its block state, not just its power level.
- *
- * Placing dust by hand makes Minecraft update north/east/south/west automatically;
- * writing a schematic does not go through that update. Omitting them makes the dust
- * load as an unconnected dot, which visibly breaks the branch columns of chords
- * with four or more notes.
- */
-function finalizeWireConnections(placements: BlockPlacement[]): void {
-  const key = (pos: Vec3): string => `${pos.x},${pos.y},${pos.z}`;
-  const byPos = new Map<string, BlockPlacement>();
-  for (const placement of placements) byPos.set(key(placement.pos), placement);
-
-  const directions = [
-    { name: 'north', dx: 0, dz: -1 },
-    { name: 'east', dx: 1, dz: 0 },
-    { name: 'south', dx: 0, dz: 1 },
-    { name: 'west', dx: -1, dz: 0 },
-  ] as const;
-
-  for (const wire of placements) {
-    if (wire.block !== 'minecraft:redstone_wire') continue;
-    const props: Record<string, string> = {
-      ...(wire.props ?? {}),
-      power: wire.props?.power ?? '0',
-    };
-    for (const direction of directions) {
-      const neighbor = byPos.get(
-        key({
-          x: wire.pos.x + direction.dx,
-          y: wire.pos.y,
-          z: wire.pos.z + direction.dz,
-        }),
-      );
-      props[direction.name] = wireConnection(neighbor);
-    }
-    wire.props = props;
-  }
-}
-
-function wireConnection(neighbor: BlockPlacement | undefined): 'none' | 'side' {
-  if (!neighbor) return 'none';
-  if (
-    neighbor.block === 'minecraft:redstone_wire' ||
-    neighbor.block === 'minecraft:repeater' ||
-    neighbor.block === 'minecraft:note_block'
-  ) {
-    return 'side';
-  }
-  return 'none';
 }

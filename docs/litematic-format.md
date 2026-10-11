@@ -109,8 +109,24 @@ A dust block's `north`/`east`/`south`/`west` properties are part of its block
 state. Placing dust by hand in game makes Minecraft update them automatically;
 writing a schematic does not. If they are omitted, the dust loads as an
 unconnected dot — which visibly breaks branch columns in chords of four or more
-notes. The layout therefore computes them explicitly from the neighbouring
-blocks before writing.
+notes.
+
+`core/layout/wiring.ts` computes them from the neighbouring blocks, following
+`RedStoneWireBlock`:
+
+- Dust connects to other dust, and to a repeater **only along that repeater's own
+  axis**. A note block, stone or any other full block is a redstone conductor and
+  gets `none`.
+- Dust never renders as a bare dot. If a whole axis has no connection on either
+  side, both of its sides are filled in, so an isolated dust block becomes a cross
+  and a dust block with one neighbour becomes a full straight line.
+
+The `RedstoneSide.UP` branch of the vanilla rule is omitted: it needs dust climbing
+onto a block above its neighbour, and the generator keeps every dust block on one
+circuit layer.
+
+`test/wireConnections.test.ts` encodes the vanilla cases directly rather than the
+generator's own output, so it fails if the rule drifts from the game.
 
 ### Power
 

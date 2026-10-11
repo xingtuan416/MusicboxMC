@@ -9,6 +9,7 @@ import {
   type RepeaterFacing,
 } from '../palette/noteBlock';
 import { place } from './placement';
+import { applyWireConnections } from './wiring';
 import {
   chordCapacity,
   gameTickToRedstone,
@@ -241,24 +242,7 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
       }
     }
 
-    const directions = [
-      { name: 'east', dx: 1, dz: 0 },
-      { name: 'west', dx: -1, dz: 0 },
-      { name: 'south', dx: 0, dz: 1 },
-      { name: 'north', dx: 0, dz: -1 },
-    ];
-    for (const p of placements) {
-      if (p.block !== 'minecraft:redstone_wire') continue;
-      for (const dir of directions) {
-        const neighbor = occupied.get(key({ x: p.pos.x + dir.dx, y: p.pos.y, z: p.pos.z + dir.dz }));
-        const connected =
-          neighbor?.block === 'minecraft:redstone_wire' ||
-          neighbor?.block === 'minecraft:stone' ||
-          (neighbor?.block === 'minecraft:repeater' &&
-            (dir.dx !== 0 ? ['east', 'west'] : ['north', 'south']).includes(neighbor.props?.facing ?? ''));
-        p.props![dir.name] = connected ? 'side' : 'none';
-      }
-    }
+    applyWireConnections(placements);
     const track: TrackSkeleton = {
       trackIndex: input.index,
       zBase,
