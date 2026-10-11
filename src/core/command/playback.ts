@@ -14,16 +14,19 @@ const SCORE_MAX = 2147483646;
 export const COMMAND_SOUND_WARNING_THRESHOLD = 31;
 
 /**
- * 命令方块数量的安全参考值。
+ * Safe reference value for the command block count.
  *
- * 命令链每个游戏刻都要完整遍历一遍，方块本身又要在粘贴时逐个写入方块实体，
- * 所以"块数"同时决定粘贴耗时与持续刻开销。健康结构只随
- * 「帧数 + 音色数 + 复用槽位数」增长，与音符总数**无关**：本实现的 Rush E
- * 是 798 块。历史实现按音符逐个放命令方块（46291 音 → 46308 块、链长 46293），
- * 既让投影膨胀到 348KB，也让每刻要跑 4.6 万条命令而卡死。
+ * A command chain is traversed in full every game tick, and the blocks themselves are written one
+ * by one as block entities on paste, so "block count" drives both paste time and the per-tick
+ * overhead. A healthy structure only grows with "frames + voices + reusable slots" and is
+ * **independent** of the total note count: this implementation's Rush E is 798 blocks. The
+ * historical implementation placed one command block per note (46291 notes → 46308 blocks, chain
+ * length 46293), which both inflated the schematic to 348KB and forced 46k commands to run every
+ * tick, freezing the game.
  *
- * 这里取 4096 作为"结构失控"的警戒线：比正常结果高一个数量级，
- * 又远低于按音符逐个建块的量级，因此能拦住这类回归而不误报正常曲目。
+ * 4096 is taken here as the "structure out of control" warning line: an order of magnitude above
+ * normal results, yet far below the per-note block count, so it catches this kind of regression
+ * without false-positiving on normal songs.
  */
 export const COMMAND_STRUCTURE_WARNING_BLOCKS = 4096;
 

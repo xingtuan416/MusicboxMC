@@ -2,53 +2,54 @@ export type PitchRegion = 'A' | 'B' | 'C' | 'D' | 'E';
 export type OutOfRangePolicy = 'warn' | 'clamp' | 'octave' | 'drop';
 
 export interface RegionDef {
-  /** 垫底方块 id（决定乐器/音色） */
+  /** Base block id (determines the instrument/timbre) */
   baseBlock: string;
-  /** note = 0 时该音区发声对应的 MIDI 音高 */
+  /** The MIDI pitch this pitch region sounds at when note = 0 */
   baseMidi: number;
-  /** 要写入音符盒 blockstate 的乐器事件。 */
+  /** The instrument event to write into the note block blockstate. */
   instrument: NoteBlockInstrument;
 }
 
 export type RegionTable = Record<PitchRegion, RegionDef>;
 
 /**
- * Minecraft Java 音符盒的乐器事件。
+ * Instrument events of the Minecraft Java note block.
  *
- * 这些事件的音高范围各自不同；本项目使用 bass / guitar / harp /
- * flute / bell 五个槽位拼出 F#1–F#7。
+ * These events each have a different pitch range; this project uses the five
+ * slots bass / guitar / harp / flute / bell to assemble F#1–F#7.
  */
 export type NoteBlockInstrument = 'bass' | 'guitar' | 'harp' | 'flute' | 'bell';
 
 export interface MappedPitch {
-  /** 是否被丢弃（outOfRange = 'drop' 时可能为 true） */
+  /** Whether it was dropped (may be true when outOfRange = 'drop') */
   dropped: boolean;
   midi: number;
-  /** 音符盒档位 0-24 */
+  /** Note block note 0-24 */
   note: number;
   region: PitchRegion;
-  /** 垫底方块 */
+  /** Base block */
   block: string;
-  /** 音符盒 blockstate 中的 instrument 值。 */
+  /** The instrument value in the note block blockstate. */
   instrument: NoteBlockInstrument;
-  /** 是否因超出音域被降级 */
+  /** Whether it was degraded for exceeding the pitch range */
   degraded: boolean;
 }
 
-/** 单个音区的半音跨度：note 0..24 共 25 档，跨 24 个半音。 */
+/** Semitone span of one pitch region: note 0..24 is 25 steps across 24 semitones. */
 export const REGION_SEMITONES = 24;
 
 /**
- * 五个采样槽位按原版音符盒的 F# 锚点排列：
- * - A：木板 → bass，F#1 起（MIDI 30）
- * - B：羊毛 → guitar，F#2 起（MIDI 42）
- * - C：普通方块 → harp/piano，F#3 起（MIDI 54）
- * - D：黏土 → flute，F#4 起（MIDI 66）
- * - E：金块 → bell，F#5 起（MIDI 78）
+ * The five sample slots are arranged by the vanilla note block's F# anchors:
+ * - A: planks → bass, starting at F#1 (MIDI 30)
+ * - B: wool → guitar, starting at F#2 (MIDI 42)
+ * - C: normal block → harp/piano, starting at F#3 (MIDI 54)
+ * - D: clay → flute, starting at F#4 (MIDI 66)
+ * - E: gold block → bell, starting at F#5 (MIDI 78)
  *
- * 这个排列正好对应资源包里的 harp1..harp5。原先的 dirt /
- * grass_block / bedrock 会把低音和高音错误地落到 harp 或 basedrum，
- * 既没有用到 guitar/flute，也无法得到连续的钢琴音色。
+ * This arrangement corresponds exactly to harp1..harp5 in the resource pack. The
+ * previous dirt / grass_block / bedrock would wrongly drop low and high notes onto
+ * harp or basedrum, using neither guitar/flute and never yielding a continuous
+ * piano timbre.
  */
 export const DEFAULT_REGIONS: RegionTable = {
   A: { baseBlock: 'minecraft:oak_planks', baseMidi: 30, instrument: 'bass' },
@@ -58,21 +59,22 @@ export const DEFAULT_REGIONS: RegionTable = {
   E: { baseBlock: 'minecraft:gold_block', baseMidi: 78, instrument: 'bell' },
 };
 
-/** 从低到高作为并列时的稳定顺序；实际选择按采样中心的距离决定。 */
+/** Stable low-to-high tie order; the actual choice uses distance to the sample center. */
 const REGION_PRIORITY: PitchRegion[] = ['A', 'B', 'C', 'D', 'E'];
 
-/** 覆盖的 MIDI 音高区间（含端点）。 */
+/** Covered MIDI pitch range (endpoints inclusive). */
 export function coveredRange(regions: RegionTable): [number, number] {
   const lows = (Object.keys(regions) as PitchRegion[]).map((k) => regions[k].baseMidi);
   return [Math.min(...lows), Math.max(...lows) + REGION_SEMITONES];
 }
 
 /**
- * MIDI 音高 → (note 档位, 音区, 垫底方块)。
+ * MIDI pitch → (note, pitch region, base block).
  *
- * 每个采样的 note=12 是它的原始录音音高（F#2..F#6）。在多个音区
- * 重叠时选择距离 note=12 最近的音区，尽量减少资源包的变速失真；
- * 同距离时选择较高音区，保证边界稳定地向上衔接。
+ * note=12 of each sample is its original recorded pitch (F#2..F#6). When several
+ * pitch regions overlap, the region closest to note=12 is chosen, to minimize the
+ * resource pack's pitch-shift distortion; on a tie the higher region is chosen, so
+ * boundaries connect upward stably.
  */
 export function mapPitch(
   midi: number,
@@ -120,7 +122,7 @@ function applyOutOfRange(
         degraded: true,
       };
     }
-    // 理论不可达
+    // Theoretically unreachable
     return {
       dropped: true,
       midi,
@@ -146,7 +148,8 @@ function applyOutOfRange(
   if (policy === 'clamp') {
     return pick(p < low ? low : high);
   }
-  // 'warn' 与 'octave' 都按整数八度平移回可用音域，区别只在上层是否提示用户
+  // Both 'warn' and 'octave' shift back into the usable pitch range by whole octaves;
+  // they differ only in whether the caller notifies the user
   const octaves = Math.ceil((low - p) / 12);
   let shifted = p + 12 * octaves;
   if (shifted > high) shifted -= 12;

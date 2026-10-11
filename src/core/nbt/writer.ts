@@ -1,6 +1,6 @@
 import { NbtTag, TagType } from './tag';
 
-/** 大端序 NBT 序列化器（NBT 规范要求所有基本类型大端序）。 */
+/** Big-endian NBT serializer (the NBT spec requires all primitives to be big-endian). */
 class NbtWriter {
   private buf: Buffer;
   private pos = 0;
@@ -66,7 +66,7 @@ class NbtWriter {
     this.pos += 8;
   }
 
-  /** 无符号 16 位长度的 UTF-8 字符串 */
+  /** UTF-8 string with an unsigned 16-bit length */
   str(s: string): void {
     const bytes = Buffer.from(s, 'utf8');
     if (bytes.length > 0xffff) {
@@ -135,7 +135,7 @@ class NbtWriter {
     }
   }
 
-  /** 写带名字的标签，返回字节。 */
+  /** Write a named tag, returning the bytes. */
   write(name: string, tag: NbtTag): Buffer {
     this.u8(tag.type);
     this.str(name);

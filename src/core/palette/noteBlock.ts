@@ -1,15 +1,15 @@
-/** 音符盒方块状态序列化。 */
+/** Note block blockstate serialization. */
 
 import type { NoteBlockInstrument } from './pitchMap';
 
 export interface BlockState {
-  /** 完整方块 id，如 minecraft:note_block */
+  /** Full block id, e.g. minecraft:note_block */
   name: string;
-  /** 方块状态属性，值均为字符串 */
+  /** Blockstate properties, all values are strings */
   properties?: Record<string, string>;
 }
 
-/** 音符盒：note 档位 0-24，并显式写入 instrument，避免粘贴后回落到 harp。 */
+/** Note block: note 0-24; instrument is written explicitly to avoid harp fallback on paste. */
 export function noteBlock(note: number, instrument: NoteBlockInstrument = 'harp'): BlockState {
   return {
     name: 'minecraft:note_block',
@@ -17,7 +17,7 @@ export function noteBlock(note: number, instrument: NoteBlockInstrument = 'harp'
   };
 }
 
-/** 红石线：power 0-15。 */
+/** Redstone wire: power 0-15. */
 export function redstoneWire(power = 0): BlockState {
   return {
     name: 'minecraft:redstone_wire',
@@ -27,7 +27,7 @@ export function redstoneWire(power = 0): BlockState {
 
 export type RepeaterFacing = 'north' | 'south' | 'east' | 'west';
 
-/** 红石中继器：delay 1-4，facing 为输出方向。 */
+/** Redstone repeater: delay 1-4, facing is the output direction. */
 export function repeater(facing: RepeaterFacing, delay: number): BlockState {
   return {
     name: 'minecraft:repeater',
@@ -40,7 +40,7 @@ export function repeater(facing: RepeaterFacing, delay: number): BlockState {
   };
 }
 
-/** 无属性的普通方块（垫底方块等）。 */
+/** A plain block with no properties (base blocks and the like). */
 export function plainBlock(name: string): BlockState {
   return { name };
 }
@@ -53,7 +53,7 @@ function clampDelay(d: number): number {
   return Math.max(1, Math.min(4, Math.round(d)));
 }
 
-/** 稳定的调色板键，用于去重。 */
+/** Stable palette key, used for deduplication. */
 export function stateKey(s: BlockState): string {
   if (!s.properties) return s.name;
   const keys = Object.keys(s.properties).sort();

@@ -6,11 +6,11 @@ import { writeNbt } from '../nbt/writer';
 import { BlockState, stateKey } from '../palette/noteBlock';
 
 export interface RegionData {
-  /** 区域原点（整图坐标系） */
+  /** Region origin (whole-map coordinate system) */
   position: { x: number; y: number; z: number };
-  /** 尺寸，均为正数 */
+  /** Size, all positive */
   size: { x: number; y: number; z: number };
-  /** 区域内方块，坐标相对区域原点 */
+  /** Blocks in the region, coordinates relative to the region origin */
   blocks: Array<{ x: number; y: number; z: number; state: BlockState }>;
   /** Block entities use region-local x/y/z, as required by Litematica. */
   tileEntities?: NbtCompound[];
@@ -20,16 +20,16 @@ export interface LitematicMeta {
   name: string;
   author: string;
   description: string;
-  /** MC 数据版本（1.20.4 = 3700） */
+  /** MC data version (1.20.4 = 3700) */
   dataVersion: number;
-  /** litematic 格式版本（1.20.4 = 6） */
+  /** litematic format version (1.20.4 = 6) */
   version: number;
 }
 
 export const MC_1_20_4_DATA_VERSION = 3700;
 export const LITEMATIC_VERSION_1_20_4 = 6;
 
-/** 索引顺序：index = y * (sizeX * sizeZ) + z * sizeX + x */
+/** Index order: index = y * (sizeX * sizeZ) + z * sizeX + x */
 export function blockIndex(x: number, y: number, z: number, sizeX: number, sizeZ: number): number {
   return y * (sizeX * sizeZ) + z * sizeX + x;
 }
@@ -60,11 +60,11 @@ function buildRegion(region: RegionData): PackedRegion {
     entityPositions.add(pos.join(','));
   }
 
-  // 调色板：ID 0 必须是 minecraft:air
+  // Palette: ID 0 must be minecraft:air
   const palette: BlockState[] = [{ name: 'minecraft:air' }];
   const paletteIndex = new Map<string, number>([[stateKey(palette[0]!), 0]]);
 
-  const indices = new Uint32Array(volume); // 默认 0 = air
+  const indices = new Uint32Array(volume); // default 0 = air
   let nonAirCount = 0;
 
   for (const b of region.blocks) {
@@ -81,7 +81,7 @@ function buildRegion(region: RegionData): PackedRegion {
     indices[blockIndex(b.x, b.y, b.z, sx, sz)] = id;
   }
 
-  // 统计最终网格，避免重复坐标和显式 air 被计入非空气方块。
+  // Count the final grid: duplicate coordinates and explicit air must not count as non-air.
   for (const id of indices) {
     if (palette[id]?.name !== 'minecraft:air') nonAirCount++;
   }
@@ -116,7 +116,7 @@ function buildRegion(region: RegionData): PackedRegion {
   return { compound, paletteSize: palette.length, volume, nonAirCount };
 }
 
-/** 组装 .litematic 的根 NBT 并 gzip 压缩。 */
+/** Assemble the root NBT of a .litematic and gzip it. */
 export function buildLitematic(regions: RegionData[], meta: LitematicMeta): Buffer {
   const packed = regions.map(buildRegion);
 
@@ -169,7 +169,7 @@ export function buildLitematic(regions: RegionData[], meta: LitematicMeta): Buff
     ]),
   );
 
-  // 写入顺序：Version → MinecraftDataVersion → Metadata → Regions
+  // Write order: Version → MinecraftDataVersion → Metadata → Regions
   const root = nbt.compound(
     new Map<string, NbtTag>([
       ['Version', nbt.int(meta.version)],
@@ -182,14 +182,14 @@ export function buildLitematic(regions: RegionData[], meta: LitematicMeta): Buff
   return gzipSync(writeNbt('', root));
 }
 
-// ---- 回读校验 ----
+// ---- Read-back verification ----
 
 export interface ParsedRegion {
   name: string;
   position: { x: number; y: number; z: number };
   size: { x: number; y: number; z: number };
   palette: BlockState[];
-  /** 解包后的 palette 索引，按 (x,y,z) → 可用 blockIndex 查询 */
+  /** Unpacked palette indices, queryable via blockIndex with (x,y,z) */
   indices: Uint32Array;
   /** Raw region-local block entities, preserved for export roundtrip verification. */
   tileEntities: NbtCompound[];
@@ -218,7 +218,7 @@ function getVec3(c: NbtCompound, key: string): { x: number; y: number; z: number
   };
 }
 
-/** 解压并解析 .litematic（自研回读，用于校验与模拟）。 */
+/** Decompress and parse a .litematic (in-house read-back for verification and simulation). */
 export function parseLitematic(buf: Buffer): ParsedLitematic {
   const { tag } = readNbt(gunzipSync(buf));
   if (tag.type !== TagType.Compound) throw new Error('根标签不是 Compound');

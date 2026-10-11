@@ -1,26 +1,28 @@
 import type { PitchRegion } from './pitchMap';
 
 /**
- * 「某个位置该放什么方块」的统一解析层。
+ * The unified resolution layer for "which block goes at a given position".
  *
- * 刻意不针对某一种位置写特例：新增位置类型只需在 `BlockSlot` 里加一个名字，
- * 覆盖规则与解析优先级自动生效。红石线下方只是它的第一个使用者。
+ * Deliberately no special cases for any one position: adding a position type only
+ * means adding a name to `BlockSlot`, and the override rules and resolution
+ * priority take effect automatically. Below redstone wire is just its first user.
  *
- * 每个位置都可以解析成 `minecraft:air`（即"这里不放方块"），由调用方决定是否允许。
+ * Every position can resolve to `minecraft:air` (that is, "place no block here");
+ * whether that is allowed is up to the caller.
  */
 export type BlockSlot =
-  /** 红石线 / 中继器下方，防止它们悬空掉落 */
+  /** Below redstone wire / repeaters, so they do not pop off unsupported */
   | 'wireSupport'
-  /** 音符盒下方，决定音色 */
+  /** Below note blocks, determines the timbre */
   | 'noteBase'
-  /** 通用地板 */
+  /** Generic floor */
   | 'floor';
 
 export type BlockTable = Record<BlockSlot, string>;
 
 export const AIR = 'minecraft:air';
 
-/** 全局默认值。 */
+/** Global defaults. */
 export const DEFAULT_BLOCK_TABLE: BlockTable = {
   wireSupport: 'minecraft:dirt',
   noteBase: 'minecraft:grass_block',
@@ -28,17 +30,18 @@ export const DEFAULT_BLOCK_TABLE: BlockTable = {
 };
 
 /**
- * 默认值分两级：全局 + 音区。
+ * Defaults come in two levels: global + pitch region.
  *
- * 音区级默认是必要的 —— 音符盒垫底方块本来就按音区不同（A/B/C/D/E 五区音色不同），
- * 所以"默认值"本身就要能按 A/B/C/D/E 音区给。
+ * Region-level defaults are necessary — note block base blocks already differ per
+ * pitch region (the five regions A/B/C/D/E have different timbres), so the
+ * "default" itself must be expressible per A/B/C/D/E region.
  */
 export interface BlockDefaults {
   global: BlockTable;
   regions?: Partial<Record<PitchRegion, Partial<BlockTable>>>;
 }
 
-/** 音轨级 / 音区级覆盖，值可以是任意方块 id（含 `minecraft:air`）。 */
+/** Track-level / region-level overrides; a value may be any block id (incl. `minecraft:air`). */
 export interface BlockOverrides {
   tracks?: Record<number, Partial<BlockTable>>;
   regions?: Partial<Record<PitchRegion, Partial<BlockTable>>>;
@@ -53,10 +56,11 @@ export interface BlockQuery {
 export type BlockResolver = (query: BlockQuery) => string;
 
 /**
- * 解析优先级（由具体到宽泛）：
- *   覆盖·音区 > 覆盖·音轨 > 默认·音区 > 默认·全局
+ * Resolution priority (from specific to broad):
+ *   override·region > override·track > default·region > default·global
  *
- * 覆盖优先于默认；音区优先于音轨，因为音区直接决定音色（垫底方块换了乐器就变了）。
+ * Overrides take priority over defaults; region takes priority over track, because the
+ * region directly determines the timbre (swap the base block and the instrument changes).
  */
 export function createBlockResolver(
   defaults: BlockDefaults = { global: DEFAULT_BLOCK_TABLE },

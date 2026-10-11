@@ -1,17 +1,17 @@
 import { BASE_TPS } from './tick';
 
 export interface SpeedRow {
-  /** 倍率，1.0 为原速 */
+  /** Multiplier, 1.0 is the original speed */
   factor: number;
-  /** 对应的 /tick rate 值 */
+  /** The corresponding /tick rate value */
   tickRate: number;
-  /** 实际播放时长（秒） */
+  /** Actual playback duration (seconds) */
   durationSec: number;
 }
 
 /**
- * 变速换算表：`/tick rate` 把游戏刻速率提到 baseTps × factor，
- * 于是实际时长 = 曲目时长 / factor。
+ * Speed conversion table: `/tick rate` raises the game tick rate to baseTps × factor,
+ * so the actual duration = track duration / factor.
  */
 export function speedTable(durationSec: number, presets: number[], baseTps: number = BASE_TPS): SpeedRow[] {
   return presets.map((factor) => {
@@ -24,7 +24,7 @@ export function speedTable(durationSec: number, presets: number[], baseTps: numb
   });
 }
 
-/** 格式化为 mm:ss.s */
+/** Format as mm:ss.s */
 export function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds - m * 60;

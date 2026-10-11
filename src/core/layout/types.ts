@@ -5,34 +5,35 @@ export interface Vec3 {
 }
 
 export interface PlacedNote {
-  /** 音符盒坐标 */
+  /** Note block position. */
   notePos: Vec3;
-  /** 垫底方块坐标 */
+  /** Base block position, directly under the note block. */
   blockPos: Vec3;
-  /** 音符盒档位 0-24 */
+  /** Note block pitch value, 0-24. */
   note: number;
-  /** 垫底方块 id */
+  /** Base block id, which is what selects the instrument. */
   block: string;
-  /** 从分叉点到该音符盒的路径格（不含起点，含终点） */
+  /** Cells from the tap point to this note block, excluding the start and including the end. */
   path: Vec3[];
 }
 
 /**
- * 主线上的一个分叉点：同一红石刻发声的一组音符。
+ * One tap point on the main line: a group of notes that fires on the same redstone tick.
  *
- * `x` 是分线列所在的格，`t` 是该组在主线上到达的红石刻。
+ * `x` is the cell the branch column sits on, `t` the redstone tick at which the main
+ * line reaches it.
  */
 export interface Tap {
-  /** 分线列的 X */
+  /** X of the branch column. */
   x: number;
-  /** 主线到达该分叉点的红石刻 */
+  /** Redstone tick at which the main line reaches this tap point. */
   t: number;
   notes: PlacedNote[];
 }
 
 export interface BlockPlacement {
   pos: Vec3;
-  /** 方块 id */
+  /** Block id. */
   block: string;
   props?: Record<string, string>;
 }
@@ -48,50 +49,54 @@ export type LayoutWarning =
   | { code: 'COMMAND_PLAYBACK_REQUIREMENTS'; chainLength: number; budget: number }
   | { code: 'COMMAND_SOUND_PRESSURE'; peakNotes: number }
   /**
-   * 命令播放器的方块总数超过安全参考值：粘贴/加载会明显变慢。
+   * The command player holds more blocks than the safe reference count, so pasting
+   * and loading it become noticeably slow.
    *
-   * 健康结构只随「帧数 + 音色数 + 复用槽位数」增长，与音符总数无关；
-   * 历史实现曾按音符逐个放命令方块（Rush E 46291 音 → 46308 块），
-   * 该告警就是为拦截这一类回归而设。
+   * A healthy structure grows with frames, voices and reusable slots only - never
+   * with the note count. The per-note compiler this project replaced emitted one
+   * command block per note (46291 notes -> 46308 blocks); this warning exists to
+   * catch that class of regression.
    */
   | { code: 'COMMAND_STRUCTURE_SIZE'; commandBlocks: number; limit: number }
   | { code: 'POLYPHONY_EXCEEDED'; tick: number; n: number; limit: number }
   | { code: 'OUT_OF_RANGE'; midi: number; action: string }
   | { code: 'TIMING_ADJUSTED'; tick: number; actual: number }
-  /** 密集音群放不下，已改派到新音轨 */
+  /** A dense group did not fit and was re-emitted on a new track. */
   | { code: 'TRACK_SPLIT'; tick: number; notes: number }
   /** Song-wide startup compensation in game ticks; music-relative timing is unchanged. */
   | { code: 'FORCE_MERGE_LEAD_IN'; ticks: number; peakNotes: number; sectionCapacity: number }
   /** One chord's bus was extended with renewed power, not split into playback tracks. */
   | { code: 'FANOUT_EXPANDED'; tick: number; n: number; limit: number; stages: number }
-  /** 该处无法用红石线补齐跟上共享 X 参考线：报告时间与格数偏差，不改时值、不丢音 */
+  /** This group could not be padded with dust to reach the shared X reference line.
+   *  Reports the residual drift in cells; no timing is altered and no note is dropped. */
   | { code: 'SPATIAL_DRIFT'; tick: number; drift: number };
 
 export interface LayoutResult {
   tracks: TrackSkeleton[];
   size: Vec3;
-  /** 全图最小 x/y/z（用于把坐标平移到 litematic 的局部坐标系） */
+  /** Minimum x/y/z over the whole layout, used to translate into litematic local space. */
   min: Vec3;
   totalTicks: number;
   /** Uniform startup latency in game ticks for the opt-in forced layout. */
   startupDelayTicks?: number;
   warnings: LayoutWarning[];
-  /** 每个已放置音群的期望 tick 与实际触发 tick（按音轨顺序） */
+  /** Intended and actual trigger tick of every placed group, in track order. */
   placed: Array<{ trackIndex: number; zBase: number; tick: number; actual: number }>;
 }
 
 export interface LayoutConfig {
   baseTps: number;
   /**
-   * 电路层：红石线、中继器、音符盒都在这一层。
+   * Circuit layer: redstone dust, repeaters and note blocks all live here.
    *
-   * 之所以只有一层，是因为音符盒**正上方必须是空气**才发声，
-   * 所以红石线不能压在音符盒上方，只能与它同层相邻。
+   * There is only one layer because a note block **must have air directly above it**
+   * to sound, so dust cannot sit on top of a note block and has to be adjacent on the
+   * same layer instead.
    */
   circuitY: number;
-  /** 地板层，在电路层正下方，防止红石线悬空掉落 */
+  /** Floor layer, directly under the circuit layer, so dust does not pop off. */
   floorY: number;
-  /** 分线列单侧最多延伸多少行；总和弦容量为 2*dMax + 1 */
+  /** How many rows a branch column may extend to one side; total chord capacity is 2*dMax + 1. */
   dMax: number;
   trackPitch: number | 'auto';
 }

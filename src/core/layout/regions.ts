@@ -1,7 +1,7 @@
 import type { BlockPlacement, LayoutResult } from './types';
 
 export interface RegionSlice {
-  /** 所属原始音轨 index；拆轨后的区域可以共享该 index */
+  /** Index of the originating track; regions split off the same track share it. */
   trackIndex: number;
   position: { x: number; y: number; z: number };
   size: { x: number; y: number; z: number };
@@ -9,14 +9,16 @@ export interface RegionSlice {
 }
 
 /**
- * 把布局结果切成 litematic 区域。
+ * Split the layout into litematic regions.
  *
- * Litematica 为每个区域保存一整块稠密方块数组，区域越大该数组越占内存，
- * 因此按音轨切分而不是整图一个区域。同一音轨的 z 范围是连续区间，不同音轨
- * 之间至少隔一个 trackPitch，因此天然不重叠。
+ * Litematica stores one dense block array per region, and the larger the region the
+ * more memory that array costs, so regions are split per track rather than covering
+ * the whole schematic. A track's Z range is contiguous and tracks are separated by at
+ * least one trackPitch, so the regions never overlap.
  *
- * 关键点：region 内方块坐标必须 ≥0，而布局坐标可能为负（复音支线沿 -Z 展开），
- * 因此区域原点取该轨的实际最小值，并把方块坐标整体平移 (minX, minY, minZ)。
+ * The important detail: coordinates inside a region must be >= 0, while layout
+ * coordinates can be negative (chord branches extend along -Z). Each region therefore
+ * takes its own minimum as origin and translates its blocks by -(minX, minY, minZ).
  */
 export function sliceRegions(result: LayoutResult): RegionSlice[] {
   const slices: RegionSlice[] = [];

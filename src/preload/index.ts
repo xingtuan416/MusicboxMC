@@ -2,26 +2,27 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { AnalyzeResult, GenerateOptions, GenerateResult } from '../main/service';
 
 /**
- * 渲染进程可见的唯一入口。
+ * The only entry point visible to the renderer process.
  *
- * 逐功能通道：每个方法对应一个具名 IPC channel，主进程按功能返回结构化数据。
- * 渲染进程始终拿不到 Node API（contextIsolation + sandbox 全程开启），
- * 文件路径由主进程的对话框产出，渲染进程只能回传路径字符串。
+ * Per-feature channels: each method maps to one named IPC channel, and the main process returns
+ * structured data per feature. The renderer process never gets the Node API (context isolation +
+ * sandbox are enabled throughout); file paths come from main-process dialogs, and the renderer
+ * process can only send a path string back.
  */
 export interface MusicboxApi {
-  /** 打开文件对话框，返回所选 MIDI 路径；取消返回 null */
+  /** Open a file dialog and return the chosen MIDI path; returns null on cancel */
   chooseMidi(): Promise<string | null>;
-  /** 选择 .litematic 保存位置；取消返回 null */
+  /** Choose where to save the .litematic; returns null on cancel */
   chooseOutput(defaultName: string): Promise<string | null>;
-  /** 只解析，不生成电路 */
+  /** Parse only, without generating circuits */
   analyze(path: string): Promise<AnalyzeResult>;
-  /** 完整生成；输出路径为空时只生成不落盘 */
+  /** Full generation; when the output path is empty, generate without writing to disk */
   generate(path: string, options: GenerateOptions, outputPath?: string): Promise<GenerateResult>;
-  /** 在系统文件管理器中定位文件 */
+  /** Reveal the file in the system file manager */
   reveal(path: string): Promise<void>;
-  /** 用系统默认程序打开文件 */
+  /** Open the file with the system default application */
   open(path: string): Promise<void>;
-  /** 主进程打印的日志（例如未捕获异常），用于在界面上回显 */
+  /** Logs printed by the main process (e.g. uncaught exceptions), echoed back into the UI */
   onLog(handler: (line: string) => void): void;
 }
 

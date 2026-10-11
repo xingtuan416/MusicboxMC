@@ -1,6 +1,7 @@
 'use strict';
 
-/* 渲染进程：无框架，纯 DOM。所有重活都在主进程，这里只做展示与参数收集。 */
+/* Renderer: no framework, plain DOM. All the heavy work happens in the main process;
+   this file only presents results and collects parameters. */
 
 const api = window.musicbox;
 
@@ -14,7 +15,7 @@ const state = {
   previewRenderScale: 1,
 };
 
-/* ---------------- 日志 ---------------- */
+/* ---------------- Logging ---------------- */
 
 const logLines = [];
 function log(line) {
@@ -24,12 +25,13 @@ function log(line) {
   $('log').textContent = logLines.join('\n');
 }
 
-/* ---------------- 通用 UI ---------------- */
+/* ---------------- Shared UI ---------------- */
 
 /**
- * banner 是多个信息共用的单元素区域，直接赋值会互相覆盖
- * （曾把音域越界这类"必须提示"的警告盖掉）。这里按优先级累积，
- * 并让更严重的级别决定整体配色。
+ * The banner is a single element shared by several messages, so assigning to it
+ * directly makes them overwrite each other (which once swallowed a must-show
+ * warning about notes outside the pitch range). Accumulate instead, and let the
+ * most severe level decide the colour.
  */
 const BANNER_LEVEL = { ok: 0, warn: 1, err: 2 };
 const bannerState = { level: null, lines: [] };
@@ -191,7 +193,7 @@ function card(title, ...children) {
   return c;
 }
 
-/* ---------------- 参数收集 ---------------- */
+/* ---------------- Option collection ---------------- */
 
 function collectOptions() {
   const excluded = [];
@@ -211,7 +213,7 @@ function collectOptions() {
   };
 }
 
-/* ---------------- 概览渲染 ---------------- */
+/* ---------------- Overview rendering ---------------- */
 
 function renderOverview(res) {
   const box = $('overview');
@@ -394,8 +396,9 @@ function renderOverview(res) {
       ),
     );
 
-    // 超出音域必须明确提示，禁止静默失真。
-    // 这条不能和"生成成功"挤在一行里被忽略，故单独一段并加前缀。
+    // Notes outside the pitch range must be reported; silent degradation is not an
+    // option. This cannot share a line with "generated successfully" or it gets
+    // skimmed past, so it gets its own paragraph and a prefix.
     if (res.outOfRangeNotes > 0) {
       banner(
         'warn',
@@ -412,7 +415,7 @@ function fmtDuration(sec) {
   return `${m}:${s.toFixed(1).padStart(4, '0')}`;
 }
 
-/* ---------------- 告警渲染 ---------------- */
+/* ---------------- Warning rendering ---------------- */
 
 const WARN_TEXT = {
   COMMAND_PLAYBACK_REQUIREMENTS: (w) =>
@@ -475,7 +478,8 @@ function renderWarnings(warnings) {
     return;
   }
 
-  // 同类告警可能成百上千条（密集段落每条一个），按 code 折叠计数
+  // One warning per note is normal in a dense passage, so hundreds of entries of the
+  // same kind are possible; collapse them by code.
   const counts = new Map();
   for (const w of warnings) counts.set(w.code, (counts.get(w.code) || 0) + 1);
 
@@ -495,7 +499,7 @@ function renderWarnings(warnings) {
   }
 }
 
-/* ---------------- 预览渲染 ---------------- */
+/* ---------------- Preview rendering ---------------- */
 
 const BLOCK_COLORS = {
   'minecraft:command_block': '#bd885c',
@@ -552,22 +556,22 @@ function displayBlockName(block) {
   return names[block] || shortName(block);
 }
 
-/** 每个格子 38px（96dpi 下约 1cm，用户要求至少 1cm 大）。 */
+/** Base cell size in CSS pixels: 38px is about 1cm at 96dpi. */
 const BASE_CELL = 38;
-/** 左侧行头宽度（显示 Z 行号与所属音轨） */
+/** Width of the left gutter, which shows the Z row and its track. */
 const GUTTER = 150;
-/** 顶部刻度尺高度（X 轴 = 时间方向） */
+/** Height of the top ruler (X is the time axis). */
 const RULER = 28;
-/** 行头与刻度尺的底色 */
+/** Background of the gutter and ruler. */
 const HEAD_BG = '#e9e7e2';
-/** Chromium 对单个 canvas 维度有限制；为长曲目预留安全余量。 */
+/** Chromium caps canvas dimensions, so leave headroom for long songs. */
 const MAX_CANVAS_PIXELS = 30000;
 const MAX_CANVAS_AREA = 16000000;
 
-/** 每个区域一个颜色，用于行头的音轨色条。 */
+/** One colour per region, used for the track stripe in the gutter. */
 const REGION_COLORS = ['#c97962', '#c29a65', '#879b79', '#ad8971', '#c58f9c', '#7d9690', '#aa9161'];
 
-/** 该 Z 行属于哪个区域（regions 与预览同坐标系） */
+/** Which region a Z row belongs to (regions share the preview's coordinate space). */
 function regionOfRow(res, z) {
   for (let i = 0; i < res.regions.length; i++) {
     const r = res.regions[i];
@@ -576,7 +580,7 @@ function regionOfRow(res, z) {
   return -1;
 }
 
-/** 在 (cx, cy) 居中写一行字 */
+/** Draw one line of text centred on (cx, cy). */
 function label(ctx, text, cx, cy, color, font) {
   ctx.fillStyle = color;
   ctx.font = font;
@@ -614,9 +618,10 @@ function drawTileShadow(ctx, x, y, width, height, radius) {
 }
 
 /**
- * 电路预览：**一行 = 一个实际 Z 行**，一列 = 一格 X（时间方向 →）。
- * 红石线只画线；中继器画成真中继器的样子（石板 + 前后两个红石火把 + 箭头），
- * 档位数字写在上方；音符盒画成音符盒方块，右上角小方块是它下面的方块。
+ * Circuit preview: **one row is one real Z row**, one column is one X cell (time runs
+ * to the right). Dust is drawn as lines; a repeater is drawn like the real block (a
+ * slab with a torch at each end and an arrow) with its delay setting above it; a note
+ * block is drawn as a note block, with the block underneath shown in its corner.
  */
 function renderPreview(res) {
   const canvas = $('canvas');
@@ -656,7 +661,8 @@ function renderPreview(res) {
     (2 * Math.max(1, cssArea - GUTTER * RULER)) /
     (areaB + Math.sqrt(areaB * areaB + 4 * x * z * Math.max(1, cssArea - GUTTER * RULER)));
   const requestedCell = BASE_CELL * state.previewScale;
-  // 长曲目自动缩小到安全画布尺寸，避免 canvas.width 超过 Chromium 上限后整块空白。
+  // Scale long songs down to a safe canvas size; past Chromium's dimension cap the
+  // whole canvas renders blank.
   const CELL = Math.min(requestedCell, dimensionCell, areaCell);
   const renderScale = CELL / BASE_CELL;
   state.previewRenderScale = renderScale;
@@ -680,7 +686,7 @@ function renderPreview(res) {
   const px = (gx) => gridX0 + gx * CELL;
   const pz = (gz) => gridY0 + gz * CELL;
 
-  // ── 顶部刻度尺（X = 时间方向）──
+  // ── Top ruler (X is the time axis) ──
   ctx.fillStyle = HEAD_BG;
   ctx.fillRect(0, 0, w, RULER);
   ctx.font = '10px ui-monospace, monospace';
@@ -698,7 +704,7 @@ function renderPreview(res) {
     ctx.fillText(String(gx), cx + 3, RULER / 2 - 1);
   }
 
-  // ── 左侧行头（Z 行号 + 所属音轨）──
+  // ── Left gutter (Z row and its track) ──
   ctx.fillStyle = HEAD_BG;
   ctx.fillRect(0, 0, GUTTER, h);
   const trackOf = new Map();
@@ -710,7 +716,8 @@ function renderPreview(res) {
     const region = ri >= 0 ? res.regions[ri] : null;
     const color = ri >= 0 ? REGION_COLORS[ri % REGION_COLORS.length] : 'rgba(255,255,255,0.12)';
 
-    // 同一区域的整段行用同色左边条，一眼看出哪几行属于同一条轨
+    // Give a whole region's rows the same coloured stripe so it is obvious which rows
+    // belong to the same track.
     ctx.fillStyle = color;
     ctx.fillRect(0, y, 3, CELL);
     if (region && absoluteZ === region.position.z) {
@@ -730,8 +737,8 @@ function renderPreview(res) {
     ctx.fillText(`z${gz}`, GUTTER - 34, y + CELL / 2);
   }
 
-  // ── 格子 ──
-  // 垫底方块：淡淡铺一层，看得出下面是什么方块
+  // ── Cells ──
+  // Base blocks: a faint wash so the material underneath is still readable.
   for (let gz = 0; gz < z; gz++) {
     for (let gx = 0; gx < x; gx++) {
       const base = preview.baseCells[gz * x + gx];
@@ -753,7 +760,8 @@ function renderPreview(res) {
     }
   }
 
-  // 红石线：用浅色节点卡片 + 连接线表现，避免看起来像一条难以追踪的粗红线。
+  // Dust: light node cards joined by connector lines, rather than a thick red line that
+  // is impossible to trace.
   const wireAt = (gx, gz) =>
     gx >= 0 && gx < x && gz >= 0 && gz < z
       ? preview.wireCells[gz * x + gx] === 'minecraft:redstone_wire'
@@ -819,7 +827,8 @@ function renderPreview(res) {
     }
   }
 
-  // 中继器：做成清晰的输入 → 延迟 → 输出模块，方向与档位一眼可见。
+  // Repeaters: drawn as a clear input -> delay -> output module so direction and delay
+  // setting are readable at a glance.
   for (let gz = 0; gz < z; gz++) {
     for (let gx = 0; gx < x; gx++) {
       if (preview.wireCells[gz * x + gx] !== 'minecraft:repeater') continue;
@@ -859,7 +868,7 @@ function renderPreview(res) {
       ctx.translate(cx, cy);
       ctx.rotate(rotation);
       ctx.translate(-cx, -cy);
-      // 输入输出端点
+      // Input and output terminals
       ctx.fillStyle = '#bd4d49';
       ctx.beginPath();
       ctx.arc(x0 + Math.max(8, CELL * 0.19), cy, Math.max(3, CELL * 0.08), 0, Math.PI * 2);
@@ -869,7 +878,7 @@ function renderPreview(res) {
       ctx.arc(x0 + CELL - Math.max(8, CELL * 0.19), cy, Math.max(3, CELL * 0.08), 0, Math.PI * 2);
       ctx.fill();
 
-      // 中心轨道与向右箭头
+      // Centre track and arrow
       ctx.strokeStyle = '#8e8b84';
       ctx.lineWidth = Math.max(2, CELL * 0.055);
       ctx.lineCap = 'round';
@@ -913,7 +922,7 @@ function renderPreview(res) {
     }
   }
 
-  // 音符盒：木质主体 + 清晰音符符号 + 底部音色条。
+  // Note blocks: wooden body, clear note glyph and a timbre stripe along the bottom.
   if (showNotes) {
     for (let gz = 0; gz < z; gz++) {
       for (let gx = 0; gx < x; gx++) {
@@ -949,7 +958,7 @@ function renderPreview(res) {
           '#70401f',
         );
 
-        // 木纹条带，让它和红石/中继器在视觉上明显区分。
+        // Grain stripes, so it reads clearly as something other than dust or a repeater.
         ctx.fillStyle = 'rgba(255, 232, 193, 0.32)';
         ctx.fillRect(x0 + inset + 2, y0 + inset + 3, CELL - inset * 2 - 4, Math.max(2, CELL * 0.07));
         ctx.fillStyle = 'rgba(65, 31, 13, 0.24)';
@@ -960,7 +969,7 @@ function renderPreview(res) {
           Math.max(2, CELL * 0.07),
         );
 
-        // 音符记号
+        // Note glyph
         const noteStem = Math.max(9, CELL * 0.3);
         const noteHead = Math.max(4, CELL * 0.13);
         ctx.fillStyle = '#fff6e7';
@@ -975,7 +984,7 @@ function renderPreview(res) {
         ctx.ellipse(cx - CELL * 0.11, cy + CELL * 0.12, noteHead, noteHead * 0.78, -0.2, 0, Math.PI * 2);
         ctx.fill();
 
-        // 底部色条代表音符盒下面的方块（音色）。
+        // The bottom stripe shows the block under the note block, which is its timbre.
         const base = preview.baseCells[idx];
         const toneColor = base ? colorOf(base, preview) : '#d7d2c8';
         fillRoundedRect(
@@ -1009,7 +1018,7 @@ function renderPreview(res) {
     }
   }
 
-  // 行头与刻度尺的边界
+  // Gutter and ruler borders
   ctx.strokeStyle = '#c1bdb4';
   ctx.beginPath();
   ctx.moveTo(gridX0 + 0.5, 0);
@@ -1034,7 +1043,7 @@ function renderPreview(res) {
         `${trackCount} 条音轨 / ${(res.regions || []).length} 个区域　·　可见方块 ${nonEmpty} 个` +
         (renderScale < state.previewScale - 0.005 ? '　·　长曲目已自动缩小预览' : '');
 
-  // 图例
+  // Legend
   const legend = $('legend');
   legend.replaceChildren();
   for (const block of preview.blocks) {
@@ -1075,7 +1084,7 @@ function fitPreview() {
   setPreviewScale(Math.min(1.35, Math.max(0.45, Math.min(widthScale, heightScale))));
 }
 
-/* ---------------- 音轨列表 ---------------- */
+/* ---------------- Track list ---------------- */
 
 function renderTrackList(analyze) {
   const box = $('trackList');
@@ -1105,7 +1114,7 @@ function renderTrackList(analyze) {
   }
 }
 
-/* ---------------- 动作 ---------------- */
+/* ---------------- Actions ---------------- */
 
 function setBusy(on) {
   state.busy = on;
@@ -1146,8 +1155,10 @@ async function doAnalyze() {
     renderTrackList(res);
     renderWarnings([]);
 
-    // 解析后立即生成内存中的布局结果，让「电路预览」在不落盘的情况下可用。
-    // 最终点击「生成投影」时仍会按用户最新参数重新生成并保存。
+    // Build the layout in memory right after parsing so the circuit preview works
+    // without writing a file.
+    // Clicking "generate" later re-runs it with the user's latest settings and saves
+    // the result.
     try {
       updateWorkflowUI('generating', res);
       const previewRes = await api.generate(path, collectOptions());
@@ -1189,7 +1200,8 @@ async function doGenerate() {
   const path = $('filePath').value.trim();
   if (!path) return;
 
-  // 未指定输出路径时先问一次，避免"生成了但不知道文件在哪"
+  // Ask for an output path first when none is set, so a generated file never ends up
+  // somewhere the user cannot find.
   let out = $('outputPath').value.trim();
   if (!out) {
     try {
@@ -1241,7 +1253,7 @@ function switchTab(name) {
   }
 }
 
-/* ---------------- 绑定 ---------------- */
+/* ---------------- Bindings ---------------- */
 
 function bind() {
   const syncPlaybackSettings = () => {

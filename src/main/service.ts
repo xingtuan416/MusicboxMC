@@ -17,16 +17,16 @@ import type { BlockOverrides } from '../core/palette/blockTable';
 import { MAX_QUANTIZE_ERROR_MS, secondsToTick } from '../core/tempo/tick';
 import { buildCommandPlayback, type CommandPlaybackInfo } from '../core/command/playback';
 
-/** 渲染进程可提交的参数。只暴露 core 层已有能力，不引入新语义。 */
+/** Options the renderer process may submit; only existing core capabilities, no new semantics. */
 export interface GenerateOptions {
   baseTps?: number;
   dMax?: number;
   outOfRange?: 'warn' | 'clamp' | 'octave' | 'drop';
   excludeTracks?: number[];
   transpose?: Record<number, number>;
-  /** 方块选择覆盖（按音轨 / 音区） */
+  /** Block selection overrides (per track / pitch region) */
   blocks?: BlockOverrides;
-  /** 同乐器并轨：乐器相同的音轨合并成一条主线（打击乐单独一类） */
+  /** Merge same-instrument tracks into one spine (percussion is its own class) */
   mergeSameInstrument?: boolean;
   /** One connected spine per instrument, with song-wide branch-delay compensation. */
   forceMergeSameInstrument?: boolean;
@@ -51,7 +51,7 @@ export interface TrackSummary {
 
 export interface RegionSummary {
   name: string;
-  /** 该区域所属的原始音轨 index（供预览把 Z 行标回音轨；拆出的新轨与原轨同号） */
+  /** Source track index for this region; preview maps Z rows back, and splits share the index */
   trackIndex: number;
   position: { x: number; y: number; z: number };
   size: { x: number; y: number; z: number };
@@ -59,27 +59,28 @@ export interface RegionSummary {
 }
 
 /**
- * 俯视预览。
+ * Top-down preview.
  *
- * 新几何下红石线、中继器、音符盒**都在同一层**（音符盒正上方必须留空），
- * 所以不能再按 Y 分层 —— 改为按方块类型分三层输出，
- * 前端按「地板 → 线 → 音符盒」叠画，既能看清排线又能看清音符落点。
+ * In the new geometry redstone wire, repeaters and note blocks are **all on the same layer** (the
+ * space directly above a note block must be left empty), so output can no longer be layered by Y —
+ * instead it is split into three layers by block type, and the frontend stacks them as
+ * "floor → wire → note block", which shows both the wiring and the note placements clearly.
  */
 export interface PreviewData {
   size: { x: number; y: number; z: number };
-  /** 预览网格左上角在整图坐标系中的 X/Z */
+  /** X/Z of the preview grid's top-left corner in whole-schematic coordinates */
   origin: { x: number; z: number };
-  /** 红石线 / 中继器 */
+  /** Redstone wire / repeaters */
   wireCells: string[];
-  /** 与 wireCells 同长度：中继器的档位（1–4），非中继器为 '' */
+  /** Same length as wireCells: repeater delay (1–4), '' for non-repeaters */
   repeaterDelays: string[];
   /** Direction of repeater input, matching Minecraft facing blockstate. */
   repeaterFacings: string[];
-  /** 音符盒 */
+  /** Note blocks */
   noteCells: string[];
-  /** 地板（垫底方块） */
+  /** Floor (base blocks) */
   baseCells: string[];
-  /** 出现过的方块 id 去重列表，供前端配色 */
+  /** Deduplicated list of block ids that occur, used by the frontend for coloring */
   blocks: string[];
 }
 
@@ -105,17 +106,17 @@ export interface AnalyzeResult {
 
 export interface GenerateResult extends AnalyzeResult {
   success: boolean;
-  /** 生成失败时的人类可读原因 */
+  /** Human-readable reason when generation fails */
   error?: string;
-  /** 已落盘的投影路径（仅 generateToFile 会给） */
+  /** Schematic path written to disk (only set by generateToFile) */
   outputPath?: string;
-  /** 投影字节数 */
+  /** Schematic size in bytes */
   bytes: number;
   /** Backend actually used for this generation, not the current UI setting. */
   playbackMode?: 'redstone' | 'command';
   /** Command-mode controls, score namespace and execution budgets. */
   commandPlayback?: CommandPlaybackInfo;
-  /** 需要在前端提示的、超出资源包音域（F#1-F#7）的音符数 */
+  /** Notes outside the resource-pack pitch range (F#1-F#7) that the frontend must report */
   outOfRangeNotes: number;
   stats: {
     tickCount: number;
@@ -200,7 +201,7 @@ function toRegionData(slices: ReturnType<typeof sliceRegions>): RegionData[] {
   }));
 }
 
-/** 预览按方块类型分层：线 / 音符盒 / 地板。 */
+/** The preview layers by block type: wire / note blocks / floor. */
 function buildPreview(slices: ReturnType<typeof sliceRegions>, topDown = false): PreviewData {
   if (slices.length === 0) {
     return {
@@ -230,7 +231,7 @@ function buildPreview(slices: ReturnType<typeof sliceRegions>, topDown = false):
   const width = maxX - minX;
   const depth = maxZ - minZ;
 
-  // 行优先 index = z * width + x
+  // Row-major: index = z * width + x
   const wireCells = new Array<string>(width * depth).fill('');
   const repeaterDelays = new Array<string>(width * depth).fill('');
   const repeaterFacings = new Array<string>(width * depth).fill('');
@@ -357,13 +358,13 @@ function generateCommands(
   }
 }
 
-/** 只解析，不生成电路。用于导入后立刻显示文件信息。 */
+/** Parse only, without generating circuits. Used to show file info right after import. */
 export function analyzeFile(path: string): AnalyzeResult {
   return analyze(parseMidi(readFileSync(path)), path);
 }
 
 function layoutOptions(options: GenerateOptions) {
-  // 只把用户显式给出的项透传，其余交给 layout() 与默认值合并
+  // Pass through only the options the user set explicitly; layout() merges the rest with defaults
   const config: Partial<LayoutConfig> = {};
   if (options.baseTps !== undefined) config.baseTps = options.baseTps;
   if (options.dMax !== undefined) config.dMax = options.dMax;
@@ -382,7 +383,7 @@ function layoutOptions(options: GenerateOptions) {
 
 interface FailureContext {
   base: AnalyzeResult;
-  /** 曲目时长，用于算变速表 */
+  /** Song duration, used to compute the speed table */
   durationSec: number;
   error: string;
   presets: number[];
@@ -413,8 +414,8 @@ function failure(ctx: FailureContext): GenerateResult {
 }
 
 /**
- * 完整链路：解析 → 布局 → 切区域 → litematic 字节。
- * 失败不抛错，而是回 success=false + error，便于 GUI 直接展示。
+ * Full pipeline: parse → layout → slice regions → litematic bytes.
+ * Failures do not throw; they return success=false + error so the GUI can show them directly.
  */
 export function generate(
   path: string,
@@ -531,7 +532,7 @@ export function generate(
   };
 }
 
-/** 生成并落盘。 */
+/** Generate and write to disk. */
 export function generateToFile(
   path: string,
   outputPath: string,

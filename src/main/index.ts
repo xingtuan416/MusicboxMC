@@ -4,8 +4,8 @@ import { existsSync } from 'node:fs';
 import { analyzeFile, generate, generateToFile, type GenerateOptions } from './service';
 
 /**
- * 静态资源定位。编译产物布局为 dist/src/main/index.js，
- * 即 __dirname = <root>/dist/src/main，故用一级 ".." 回到 <root>/dist/src。
+ * Static asset resolution. The build output layout is dist/src/main/index.js,
+ * i.e. __dirname = <root>/dist/src/main, so a single ".." goes back to <root>/dist/src.
  */
 const RENDERER_DIR = join(__dirname, '..', 'renderer');
 const PRELOAD_FILE = join(__dirname, '..', 'preload', 'index.js');
@@ -44,7 +44,7 @@ function createWindow(): void {
   });
 }
 
-/** 渲染进程回传的路径必须是真实存在的文件，避免把任意字符串当路径用。 */
+/** Paths from the renderer process must be real files, not arbitrary path strings. */
 function assertFile(path: unknown): string {
   if (typeof path !== 'string' || path.length === 0) throw new Error('缺少文件路径');
   if (!existsSync(path)) throw new Error(`文件不存在：${path}`);

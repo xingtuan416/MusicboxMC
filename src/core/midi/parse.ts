@@ -1,7 +1,7 @@
 import { Midi } from '@tonejs/midi';
 import type { NoteEvent, SongModel, TempoSegment, TrackModel } from './types';
 
-/** 解析 MIDI 二进制为归一化的 SongModel。 */
+/** Parse MIDI binary into a normalized SongModel. */
 export function parseMidi(buffer: Buffer | Uint8Array): SongModel {
   const midi = new Midi(buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer));
 

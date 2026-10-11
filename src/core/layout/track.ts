@@ -12,9 +12,9 @@ import type { BlockResolver } from '../palette/blockTable';
 import { noteBlock, plainBlock, redstoneWire, repeater } from '../palette/noteBlock';
 import { place } from './placement';
 
-/** 单个音符的时间/音高输入。tick 为游戏刻（默认 20/秒）。 */
+/** One note's timing and pitch. `tick` is in game ticks (20 per second by default). */
 export interface TrackNote {
-  /** 已量化的触发 tick（游戏刻） */
+  /** Quantised trigger time, in game ticks. */
   tick: number;
   midi: number;
 }
@@ -29,67 +29,77 @@ export interface BuildTrackOptions {
   transpose?: number;
   outOfRange?: 'warn' | 'clamp' | 'octave' | 'drop';
   /**
-   * 超出单列和弦容量的音符不丢弃，而是登记后供上层改派到新音轨。
+   * Notes beyond the column's chord capacity are not dropped: they are recorded so
+   * the caller can re-emit them on a new track.
    */
   collectOverflow?: boolean;
   /**
-   * 全轨统一的红刻前导（0 或 1，由 layout() 按全曲计算后传入）。
+   * Song-wide lead-in in redstone ticks (0 or 1), computed once by layout().
    *
-   * 中继器最小 1 档：落在 rt 0 的音最早也只能 1 红刻后发声。为保住
-   * **跨轨相对时序**，该前导必须全曲统一——只要曲中存在 rt 0 的音组，
-   * 所有轨一律 +1 红刻；只按单轨推断会让不同轨的首音偏移互相不一致。
-   * 缺省时按本轨首组推断（供直接调用 buildTrack 的测试/脚本使用）。
+   * A repeater cannot have delay 0, so a group landing on redstone tick 0 cannot
+   * sound earlier than one redstone tick in. To preserve **relative timing across
+   * tracks** that offset has to be identical everywhere: if any track has a group
+   * at rt 0, every track gets +1. Inferring it per track would give the tracks
+   * different first-note offsets. When omitted, it is inferred from this track's
+   * first group, which is what tests and scripts calling buildTrack directly want.
    */
   base?: number;
   /**
-   * 全曲共享的「曲中时刻 → X」参考线（多轨空间对齐用）。
-   * 传入后本轨会按需补**红石线**跟上参考线；不传则按自然排布（单轨场景）。
+   * Shared "song time -> X" reference line, used for multi-track spatial alignment.
+   * When given, this track pads with **redstone dust** to keep up with it; when
+   * omitted the track is laid out naturally, which is the single-track case.
    */
   plan?: XPlan;
 }
 
-/** 单个超出单列容量的音群，供上层改派到其他音轨。 */
+/** One group that exceeded the column's capacity, for the caller to re-emit elsewhere. */
 export interface OverflowGroup {
   tick: number;
   notes: TrackNote[];
 }
 
 /**
- * 拓扑：主线自带中继器、音符盒内联在主线里。
+ * Topology: the main line carries its own repeaters, with note blocks inline.
  *
- *   主线: …[N][分线列 W][R(r)][N][分线列 W][R(r)][N]…（沿 +X）
- *   和弦: 分线列向 ±Z 各延伸若干行，每行 [W][R(r)][N]，与主线行同构。
+ *   main:  ... [N] [branch column W] [R(r)] [N] [branch column W] [R(r)] [N] ...  (+X)
+ *   chord: the branch column extends a few rows along +/-Z, each row [W][R(r)][N],
+ *          structurally identical to the main row.
  *
- * 时间模型：红石粉不按格计延迟，只有中继器计延迟（1–4 红石刻，
- * 1 红石刻 = 2 游戏刻 = 0.1s @20TPS）。相邻两组的间隔 = 组前中继器
- * 档位之和；组内齐响靠「分支行中继器档位 == 主线行末级中继器档位」。
+ * Time model: redstone dust adds no delay per cell; only repeaters delay (1-4
+ * redstone ticks, where 1 redstone tick = 2 game ticks = 0.1s at 20 TPS). The gap
+ * between two groups is the sum of the repeater delays ahead of the group, and a
+ * group fires together because every branch row's repeater uses the same delay as
+ * the main row's final repeater.
  *
- * 主线接续：中继器充能音符盒，被充能的音符盒给后方红石线供电，
- * 下一组的中继器从该线得电。音符盒只向相邻方块传导一跳，这是 ≤3 音
- * 和弦能靠单个音符盒点亮邻行的原因（见 chordRowLayout）。
+ * Main-line continuity: a repeater powers a note block, and the powered note block
+ * in turn powers the dust behind it, from which the next group's repeaters draw
+ * power. A note block conducts only to its immediate neighbours, which is why a
+ * chord of up to three notes can be lit by a single note block (see
+ * chordRowLayout).
  */
 
-/** 1 红石刻 = 2 游戏刻 = 0.1 秒（20 TPS）。 */
+/** 1 redstone tick = 2 game ticks = 0.1s at 20 TPS. */
 export const GAME_TICKS_PER_REDSTONE_TICK = 2;
 
-/** 中继器单档延迟上限（红石刻）。 */
+/** Highest delay a single repeater can be set to, in redstone ticks. */
 export const MAX_REPEATER_DELAY = 4;
 
-/** 红石线满信号强度。 */
+/** Full signal strength of redstone dust. */
 export const WIRE_STRENGTH = 15;
 
 /**
- * 分线列向单侧可延伸的最大行数。
+ * Maximum number of rows a branch column may extend to one side.
  *
- * 列上距供电格 d 行的红石线功率 = 15 − d，分支中继器输入需要 ≥1，
- * 故 d ≤ 14。这是信号强度给出的物理上限，不是预设容量。
+ * Dust d rows away from the powered cell carries 15 - d, and a branch repeater
+ * needs an input of at least 1, so d <= 14. This is the physical limit implied by
+ * signal strength, not a configured capacity.
  */
 export const MAX_SIDE_ROWS = WIRE_STRENGTH - 1;
 
-/** 一个分线列可承载的最大和弦音数：1 内联 + 每侧 MAX_SIDE_ROWS 行。 */
+/** Most notes one branch column can carry: 1 inline plus MAX_SIDE_ROWS rows on each side. */
 export const MAX_CHORD_NOTES = 2 * MAX_SIDE_ROWS + 1;
 
-/** 将用户配置转换为受红石强度上限约束的单列容量。 */
+/** Convert the user's setting into a column capacity, clamped by signal strength. */
 export function chordCapacity(dMax: number): number {
   if (!Number.isFinite(dMax)) return MAX_CHORD_NOTES;
   const rows = Math.max(1, Math.min(MAX_SIDE_ROWS, Math.floor(dMax)));
@@ -97,52 +107,59 @@ export function chordCapacity(dMax: number): number {
 }
 
 /**
- * 实际触发与期望的最大偏差（游戏刻）。
- * 新拓扑下偏差只来自红石刻量化：|tick − 2·rt| ≤ 1。
+ * Largest allowed difference between the actual and intended trigger time, in game ticks.
+ * With this topology the only source of drift is redstone-tick quantisation:
+ * |tick - 2*rt| <= 1.
  */
 export const MAX_TRIGGER_SHIFT = 1;
 
-/** 游戏刻 → 红石刻（四舍五入到 0.1s 网格）。 */
+/** Game ticks -> redstone ticks, rounded onto the 0.1s grid. */
 export function gameTickToRedstone(tick: number): number {
   return Math.round(tick / GAME_TICKS_PER_REDSTONE_TICK);
 }
 
 /**
- * 多轨空间对齐容差（格）。
+ * Spatial alignment tolerance between tracks, in cells.
  *
- * 各轨的 X 由**曲中时刻**决定（见 XPlan），偏差超过该值才用红石线补齐，
- * 因此同一段音乐的各轨始终保持在这段局部范围内，不会随曲长越走越散。
- * 10–15 是"检查间隔"量级，不是给任何曲目承诺的绝对最大误差。
+ * A track's X follows **song time** (see XPlan), and it is only padded once the
+ * deficit exceeds this value, so tracks stay within a bounded distance of each
+ * other instead of drifting apart over a long song. The 10-15 range is an order of
+ * magnitude for the check interval, not a promised worst case for any song.
  */
 export const ALIGN_TOLERANCE_CELLS = 12;
 
 /**
- * 单个补齐段（纯红石线）的最大格数。
+ * Longest single padding run, in cells, made of redstone dust only.
  *
- * 信号强度 15，末端给中继器/音符盒供电需 ≥1，故留 1 格余量取 13。
- * 补齐**只用红石线**：线不产生延迟，所以补格不改变任何音的触发时刻。
+ * Signal strength is 15 and powering a repeater or note block at the far end needs
+ * at least 1, so 13 leaves one cell of margin. Padding uses **dust only** because
+ * dust adds no delay, which is what lets padding change geometry without changing
+ * when anything fires.
  */
 export const MAX_PAD_RUN = 13;
 
 /**
- * 全曲共享的「曲中时刻 → X」参考线。
+ * Shared "song time -> X" reference line for the whole song.
  *
- * 取各轨**自然排布**（不补格）的 X 上包络：包络必然 ≥ 任一轨的自然 X，
- * 于是每条轨只需往前补，永远不需要后退或被压缩，
- * 也因此不需要改动中继器时值、不需要跨轨接线。
+ * It is the upper envelope of every track's **natural** X (no padding). Because an
+ * envelope is never behind any track, each track only ever pads forward - it never
+ * has to move back or be compressed, so no repeater delay is altered and no
+ * cross-track wiring is needed.
  */
 export interface XPlan {
-  /** 给定曲中时刻（含全曲前导的红刻）返回参考 X（音符列位置） */
+  /** Reference X (note column position) at a song time, including the song-wide lead-in. */
   targetX(atRt: number): number;
-  /** 该时刻是否有多条独立音轨同时落音，需要尽量共用 X 轴 */
+  /** Whether two or more independent tracks land a note at this time, so X should be shared. */
   isSynchronized(atRt: number): boolean;
 }
 
 /**
- * 一条音轨自然排布（不补格）时各音组的 X 采样，供 index.ts 建上包络。
+ * X samples of each group when a track is laid out naturally (no padding), used by
+ * index.ts to build the upper envelope.
  *
- * 与 buildTrack 的走线规则严格一致：组前中继器 ceil(rest/4) 格 + 分线列 1 格
- * + 末级中继器 1 格 + 音符列 1 格；首组且 rest>0 时另有一格起始线。
+ * Mirrors buildTrack's routing exactly: ceil(rest/4) cells of pre-group repeaters,
+ * one branch-column cell, one final-repeater cell and one note cell; plus a single
+ * starting dust cell for the first group when rest > 0.
  */
 export function naturalSamples(
   notes: TrackNote[],
@@ -167,14 +184,14 @@ export function naturalSamples(
     const n = Math.min(counts.get(rt)!, maxNotes);
     if (first && rest > 0) x = 1;
     x += restCells + groupTailCells(n);
-    out.push({ atRt: rt + base, x: x - 1 }); // 音符列
+    out.push({ atRt: rt + base, x: x - 1 }); // note column
     prevRt = rt + base;
     first = false;
   }
   return out;
 }
 
-/** 按 tick（游戏刻）归并音符。仅用于 totalTicks 统计；布局按红石刻分组。 */
+/** Group notes by game tick. Only used for the totalTicks statistic; layout groups by redstone tick. */
 export function groupByTick(notes: TrackNote[]): Array<{ tick: number; midi: number[] }> {
   const map = new Map<number, number[]>();
   for (const n of notes) {
@@ -185,42 +202,49 @@ export function groupByTick(notes: TrackNote[]): Array<{ tick: number; midi: num
   return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([tick, midi]) => ({ tick, midi }));
 }
 
-/** 和弦第 j 个分支音所在的行：+1, −1, +2, −2, …（两侧交替） */
+/** Row of the j-th extra chord note: +1, -1, +2, -2, ... alternating sides. */
 export function branchRow(j: number): { side: 1 | -1; row: number } {
   return { side: j % 2 === 0 ? 1 : -1, row: Math.floor(j / 2) + 1 };
 }
 
-/** n 音和弦向单侧延伸的行数。 */
+/** Rows an n-note chord extends to one side. */
 export function chordRows(n: number): number {
   return n <= 1 ? 0 : Math.ceil((n - 1) / 2);
 }
 
-/** 和弦中一个额外音所在的行（不含内联的主线行）。 */
+/** Row of one extra chord note, excluding the inline main-line row. */
 export interface ChordRow {
   side: 1 | -1;
   row: number;
-  /** true = 由内联音符盒**一跳传导**点亮：该行不放线、不放中继器 */
+  /** true = lit by the inline note block's **single hop**, so this row gets no dust and no repeater */
   conducted: boolean;
 }
 
 /**
- * 和弦各额外音的行布局。
+ * Row layout for the extra notes of a chord.
  *
- * **≤3 个音 → 一跳传导（一个簇）**：只用一个中继器充能内联（中间）那个音符盒，
- * 相邻行的音符盒被它点亮，同刻发声 —— 不需要各自的线与中继器。
- * 上限是 3 的原因：音符盒只导一跳，一排 [a][b][c][d] 充能 b 时只有 a、c 响，d 不响。
- * 主线仍从**被充能的那个**（内联/中间）往 +X 接续。
+ * **Up to 3 notes -> single-hop cluster.** One repeater powers the inline (middle)
+ * note block, which lights the note blocks on the adjacent rows, so the whole chord
+ * fires on the same tick with no dust and no repeaters of its own. The limit is 3
+ * because a note block conducts only one hop: in a row [a][b][c][d], powering b
+ * lights a and c but not d. The main line still continues +X from the powered
+ * (inline) note block.
  *
- * **≥4 个音 → 分支模式**：分线列必须连续铺线才能到达外圈，而簇会占住 ±1 行
- * （列被音符盒挡住），所以 4 个以上回到"每个额外音各占一行、各配一个中继器"。
+ * **4 or more notes -> branch mode.** The branch column has to be laid with dust to
+ * reach the outer rows, and a cluster would occupy the +/-1 rows and block the
+ * column, so from four notes up each extra note gets its own row and its own
+ * repeater.
  */
 /**
- * 该组在「组前中继器之后」占几格：分线列 1 格 + 中继器 1 格 + 音符列 1 格 = 3，
- * 或（不需要分线列时）中继器 1 格 + 音符列 1 格 = 2。
+ * How many cells a group occupies after its pre-group repeaters: one branch-column
+ * cell, one repeater cell and one note cell = 3, or - when no branch column is
+ * needed - one repeater cell and one note cell = 2.
  *
- * **只有 ≥4 音和弦才铺分线列**：外圈分支行要在同一刻取电，纵向供能只能用
- * 红石粉（中继器任何朝向都会加延迟）。除此之外末级中继器的输入直接取自
- * 背后的方块（上一个音符盒 / 上一个中继器），中间那格红石粉是多余的。
+ * **Only chords of four or more notes get a branch column.** The outer rows must be
+ * powered at the same instant, and vertical power transfer needs dust, because any
+ * repeater orientation would add delay. Otherwise the final repeater draws its
+ * input straight from the block behind it (the previous note block or repeater),
+ * and the dust cell in between would be redundant.
  */
 export function groupTailCells(n: number): number {
   return chordRowLayout(n).some((r) => !r.conducted) ? 3 : 2;
@@ -238,7 +262,7 @@ export function chordRowLayout(n: number): ChordRow[] {
   return Array.from({ length: n - 1 }, (_, j) => ({ ...branchRow(j), conducted: false }));
 }
 
-/** 预扫描一条音轨的最大和弦行数（用于 zBase 内移与轨距规划）。 */
+/** Pre-scan a track's widest chord (used to inset zBase and to plan track spacing). */
 export function maxChordRows(notes: TrackNote[], maxSideRows: number = MAX_SIDE_ROWS): number {
   const counts = new Map<number, number>();
   for (const n of notes) {
@@ -252,9 +276,9 @@ export function maxChordRows(notes: TrackNote[], maxSideRows: number = MAX_SIDE_
   return max;
 }
 
-/** 一个待落位的音符（已映射到音符盒档位、音区与垫底方块）。 */
+/** A note ready to be placed: already mapped to a note value, region and base block. */
 interface NoteToPlace {
-  /** 源音符（overflow 改派时用） */
+  /** Original note, kept so overflow can be re-emitted elsewhere. */
   source: TrackNote;
   midi: number;
   note: number;
@@ -265,29 +289,31 @@ interface NoteToPlace {
 }
 
 /**
- * 构建单条音轨的主线 + 各和弦分支。
+ * Build one track: the main line plus every chord branch.
  *
- * 时间模型：组间隔 gap（红石刻）= 组前中继器档位之和（红石粉 0 延迟）；
- * 末级中继器取 min(4, gap)，其余档位放在更靠前的串联中继器上。
- * 组内第 0 个音内联主线，其余音沿分线列 ±Z 行展开，
- * 每行中继器档位与主线行末级相同 ⇒ 全组同红石刻触发。
+ * Time model: the gap between groups, in redstone ticks, is the sum of the delays
+ * of the repeaters ahead of the group (dust contributes none). The final repeater
+ * takes min(4, gap) and the remainder is spread over earlier repeaters in series.
+ * The group's first note sits inline on the main line and the rest fan out along
+ * +/-Z; every row's repeater uses the same delay as the main row's final repeater,
+ * so the whole group fires on one redstone tick.
  */
 export function buildTrack(opts: BuildTrackOptions): {
   track: TrackSkeleton;
   warnings: LayoutWarning[];
-  /** 仅当 collectOverflow = true 时可能有值 */
+  /** Only ever non-empty when collectOverflow = true. */
   overflow: OverflowGroup[];
-  /** 每个已放置音群的期望 tick 与实际触发 tick（游戏刻；actual = 2·rt） */
+  /** Intended and actual trigger tick for each placed group, in game ticks (actual = 2*rt). */
   placed: Array<{ tick: number; actual: number }>;
 } {
   const warnings: LayoutWarning[] = [];
   const overflow: OverflowGroup[] = [];
   const maxChordNotes = chordCapacity(opts.config.dMax);
 
-  // 1) 音高映射 + 按红石刻分组
+  // 1) Map pitches, then group by redstone tick
   interface Group {
     rt: number;
-    /** 组内最小原始游戏刻（告警与 placed 报告用） */
+    /** Earliest original game tick in the group, used for warnings and placed reporting. */
     tick: number;
     notes: NoteToPlace[];
   }
@@ -298,7 +324,8 @@ export function buildTrack(opts: BuildTrackOptions): {
       warnings.push({ code: 'OUT_OF_RANGE', midi: n.midi, action: 'drop' });
       continue;
     }
-    // 自动八度移调是用户明确选择的无提示策略；其余降级策略仍需在结果中说明。
+    // Automatic octave shifting is an explicit user choice and stays silent; every
+    // other degraded outcome is reported.
     if (m.degraded && (opts.outOfRange ?? 'warn') !== 'octave') {
       warnings.push({ code: 'OUT_OF_RANGE', midi: n.midi, action: opts.outOfRange ?? 'warn' });
     }
@@ -321,7 +348,7 @@ export function buildTrack(opts: BuildTrackOptions): {
   }
   const groups = [...groupMap.values()].sort((a, b) => a.rt - b.rt);
 
-  // 2) 和弦容量：超出单列物理上限（信号强度）的部分移入 overflow
+  // 2) Chord capacity: anything past the column's physical limit goes to overflow
   const prepared: Group[] = [];
   for (const g of groups) {
     if (g.notes.length <= maxChordNotes) {
@@ -342,14 +369,15 @@ export function buildTrack(opts: BuildTrackOptions): {
     }
   }
 
-  // 3) 沿 +X 铺主线：[组前中继器][分线列][中继器列][音符列]
+  // 3) Lay the main line along +X: [pre-group repeaters][branch column][repeaters][notes]
   const placements: BlockPlacement[] = [];
   const taps: Tap[] = [];
   const placed: Array<{ tick: number; actual: number }> = [];
 
   const putWire = (x: number, z: number): void => {
-    // 投影是**未通电的初始状态**：红石粉一律 power=0，等玩家在起点接电后
-    // 由游戏自行传播。写 15 会把整条线预点亮（粘贴即满强度，与实际不符）。
+    // A schematic is pasted **unpowered**: dust is always written with power=0 and
+    // the game propagates it once the player applies power at the start. Writing 15
+    // would paste a pre-lit line, which is not what placing these blocks produces.
     placements.push(place({ x, y: opts.config.circuitY, z }, redstoneWire(0)));
     placements.push(
       place(
@@ -360,8 +388,9 @@ export function buildTrack(opts: BuildTrackOptions): {
   };
 
   const putRelay = (x: number, z: number, delay: number): void => {
-    // 输出必须朝 +X（音符盒侧）。注意 blockstate 语义：facing 是"从输出侧指向
-    // 输入侧"的向量，与箭头方向相反 —— 输出朝东 ⇒ facing=west（输入在西侧线列）。
+    // The output must point +X, towards the note blocks. Note the blockstate
+    // semantics: facing points from the output side back towards the input side, the
+    // opposite of the arrow - output east means facing=west.
     placements.push(place({ x, y: opts.config.circuitY, z }, repeater('west', delay)));
     placements.push(
       place(
@@ -393,9 +422,10 @@ export function buildTrack(opts: BuildTrackOptions): {
   let prevRt = 0;
   let first = true;
 
-  // 首组落在 rt 0 时，电路至少需要 1 红石刻驱动（中继器最小档位），
-  // 整轨统一加 1 红刻前导：各音相对时序不变，仅整体晚 0.1s 触发。
-  // base 由 layout() 全曲统一计算传入；缺省时按本轨首组推断。
+  // A group at rt 0 still needs one redstone tick to drive (the minimum repeater
+  // delay), so the whole track shifts by one redstone tick: relative timing is
+  // unchanged and everything simply fires 0.1s later. layout() computes this once
+  // for the song and passes it in; when absent it is inferred from this track.
   const base = opts.base ?? (prepared.length > 0 && prepared[0]!.rt === 0 ? 1 : 0);
   if (base === 1) {
     warnings.push({
@@ -406,16 +436,19 @@ export function buildTrack(opts: BuildTrackOptions): {
   }
 
   for (const g of prepared) {
-    const gap = g.rt + base - prevRt; // ≥1（同 rt 已合并；base 保证首组 ≥1）
+    const gap = g.rt + base - prevRt; // >= 1: equal rts are merged and base keeps the first >= 1
     const r = Math.min(MAX_REPEATER_DELAY, gap);
     const rest = gap - r;
     const restCells = Math.ceil(rest / MAX_REPEATER_DELAY);
 
-    // 空间对齐：本组音符列的自然 X，与共享参考线比较。
-    // 只在偏差超过容差时补齐，且**只用红石线**（0 延迟）——不改中继器时值、
-    // 不跨轨接线、不靠补齐末端。同步点的容差为 0，尽量让同刻音符共用 X；
-    // 若补线容量仍不足，则保留 SPATIAL_DRIFT 告警并报告无法消除的残差。
-    // 只有 ≥4 音和弦才铺分线列（给外圈分支行供能），否则末级中继器直接接背后方块
+    // Spatial alignment: compare this group's natural note-column X against the
+    // shared reference line. Pad only when the deficit exceeds the tolerance, and
+    // **with dust only** (zero delay) - never by altering a repeater's delay, never
+    // by cross-track wiring, never by padding past the end. At synchronised points
+    // the tolerance is 0 so simultaneous notes share an X; if the available padding
+    // still falls short, the residual is reported as SPATIAL_DRIFT.
+    // Only chords of four or more notes get a branch column; otherwise the final
+    // repeater draws directly from the block behind it.
     const tail = groupTailCells(g.notes.length);
     const noteXNatural = x + (first && rest > 0 ? 1 : 0) + restCells + (tail - 1);
     const atRt = g.rt + base;
@@ -423,7 +456,7 @@ export function buildTrack(opts: BuildTrackOptions): {
     const deficit = Math.max(0, targetX - noteXNatural);
     const tolerance = opts.plan?.isSynchronized(atRt) === true ? 0 : ALIGN_TOLERANCE_CELLS;
     const padNeeded = Math.max(0, deficit - tolerance);
-    const slots = restCells + 1; // 槽 0 在组前中继器之前，其后每个中继器之后各一槽
+    const slots = restCells + 1; // slot 0 precedes the pre-group repeaters; one slot follows each of them
     const pad = Math.min(padNeeded, slots * MAX_PAD_RUN);
     if (padNeeded > pad) {
       warnings.push({ code: 'SPATIAL_DRIFT', tick: g.tick, drift: deficit - pad });
@@ -435,14 +468,15 @@ export function buildTrack(opts: BuildTrackOptions): {
       for (let i = 0; i < pad % slots; i++) padSlots[i] = padSlots[i]! + 1;
     }
 
-    // 首组且组前有中继器时，先铺一格起始线作为电源接入点
-    // （rest = 0 时分线列本身就是首格，电源直接接在列上，保证列上功率为 15）
+    // When the first group has repeaters ahead of it, lay one starting dust cell as
+    // the power connection point. With rest = 0 the branch column is itself the first
+    // cell, so power goes straight onto the column and keeps it at strength 15.
     if (first && rest > 0) {
       putWire(0, opts.zBase);
       x = 1;
     }
 
-    // 补齐段（纯红石线，0 延迟）
+    // Padding runs: dust only, zero delay
     const putPad = (slot: number): void => {
       for (let i = 0; i < padSlots[slot]!; i++) {
         putWire(x, opts.zBase);
@@ -451,7 +485,7 @@ export function buildTrack(opts: BuildTrackOptions): {
     };
     putPad(0);
 
-    // 组前延迟中继器（同向首尾相接，档位之和 = rest）
+    // Pre-group repeaters, chained end to end so their delays sum to rest
     let remaining = rest;
     let slot = 1;
     while (remaining > 0) {
@@ -463,29 +497,34 @@ export function buildTrack(opts: BuildTrackOptions): {
       slot += 1;
     }
 
-    // 分线列：主线行 + 各分支行（同一列红石线互连为一网，同时得电）
+    // Branch column: main row plus branch rows. Dust in one column is a single
+    // connected network, so every row in it is powered at the same instant.
     const xCol = x;
     const branches = chordRowLayout(g.notes.length);
     const needColumn = tail === 3;
     if (needColumn) putWire(xCol, opts.zBase);
-    // 分支行（≥4 音）铺线做纵向供能；传导行不铺线（靠内联音符盒点亮）
+    // Branch rows (4+ notes) get dust for vertical power transfer; conducted rows get
+    // none, since the inline note block lights them.
     for (const b of branches) {
       if (!b.conducted) putWire(xCol, opts.zBase + b.side * b.row);
     }
 
-    // 中继器列：全部朝东；主线行与分支行同为 r 档 ⇒ 组内同红石刻触发
+    // Repeater column: all facing east, main and branch rows alike at delay r, so the
+    // whole group fires on the same redstone tick.
     const xRelay = needColumn ? xCol + 1 : xCol;
     putRelay(xRelay, opts.zBase, r);
     for (const b of branches) {
       if (!b.conducted) putRelay(xCol + 1, opts.zBase + b.side * b.row, r);
     }
 
-    // 音符列：第 0 个音内联主线（被中继器充能，主线从它往 +X 接续）；
-    // 传导行没有红石路径，由内联音符盒一跳点亮，与主线上同刻发声。
+    // Note column: note 0 sits inline on the main line, powered by the repeater, and
+    // the main line continues +X from it. Conducted rows have no redstone path at
+    // all; the inline note block lights them one hop away, on the same tick.
     const xNote = xRelay + 1;
     const placedNotes: PlacedNote[] = [];
     placedNotes.push(
-      // 无分线列时输入直接来自背后的方块（上一个音符盒 / 上一个中继器），路径为空
+      // Without a branch column the input comes straight from the block behind, so the
+      // recorded path is empty.
       putNote(
         xNote,
         opts.zBase,
@@ -509,7 +548,8 @@ export function buildTrack(opts: BuildTrackOptions): {
 
     const actual = (g.rt + base) * GAME_TICKS_PER_REDSTONE_TICK;
     placed.push({ tick: g.tick, actual });
-    // 量化偏移已含整轨前导 2·base；只有超出「前导 + 1 游刻网格误差」才逐组告警
+    // The quantisation offset already includes the 2*base lead-in, so only a deviation
+    // beyond the lead-in plus one game tick of grid error is worth reporting.
     if (Math.abs(actual - g.tick - 2 * base) > MAX_TRIGGER_SHIFT) {
       warnings.push({ code: 'TIMING_ADJUSTED', tick: g.tick, actual });
     }
@@ -535,11 +575,12 @@ export function buildTrack(opts: BuildTrackOptions): {
 }
 
 /**
- * 红石线的连接方向属于方块状态的一部分，不能只写 power。
+ * A dust block's connections are part of its block state, not just its power level.
  *
- * 手工放置红石粉时，Minecraft 会自动更新 north/east/south/west；
- * litematic 直接写入不会经过这个更新，因此省略这些属性会让红石粉
- * 加载后退化为四面无连接的小点，尤其会破坏四音以上和弦的分线列。
+ * Placing dust by hand makes Minecraft update north/east/south/west automatically;
+ * writing a schematic does not go through that update. Omitting them makes the dust
+ * load as an unconnected dot, which visibly breaks the branch columns of chords
+ * with four or more notes.
  */
 function finalizeWireConnections(placements: BlockPlacement[]): void {
   const key = (pos: Vec3): string => `${pos.x},${pos.y},${pos.z}`;

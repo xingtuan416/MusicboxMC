@@ -1,21 +1,21 @@
-/** 归一化后的单个音符事件（时间已换算为秒，直接来自 MIDI）。 */
+/** A single normalized note event (times already converted to seconds, straight from MIDI). */
 export interface NoteEvent {
-  /** MIDI 音高 0-127 */
+  /** MIDI pitch 0-127 */
   midi: number;
-  /** 起始时间（秒） */
+  /** Start time (seconds) */
   timeSec: number;
-  /** 时值（秒） */
+  /** Duration (seconds) */
   durationSec: number;
-  /** 力度 0-1 */
+  /** Velocity 0-1 */
   velocity: number;
-  /** MIDI 通道，9/10 为打击乐 */
+  /** MIDI channel; 9/10 is percussion */
   channel: number;
 }
 
 export interface TempoSegment {
-  /** 该段起始 tick（以文件 PPQ 为单位） */
+  /** Start tick of this segment (in file PPQ units) */
   ticks: number;
-  /** 该段起始时间（秒） */
+  /** Start time of this segment (seconds) */
   timeSec: number;
   /** BPM */
   bpm: number;
@@ -32,11 +32,11 @@ export interface TrackModel {
 
 export interface SongModel {
   name: string;
-  /** 文件 PPQ（每四分音符的脉冲数） */
+  /** File PPQ (pulses per quarter note) */
   ppq: number;
-  /** 总时长（秒），到最后一个音符结束 */
+  /** Total duration (seconds), up to the end of the last note */
   durationSec: number;
-  /** 基准 BPM：取文件里第一个 tempo 事件 */
+  /** Base BPM: taken from the first tempo event in the file */
   baseBpm: number;
   tempos: TempoSegment[];
   timeSignature: [number, number] | null;

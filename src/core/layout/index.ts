@@ -33,27 +33,30 @@ export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
 export interface LayoutOptions {
   config?: Partial<LayoutConfig>;
   regions?: RegionTable;
-  /** 超出音域时的处理策略 */
+  /** What to do with notes outside the covered pitch range. */
   outOfRange?: 'warn' | 'clamp' | 'octave' | 'drop';
-  /** 需要排除的轨（如打击乐轨） */
+  /** Tracks to leave out, such as a percussion track. */
   excludeTracks?: number[];
-  /** 每轨 transpose 覆盖 */
+  /** Per-track transpose override, in octaves. */
   transpose?: Record<number, number>;
-  /** 方块选择覆盖（按音轨 / 音区），见 palette/blockTable */
+  /** Block material overrides, by track or by pitch region; see palette/blockTable. */
   blocks?: BlockOverrides;
   /**
-   * 同乐器并轨：乐器相同的 MIDI 轨合并成**一条主线**（打击乐单独归一类）。
+   * Merge tracks that share an instrument onto **one main line**, with percussion
+   * treated as its own class.
    *
-   * 合并后这些音本来就落在同一条线上，天然不存在跨轨 X 漂移，
-   * 不必再靠补齐去逼近对齐；代价是同刻音会变成和弦（超容量时按既有规则拆轨）。
-   * 默认 false —— 每轨一条线。合并后的 transpose / 方块覆盖沿用组内第一个原轨。
+   * The merged notes now sit on the same line, so cross-track X drift cannot happen
+   * and no padding is needed to approximate alignment. The cost is that notes landing
+   * together become a chord, which is split into extra tracks by the usual rules when
+   * it exceeds the column capacity. Default false: one line per track. Transpose and
+   * block overrides for a merged group come from its first original track.
    */
   mergeSameInstrument?: boolean;
   /** Opt-in: one connected time spine per instrument; takes precedence over legacy merging. */
   forceMergeSameInstrument?: boolean;
 }
 
-/** 归并键：打击乐单独一类，其余按乐器名。 */
+/** Merge key: percussion is its own class, everything else groups by instrument name. */
 function instrumentKey(t: TrackModel): string {
   return t.percussion ? 'percussion' : t.instrument;
 }
@@ -68,7 +71,7 @@ function mergeByInstrument<T extends { index: number; notes: TrackNote[]; key: s
   return [...groups.values()];
 }
 
-/** 音符盒垫底方块本来就按音区不同，所以把它作为"音区级默认值"喂给解析层。 */
+/** Base blocks already differ per pitch region, so feed them to the resolver as region-level defaults. */
 function regionDefaults(regions: RegionTable): BlockDefaults {
   return {
     global: DEFAULT_BLOCK_TABLE,
@@ -83,11 +86,14 @@ function regionDefaults(regions: RegionTable): BlockDefaults {
 }
 
 /**
- * 建全曲共享的「曲中时刻 → X」参考线：取各轨自然排布 X 的**上包络**。
+ * Build the shared "song time -> X" reference line: the **upper envelope** of every
+ * track's natural X.
  *
- * 上包络必然 ≥ 任一轨的自然 X，于是每条轨只需往前补红石线（0 延迟）即可跟上，
- * 既不会出现"要后退/要压缩"的情况，也不需要改时值或跨轨接线。
- * 同一量化时刻的跨轨 X 差因此被限制在容差内，不会随曲长累积。
+ * An upper envelope is never behind any track, so each track only has to pad forward
+ * with dust (zero delay) to keep up. Nothing ever has to move backwards or be
+ * compressed, and no delay is altered and no cross-track wiring is needed. The X
+ * difference between tracks at any quantised time is therefore bounded, instead of
+ * accumulating over the length of the song.
  */
 function buildXPlan(samples: Array<{ atRt: number; x: number; trackId: number }>): XPlan {
   const sorted = [...samples].sort((a, b) => a.atRt - b.atRt);
@@ -101,10 +107,12 @@ function buildXPlan(samples: Array<{ atRt: number; x: number; trackId: number }>
     else envelope.push({ atRt: s.atRt, x: max });
   }
 
-  // 只要“同一时刻确实有两条独立音轨落音”，就把它标记为同步点。
-  // 同刻音符应该尽量共用 X 轴；自然位置差只决定补线是否可能完成，
-  // 不能再作为“不尝试对齐”的门槛。否则密集轨与稀疏轨在长曲后段
-  // 只要自然差超过检查窗口，就会稳定地落在不同轴上。
+  // Mark a time as synchronised whenever two or more independent tracks land a note
+  // there. Simultaneous notes should share an X wherever possible; the natural
+  // distance only decides whether padding can close the gap, and must not be used as
+  // a threshold for giving up. Otherwise a dense and a sparse track would settle onto
+  // permanently different axes late in a long song, as soon as their natural distance
+  // exceeded the check window.
   for (let i = 0; i < sorted.length;) {
     const atRt = sorted[i]!.atRt;
     const sameTime = [];
@@ -121,7 +129,7 @@ function buildXPlan(samples: Array<{ atRt: number; x: number; trackId: number }>
       let lo = 0;
       let hi = envelope.length - 1;
       let hit = 0;
-      // 最后一个 atRt ≤ 查询时刻的采样点
+      // Last sample whose atRt is <= the query time
       while (lo <= hi) {
         const mid = (lo + hi) >> 1;
         if (envelope[mid]!.atRt <= atRt) {
@@ -139,7 +147,7 @@ function buildXPlan(samples: Array<{ atRt: number; x: number; trackId: number }>
   };
 }
 
-/** 构造布局用的方块解析器（测试与 service 复用同一份默认值）。 */
+/** Build the block resolver used by the layout (tests and service share these defaults). */
 export function layoutResolver(
   regions: RegionTable = DEFAULT_REGIONS,
   overrides: BlockOverrides = {},
@@ -147,14 +155,15 @@ export function layoutResolver(
   return createBlockResolver(regionDefaults(regions), overrides);
 }
 
-/** 顶层入口：SongModel → 电路布局。 */
+/** Top-level entry point: SongModel -> redstone layout. */
 export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult {
   const config: LayoutConfig = { ...DEFAULT_LAYOUT_CONFIG, ...opts.config };
   const regions = opts.regions ?? DEFAULT_REGIONS;
   const exclude = new Set(opts.excludeTracks ?? []);
   const resolve = layoutResolver(regions, opts.blocks ?? {});
 
-  // 每轨音符数组只算一次（行数预扫、全局前导与主循环共用）。
+  // Compute each track's note array once: the row pre-scan, the song-wide lead-in and
+  // the main loop all reuse it.
   const inputs: Array<{ index: number; notes: TrackNote[]; key: string }> = [];
   for (const t of song.tracks) {
     if (exclude.has(t.index) || t.notes.length === 0) continue;
@@ -165,7 +174,8 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
     inputs.push({ index: t.index, notes, key: instrumentKey(t) });
   }
 
-  // 合轨会增加同刻音符数量，必须先合轨再计算轨距和首音前导。
+  // Merging adds simultaneous notes, so merge first and only then work out the track
+  // spacing and the lead-in.
   if (opts.forceMergeSameInstrument) {
     return buildForcedLayout(mergeByInstrument(inputs), {
       config,
@@ -185,12 +195,14 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
     for (const n of notes) minRt = Math.min(minRt, gameTickToRedstone(n.tick));
   }
 
-  // 中继器最小 1 档 ⇒ rt 0 的音最早也要 1 红刻后才能发声。为保住
-  // **跨轨相对时序**，该前导必须全曲统一：只要曲中存在 rt 0 的音组，
-  // 所有轨一律 +1 红刻；只按单轨推断会让不同轨的首音偏移互相不一致。
+  // A repeater's minimum delay is 1, so a note at rt 0 cannot sound before one
+  // redstone tick in. To preserve **relative timing across tracks** this lead-in has
+  // to be identical song-wide: if any track has a group at rt 0, every track gets +1.
+  // Inferring it per track would give the tracks inconsistent first-note offsets.
   const base = minRt === 0 ? 1 : 0;
 
-  // 多轨空间对齐：X 由曲中时刻决定，取各轨自然 X 的上包络作共享参考线。
+  // Multi-track spatial alignment: X follows song time, using the upper envelope of
+  // every track's natural X as the shared reference line.
   const samples: Array<{ atRt: number; x: number; trackId: number }> = [];
   for (const { index, notes } of trackInputs) {
     samples.push(
@@ -211,9 +223,10 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   let trackSlot = 0;
 
   for (const { index, notes } of trackInputs) {
-    // 超出单列和弦容量的音群改派到新音轨（TRACK_SPLIT）：每条轨有独立的
-    // 主线与分线列容量；各轨共用启动时刻，同 rt 的音在新轨按剩余音数
-    // 重新铺线，触发时刻不变。
+    // Groups past the column's chord capacity move to a new track (TRACK_SPLIT). Each
+    // track has its own main line and column capacity, and they all start at the same
+    // instant: the remaining notes are laid out again on the new track while their
+    // trigger times stay unchanged.
     let pending = notes;
     for (let lane = 0; pending.length > 0; lane++) {
       const zBase = maxRows + trackSlot * pitch;
@@ -251,7 +264,8 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
     for (const g of groupByTick(notes)) maxTick = Math.max(maxTick, g.tick);
   }
 
-  // 包围盒：取全量 min/max。region 原点依赖它做平移，算错会导致导出越界。
+  // Bounding box over everything. Region origins are derived from it, so getting this
+  // wrong makes the exported coordinates fall outside the region.
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
   let minZ = Number.POSITIVE_INFINITY;

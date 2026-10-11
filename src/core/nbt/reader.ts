@@ -1,6 +1,6 @@
 import { NbtCompound, NbtList, NbtTag, TagType, nbt } from './tag';
 
-/** 大端序 NBT 读取器，用于自研回读校验。 */
+/** Big-endian NBT reader, used for in-house read-back verification. */
 class NbtReader {
   private pos = 0;
 

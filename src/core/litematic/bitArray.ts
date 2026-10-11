@@ -1,17 +1,18 @@
 /**
- * Litematica 的 BlockStates 紧密位打包。
+ * Litematica's tightly packed BlockStates bit packing.
  *
- * 与 Minecraft 原版 BitArray 不同，Litematica 的条目**连续跨越 64 位边界**，
- * 不做每字对齐。写入按小端位序（最低位在前）。
+ * Unlike vanilla Minecraft's BitArray, Litematica entries **span across 64-bit
+ * boundaries** and are not aligned per word. Writes use little-endian bit order
+ * (lowest bit first).
  *
  *   bits   = max(2, ceil(log2(paletteSize)))
  *   length = ceil(volume * bits / 64)
- *   条目 i 起始位 start = i * bits
- *   字索引 startArrIndex = start >>> 6
- *   跨字     endArrIndex = (start + bits - 1) >>> 6
+ *   entry i start bit   start = i * bits
+ *   word index          startArrIndex = start >>> 6
+ *   across word bounds  endArrIndex = (start + bits - 1) >>> 6
  */
 
-/** 由调色板大小求每个条目的位宽（最小 2 位）。 */
+/** Bit width per entry from the palette size (minimum 2 bits). */
 export function requiredBits(paletteSize: number): number {
   return Math.max(2, bitLength(paletteSize - 1));
 }
@@ -26,14 +27,14 @@ function bitLength(n: number): number {
   return bits;
 }
 
-/** 长整型数组长度。 */
+/** Long array length. */
 export function longArrayLength(volume: number, bits: number): number {
   return Math.ceil((volume * bits) / 64);
 }
 
 const MASK64 = (1n << 64n) - 1n;
 
-/** 将索引数组（每个元素 < 2^bits）打包为 long 数组。 */
+/** Pack an index array (each element < 2^bits) into a long array. */
 export function packLongArray(indices: ArrayLike<number>, bits: number): bigint[] {
   const volume = indices.length;
   const longs = new Array<bigint>(longArrayLength(volume, bits)).fill(0n);
@@ -57,7 +58,7 @@ export function packLongArray(indices: ArrayLike<number>, bits: number): bigint[
   return longs;
 }
 
-/** 从 long 数组解包出索引数组。 */
+/** Unpack an index array from a long array. */
 export function unpackLongArray(longs: bigint[], volume: number, bits: number): Uint32Array {
   const out = new Uint32Array(volume);
   const mask = (1n << BigInt(bits)) - 1n;

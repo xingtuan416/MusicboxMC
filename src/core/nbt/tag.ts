@@ -1,4 +1,4 @@
-/** NBT 标签类型 id（与 Minecraft 协议一致）。 */
+/** NBT tag type ids (matching the Minecraft protocol). */
 export enum TagType {
   End = 0,
   Byte = 1,
@@ -57,13 +57,13 @@ export interface NbtLongArray {
 }
 export interface NbtList {
   type: TagType.List;
-  /** 元素类型；空列表默认 End */
+  /** Element type; an empty list defaults to End */
   elementType: TagType;
   value: NbtTag[];
 }
 export interface NbtCompound {
   type: TagType.Compound;
-  /** 保持插入顺序 */
+  /** Preserves insertion order */
   value: Map<string, NbtTag>;
 }
 
@@ -81,7 +81,7 @@ export type NbtTag =
   | NbtList
   | NbtCompound;
 
-// ---- 构造器（保持调用点简洁） ----
+// ---- Constructors (keep call sites concise) ----
 
 export const nbt = {
   byte: (value: number): NbtByte => ({ type: TagType.Byte, value }),
@@ -114,7 +114,7 @@ export const nbt = {
   }),
 };
 
-/** 纯整数的 XYZ 复合标签（Litematica 的 Position/Size/EnclosingSize 都用它）。 */
+/** An all-integer XYZ compound tag (used by Litematica's Position/Size/EnclosingSize). */
 export function nbtIntVec3(x: number, y: number, z: number): NbtCompound {
   return nbt.compound({
     x: nbt.int(x),
