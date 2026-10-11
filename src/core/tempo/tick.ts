@@ -1,4 +1,4 @@
-/** 默认 TPS：1 tick = 50ms（文档 §4.1）。 */
+/** 默认 TPS：1 游戏刻 = 50ms。 */
 export const BASE_TPS = 20;
 
 /** 每 tick 的毫秒数。 */

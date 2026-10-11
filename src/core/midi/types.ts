@@ -36,7 +36,7 @@ export interface SongModel {
   ppq: number;
   /** 总时长（秒），到最后一个音符结束 */
   durationSec: number;
-  /** 基准 BPM：取首个 tempo 事件（D-06） */
+  /** 基准 BPM：取文件里第一个 tempo 事件 */
   baseBpm: number;
   tempos: TempoSegment[];
   timeSignature: [number, number] | null;
