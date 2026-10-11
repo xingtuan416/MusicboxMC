@@ -83,3 +83,64 @@ export function songOfTracks(tracks: NoteSpec[][], overrides: Partial<SongSpec> 
 export function songOfSpecs(tracks: TrackSpec[], overrides: Partial<SongSpec> = {}): SongModel {
   return buildSong({ ...overrides, tracks });
 }
+
+export interface DenseSongOptions {
+  /** 音轨数，缺省 12。 */
+  tracks?: number;
+  durationSec?: number;
+  /** 全曲音符总数，缺省 40000。 */
+  notes?: number;
+  /** 音高范围（半音数），缺省 48。 */
+  pitchSpan?: number;
+  /** 低音区起点，缺省 36。 */
+  baseMidi?: number;
+  /** 突发和弦的数量，缺省 200。 */
+  bursts?: number;
+  /** 每个突发和弦的音数，缺省 60。 */
+  burstSize?: number;
+}
+
+/**
+ * 密集曲目夹具：多轨、长时长、数万音符，且含大量同刻和弦。
+ *
+ * 生成器真正吃力的输入是"音符远多于时刻"的密集谱面，而不是某首具体的曲子；
+ * 关键特征是**突发和弦**（几十个音落在同一游戏刻），它决定和弦容量、分支深度
+ * 与命令播放的峰值压力。这里按确定性方式合成一份同等量级的输入，因此测试
+ * **不依赖任何外部 MIDI 文件**，在别人的机器和 CI 上都会照常运行 —— 依赖
+ * 本地文件的测试会静默跳过，等于作者本地跑的测试比贡献者多。
+ */
+export function denseSong(options: DenseSongOptions = {}): SongModel {
+  const trackCount = options.tracks ?? 12;
+  const durationSec = options.durationSec ?? 140;
+  const noteCount = options.notes ?? 40000;
+  const pitchSpan = options.pitchSpan ?? 48;
+  const baseMidi = options.baseMidi ?? 36;
+  const bursts = options.bursts ?? 200;
+  const burstSize = options.burstSize ?? 60;
+
+  const totalTicks = durationSec * TEST_TPS;
+  const burstNotes = Math.min(noteCount, bursts * burstSize);
+  const spreadNotes = noteCount - burstNotes;
+
+  const tracks: TrackSpec[] = Array.from({ length: trackCount }, () => ({ notes: [] }));
+  let placed = 0;
+  const push = (tick: number, midi: number): void => {
+    tracks[placed % trackCount]!.notes.push({ tick, midi });
+    placed += 1;
+  };
+
+  // 突发和弦：均匀散布在全曲，模拟密集段落的同刻音群。
+  for (let b = 0; b < bursts && placed < burstNotes; b++) {
+    const tick = Math.floor(((b + 0.5) * totalTicks) / bursts);
+    for (let k = 0; k < burstSize && placed < burstNotes; k++) {
+      push(tick, baseMidi + ((b * 13 + k) % pitchSpan));
+    }
+  }
+
+  // 其余音符均匀铺开，保证整曲都有内容而不是只有几处尖峰。
+  for (let i = 0; i < spreadNotes; i++) {
+    push(Math.floor((i * totalTicks) / spreadNotes), baseMidi + ((i * 7) % pitchSpan));
+  }
+
+  return buildSong({ name: 'dense-fixture', durationSec, tracks });
+}

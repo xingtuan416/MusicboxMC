@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { existsSync, readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Midi } from '@tonejs/midi';
@@ -10,11 +10,10 @@ import {
 } from '../src/core/command/playback';
 import { buildLitematic, parseLitematic, blockIndex, type RegionData } from '../src/core/litematic/build';
 import { TagType, nbt, type NbtCompound } from '../src/core/nbt/tag';
-import { parseMidi } from '../src/core/midi/parse';
 import { generate, generateToFile } from '../src/main/service';
 import type { SongModel } from '../src/core/midi/types';
 import { mapPitch } from '../src/core/palette/pitchMap';
-import { buildSong } from './helpers/song';
+import { buildSong, denseSong } from './helpers/song';
 
 function stackedSong(ticks: number[]): SongModel {
   return buildSong({
@@ -349,27 +348,25 @@ describe('command playback', () => {
     }
   });
 
-  it.skipIf(!existsSync('Rush E.mid'))(
-    'compiles and roundtrips Rush E in a compact player without dropping notes',
-    () => {
-      const source = parseMidi(readFileSync('Rush E.mid'));
-      const result = buildCommandPlayback(source);
-      expect(result.info.playedNotes).toBe(46291);
-      expect(result.info.peakNotes).toBeGreaterThan(31);
-      expect(result.region.size.x).toBeLessThan(50);
-      expect(result.region.size.y).toBe(3);
-      expect(result.region.size.z).toBe(36);
-      const buffer = buildLitematic([result.region], meta);
-      const parsed = parseLitematic(buffer);
-      expect(buffer.length).toBeLessThan(32000);
-      expect(result.commandBlockCount).toBeLessThan(1000);
-      // 结构规模与音符数解耦：46291 音只用到不到 800 个命令方块，不该触发结构告警。
-      expect(result.commandBlockCount).toBeLessThanOrEqual(COMMAND_STRUCTURE_WARNING_BLOCKS);
-      expect(result.warnings.map((warning) => warning.code)).not.toContain('COMMAND_STRUCTURE_SIZE');
-      expect(result.info.scheduledEvents).toBe(1296);
-      expect(result.info.reusableSlots).toBe(687);
-      expect(scheduledNotes(parsed.regions[0]!.tileEntities, result.totalTicks)).toHaveLength(46291);
-    },
-    30000,
-  );
+  it('compiles a dense multi-track song into a compact player without dropping notes', () => {
+    const source = denseSong();
+    const noteCount = source.tracks.reduce((sum, track) => sum + track.notes.length, 0);
+    const result = buildCommandPlayback(source);
+
+    expect(result.info.playedNotes).toBe(noteCount);
+    expect(result.info.peakNotes).toBeGreaterThan(31);
+    // The player must not grow with the note count: this is the regression
+    // that once produced 46308 command blocks and a 348KB schematic.
+    expect(result.commandBlockCount).toBeLessThan(1000);
+    expect(result.commandBlockCount).toBeLessThanOrEqual(COMMAND_STRUCTURE_WARNING_BLOCKS);
+    expect(result.warnings.map((warning) => warning.code)).not.toContain('COMMAND_STRUCTURE_SIZE');
+    expect(result.region.size.x).toBeLessThan(50);
+    expect(result.region.size.y).toBe(3);
+
+    const buffer = buildLitematic([result.region], meta);
+    expect(buffer.length).toBeLessThan(64 * 1024);
+
+    const parsed = parseLitematic(buffer);
+    expect(scheduledNotes(parsed.regions[0]!.tileEntities, result.totalTicks)).toHaveLength(noteCount);
+  }, 30000);
 });

@@ -1,15 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Midi } from '@tonejs/midi';
 import { layout } from '../src/core/layout/index';
 import { validateForcedTrack } from '../src/core/layout/forcedValidation';
-import { parseMidi } from '../src/core/midi/parse';
 import type { SongModel } from '../src/core/midi/types';
 import { generate, generateToFile } from '../src/main/service';
 import { parseLitematic } from '../src/core/litematic/build';
-import { buildSong } from './helpers/song';
+import { buildSong, denseSong } from './helpers/song';
 
 function multiTrackSong(
   specs: Array<{ instrument?: string; percussion?: boolean; ticks: number[] }>,
@@ -209,22 +208,21 @@ describe('forced instrument merge', () => {
     }
   });
 
-  it.skipIf(!existsSync('Rush E.mid'))(
-    'validates the local Rush E: all 46291 notes, one spine, constant latency',
-    () => {
-      const source = parseMidi(readFileSync('Rush E.mid'));
-      const result = layout(source, { forceMergeSameInstrument: true });
-      expect(result.tracks).toHaveLength(1);
-      expect(countNotes(result)).toBe(source.tracks.reduce((sum, track) => sum + track.notes.length, 0));
-      const audit = validateForcedTrack(
-        result.tracks[0]!,
-        1,
-        result.placed.map((p) => p.actual),
-      );
-      expect(audit.noteCount).toBe(46291);
-      expect(audit.minWireStrength).toBeGreaterThan(0);
-      expect(result.startupDelayTicks).toBe(70);
-    },
-    30000,
-  );
+  it('keeps a dense multi-track song on one spine with song-wide constant latency', () => {
+    const source = denseSong();
+    const noteCount = source.tracks.reduce((sum, track) => sum + track.notes.length, 0);
+    const result = layout(source, { forceMergeSameInstrument: true });
+
+    expect(result.tracks).toHaveLength(1);
+    expect(countNotes(result)).toBe(noteCount);
+
+    const audit = validateForcedTrack(
+      result.tracks[0]!,
+      1,
+      result.placed.map((p) => p.actual),
+    );
+    expect(audit.noteCount).toBe(noteCount);
+    expect(audit.minWireStrength).toBeGreaterThan(0);
+    expect(result.startupDelayTicks).toBeGreaterThan(0);
+  }, 30000);
 });
