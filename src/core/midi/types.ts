@@ -1,9 +1,3 @@
-export interface Vec3 {
-  x: number;
-  y: number;
-  z: number;
-}
-
 /** 归一化后的单个音符事件（时间已换算为秒，直接来自 MIDI）。 */
 export interface NoteEvent {
   /** MIDI 音高 0-127 */
