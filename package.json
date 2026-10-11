@@ -13,6 +13,10 @@
     "cli": "tsx scripts/cli.ts",
     "resourcepack:check": "node scripts/check-piano-pack.mjs",
     "test": "vitest run",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "dist": "npm run build && electron-builder --win --x64",
     "dist:dir": "npm run build && electron-builder --win --x64 --dir"
   },
@@ -20,12 +24,18 @@
     "@tonejs/midi": "^2.0.28"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@rollup/rollup-win32-x64-msvc": "^4.64.0",
     "@types/node": "^22.10.2",
     "electron": "^33.3.1",
     "electron-builder": "^26.15.3",
+    "eslint": "^10.12.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
+    "typescript-eslint": "^8.71.1",
     "vitest": "^2.1.8"
   },
   "build": {
@@ -43,8 +53,18 @@
     "win": {
       "icon": "icon.png",
       "target": [
-        { "target": "nsis", "arch": ["x64"] },
-        { "target": "zip", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "artifactName": "${productName}-${version}-win-${arch}.${ext}",

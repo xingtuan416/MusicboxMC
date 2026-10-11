@@ -5,6 +5,9 @@ release/
 out/
 .workbuddy-ai/
 
+# Working documents kept out of the public repository
+docs/code-quality-plan.md
+
 # Local reverse-engineering inputs and third-party binaries
 net26.2源码/
 *.jar
