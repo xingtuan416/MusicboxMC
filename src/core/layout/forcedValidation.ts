@@ -38,7 +38,7 @@ export function validateForcedTrack(
     byPos.set(k, block);
   }
   const expected = new Map<string, number>();
-  const taps = track.segments.flatMap((segment) => segment.taps);
+  const taps = track.taps;
   if (taps.length !== expectedTicks.length) throw new Error('强制合并校验：音群时刻数不一致');
   taps.forEach((tap, i) => {
     for (const note of tap.notes) expected.set(key(note.notePos.x, note.notePos.z), expectedTicks[i]!);

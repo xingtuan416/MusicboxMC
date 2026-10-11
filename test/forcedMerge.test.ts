@@ -54,7 +54,7 @@ describe('forced instrument merge', () => {
     const result = layout(source, { forceMergeSameInstrument: true, excludeTracks: [3] });
     expect(result.tracks.map((track) => track.trackIndex)).toEqual([0, 1, 4]);
     expect(countNotes(result)).toBe(5);
-    expect(result.tracks[0]!.segments[0]!.taps).toHaveLength(2);
+    expect(result.tracks[0]!.taps).toHaveLength(2);
   });
 
   it.each([1, 3, 14, 15, 28, 29, 30, 80, 470, 616])(
@@ -119,7 +119,7 @@ describe('forced instrument merge', () => {
       blocks: { tracks: { 0: { noteBase: 'minecraft:gold_block' } } },
     });
     expect(countNotes(result)).toBe(1);
-    const note = result.tracks[0]!.segments[0]!.taps[0]!.notes[0]!;
+    const note = result.tracks[0]!.taps[0]!.notes[0]!;
     expect(note.block).toBe('minecraft:gold_block');
     expect(note.note).toBe(6); // MIDI 72, flute region starting at 66.
     expect(result.warnings).toContainEqual({ code: 'OUT_OF_RANGE', midi: 10, action: 'drop' });

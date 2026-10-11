@@ -42,7 +42,7 @@ function song(tracks: Array<Array<{ tick: number; midi: number }>>): SongModel {
 /** 某轨各音组的（曲中红刻, 音符列 X）。taps[].x 是分线列，音符列在其 +2 处 */
 function noteXs(res: ReturnType<typeof layout>, trackIdx: number): Array<{ rt: number; x: number }> {
   const tr = res.tracks[trackIdx]!;
-  return tr.segments[0]!.taps.map((t) => ({ rt: t.t, x: t.x + 2 }));
+  return tr.taps.map((t) => ({ rt: t.t, x: t.x + 2 }));
 }
 
 /** 该轨在 rt 时刻（取最后一个不晚于 rt 的音组）的 X */

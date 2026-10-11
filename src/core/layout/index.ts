@@ -260,7 +260,7 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   let maxZ = 0;
   let hasBlock = false;
   for (const tr of tracks) {
-    for (const p of [...tr.placements, ...tr.bridges]) {
+    for (const p of tr.placements) {
       hasBlock = true;
       minX = Math.min(minX, p.pos.x);
       maxX = Math.max(maxX, p.pos.x);

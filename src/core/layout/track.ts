@@ -1,10 +1,8 @@
 import type {
   BlockPlacement,
-  DelayStep,
   LayoutConfig,
   LayoutWarning,
   PlacedNote,
-  Segment,
   Tap,
   TrackSkeleton,
   Vec3,
@@ -117,15 +115,6 @@ export function gameTickToRedstone(tick: number): number {
  * 10–15 是"检查间隔"量级，不是给任何曲目承诺的绝对最大误差。
  */
 export const ALIGN_TOLERANCE_CELLS = 12;
-
-/**
- * 历史兼容常量。
- *
- * 早期实现只在自然位置差不超过这个窗口时才强制共轴；现在同刻不同轨
- * 一律尝试共轴，距离仅影响是否会产生 SPATIAL_DRIFT 告警，因此该值不再
- * 作为同步判定门槛保留。
- */
-export const SYNC_ALIGN_WINDOW_CELLS = 10;
 
 /**
  * 单个补齐段（纯红石线）的最大格数。
@@ -355,14 +344,10 @@ export function buildTrack(opts: BuildTrackOptions): {
 
   // 3) 沿 +X 铺主线：[组前中继器][分线列][中继器列][音符列]
   const placements: BlockPlacement[] = [];
-  /** 主线行（z = zBase）的非音符格序列（旧 Segment.steps 约定：线/中继器，不含音符盒） */
-  const mainSteps: DelayStep[] = [];
   const taps: Tap[] = [];
   const placed: Array<{ tick: number; actual: number }> = [];
 
-  const asDelay = (n: number): 1 | 2 | 3 | 4 => n as 1 | 2 | 3 | 4;
-
-  const putWire = (x: number, z: number, isMain: boolean): void => {
+  const putWire = (x: number, z: number): void => {
     // 投影是**未通电的初始状态**：红石粉一律 power=0，等玩家在起点接电后
     // 由游戏自行传播。写 15 会把整条线预点亮（粘贴即满强度，与实际不符）。
     placements.push(place({ x, y: opts.config.circuitY, z }, redstoneWire(0)));
@@ -372,10 +357,9 @@ export function buildTrack(opts: BuildTrackOptions): {
         plainBlock(opts.resolve({ slot: 'wireSupport', trackIndex: opts.trackIndex })),
       ),
     );
-    if (isMain) mainSteps.push({ kind: 'wire', ticks: 1 });
   };
 
-  const putRelay = (x: number, z: number, delay: number, isMain: boolean): void => {
+  const putRelay = (x: number, z: number, delay: number): void => {
     // 输出必须朝 +X（音符盒侧）。注意 blockstate 语义：facing 是"从输出侧指向
     // 输入侧"的向量，与箭头方向相反 —— 输出朝东 ⇒ facing=west（输入在西侧线列）。
     placements.push(place({ x, y: opts.config.circuitY, z }, repeater('west', delay)));
@@ -385,7 +369,6 @@ export function buildTrack(opts: BuildTrackOptions): {
         plainBlock(opts.resolve({ slot: 'wireSupport', trackIndex: opts.trackIndex })),
       ),
     );
-    if (isMain) mainSteps.push({ kind: 'repeater', ticks: asDelay(delay) });
   };
 
   const putNote = (x: number, z: number, n: NoteToPlace, path: Vec3[]): PlacedNote => {
@@ -409,7 +392,6 @@ export function buildTrack(opts: BuildTrackOptions): {
   let x = 0;
   let prevRt = 0;
   let first = true;
-  let tapId = 0;
 
   // 首组落在 rt 0 时，电路至少需要 1 红石刻驱动（中继器最小档位），
   // 整轨统一加 1 红刻前导：各音相对时序不变，仅整体晚 0.1s 触发。
@@ -456,14 +438,14 @@ export function buildTrack(opts: BuildTrackOptions): {
     // 首组且组前有中继器时，先铺一格起始线作为电源接入点
     // （rest = 0 时分线列本身就是首格，电源直接接在列上，保证列上功率为 15）
     if (first && rest > 0) {
-      putWire(0, opts.zBase, true);
+      putWire(0, opts.zBase);
       x = 1;
     }
 
     // 补齐段（纯红石线，0 延迟）
     const putPad = (slot: number): void => {
       for (let i = 0; i < padSlots[slot]!; i++) {
-        putWire(x, opts.zBase, true);
+        putWire(x, opts.zBase);
         x += 1;
       }
     };
@@ -474,7 +456,7 @@ export function buildTrack(opts: BuildTrackOptions): {
     let slot = 1;
     while (remaining > 0) {
       const d = Math.min(MAX_REPEATER_DELAY, remaining);
-      putRelay(x, opts.zBase, d, true);
+      putRelay(x, opts.zBase, d);
       x += 1;
       remaining -= d;
       putPad(slot);
@@ -485,17 +467,17 @@ export function buildTrack(opts: BuildTrackOptions): {
     const xCol = x;
     const branches = chordRowLayout(g.notes.length);
     const needColumn = tail === 3;
-    if (needColumn) putWire(xCol, opts.zBase, true);
+    if (needColumn) putWire(xCol, opts.zBase);
     // 分支行（≥4 音）铺线做纵向供能；传导行不铺线（靠内联音符盒点亮）
     for (const b of branches) {
-      if (!b.conducted) putWire(xCol, opts.zBase + b.side * b.row, false);
+      if (!b.conducted) putWire(xCol, opts.zBase + b.side * b.row);
     }
 
     // 中继器列：全部朝东；主线行与分支行同为 r 档 ⇒ 组内同红石刻触发
     const xRelay = needColumn ? xCol + 1 : xCol;
-    putRelay(xRelay, opts.zBase, r, true);
+    putRelay(xRelay, opts.zBase, r);
     for (const b of branches) {
-      if (!b.conducted) putRelay(xCol + 1, opts.zBase + b.side * b.row, r, false);
+      if (!b.conducted) putRelay(xCol + 1, opts.zBase + b.side * b.row, r);
     }
 
     // 音符列：第 0 个音内联主线（被中继器充能，主线从它往 +X 接续）；
@@ -523,7 +505,7 @@ export function buildTrack(opts: BuildTrackOptions): {
       placedNotes.push(putNote(xNote, z, n, path));
     });
 
-    taps.push({ id: tapId++, x: xCol, t: g.rt, d: chordRows(g.notes.length), notes: placedNotes });
+    taps.push({ x: xCol, t: g.rt, notes: placedNotes });
 
     const actual = (g.rt + base) * GAME_TICKS_PER_REDSTONE_TICK;
     placed.push({ tick: g.tick, actual });
@@ -537,26 +519,14 @@ export function buildTrack(opts: BuildTrackOptions): {
     first = false;
   }
 
-  const segment: Segment = {
-    startTick: 0,
-    endTick: prevRt,
-    startX: 0,
-    endX: x,
-    dir: 1,
-    yRow: opts.config.circuitY,
-    steps: mainSteps,
-    taps,
-  };
-
   finalizeWireConnections(placements);
 
   return {
     track: {
       trackIndex: opts.trackIndex,
       zBase: opts.zBase,
-      segments: [segment],
       placements,
-      bridges: [],
+      taps,
     },
     warnings,
     overflow,

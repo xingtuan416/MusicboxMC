@@ -20,7 +20,6 @@ import {
 } from './track';
 import type {
   BlockPlacement,
-  DelayStep,
   LayoutConfig,
   LayoutResult,
   LayoutWarning,
@@ -146,7 +145,6 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
     const zBase = maxRows + tracks.length * pitch;
     const placements: BlockPlacement[] = [];
     const occupied = new Map<string, BlockPlacement>();
-    const steps: DelayStep[] = [];
     const taps: Tap[] = [];
     const support = resolve({ slot: 'wireSupport', trackIndex: input.index });
     if (support === 'minecraft:air') throw new Error('强制合并的红石粉和中继器支撑方块不能为空气');
@@ -161,22 +159,20 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
       put(x, config.circuitY, z, state);
       put(x, config.floorY, z, plainBlock(support));
     };
-    const wire = (x: number, z: number, main = false): void => {
+    const wire = (x: number, z: number): void => {
       supported(x, z, redstoneWire(0));
-      if (main) steps.push({ kind: 'wire', ticks: 1 });
     };
-    const relay = (x: number, z: number, delay: number, facing: RepeaterFacing, main = false): void => {
+    const relay = (x: number, z: number, delay: number, facing: RepeaterFacing): void => {
       supported(x, z, repeater(facing, delay));
-      if (main) steps.push({ kind: 'repeater', ticks: delay as 1 | 2 | 3 | 4 });
     };
     let x = 0;
     let prevRt = 0;
-    wire(x++, zBase, true);
+    wire(x++, zBase);
     for (const group of input.groups) {
       let gap = group.rt + base - prevRt;
       while (gap > 0) {
         const delay = Math.min(MAX_REPEATER_DELAY, gap);
-        relay(x++, zBase, delay, 'west', true);
+        relay(x++, zBase, delay, 'west');
         gap -= delay;
       }
       const rootX = x++;
@@ -220,7 +216,7 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
         put(blockPos.x, blockPos.y, blockPos.z, plainBlock(block));
         notePlacements.push({ notePos, blockPos, note: note.note, block, path });
       });
-      taps.push({ id: taps.length, x: rootX, t: group.rt, d: branchDelay, notes: notePlacements });
+      taps.push({ x: rootX, t: group.rt, notes: notePlacements });
       placed.push({
         trackIndex: input.index,
         zBase,
@@ -241,7 +237,7 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
       // A new chord starts beyond all previous note branches; powered stone resets
       // the main wire's budget, independently of the lateral bus budget.
       if (group !== input.groups[input.groups.length - 1]) {
-        for (let pad = 0; pad < mainRun; pad++) wire(x++, zBase, true);
+        for (let pad = 0; pad < mainRun; pad++) wire(x++, zBase);
       }
     }
 
@@ -267,19 +263,7 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
       trackIndex: input.index,
       zBase,
       placements,
-      bridges: [],
-      segments: [
-        {
-          startTick: 0,
-          endTick: prevRt,
-          startX: 0,
-          endX: x,
-          dir: 1,
-          yRow: config.circuitY,
-          steps,
-          taps,
-        },
-      ],
+      taps,
     };
     validateForcedTrack(
       track,

@@ -4,9 +4,6 @@ export interface Vec3 {
   z: number;
 }
 
-export type DelayStep =
-  { kind: 'wire'; ticks: 1 } | { kind: 'repeater'; ticks: 1 | 2 | 3 | 4; forced?: boolean };
-
 export interface PlacedNote {
   /** 音符盒坐标 */
   notePos: Vec3;
@@ -20,28 +17,17 @@ export interface PlacedNote {
   path: Vec3[];
 }
 
+/**
+ * 主线上的一个分叉点：同一红石刻发声的一组音符。
+ *
+ * `x` 是分线列所在的格，`t` 是该组在主线上到达的红石刻。
+ */
 export interface Tap {
-  id: number;
-  /** 骨架分叉点的 X */
+  /** 分线列的 X */
   x: number;
-  /** 骨架到达该分叉点的 tick */
+  /** 主线到达该分叉点的红石刻 */
   t: number;
-  /** 支线补的 tick 数（= 该组曼哈顿半径 d） */
-  d: number;
   notes: PlacedNote[];
-}
-
-export interface Segment {
-  startTick: number;
-  endTick: number;
-  startX: number;
-  endX: number;
-  /** 行进方向，+1 = +X */
-  dir: 1 | -1;
-  /** 该段所在 Y 层（蛇形分段交替 2 / 3） */
-  yRow: number;
-  steps: DelayStep[];
-  taps: Tap[];
 }
 
 export interface BlockPlacement {
@@ -54,10 +40,8 @@ export interface BlockPlacement {
 export interface TrackSkeleton {
   trackIndex: number;
   zBase: number;
-  segments: Segment[];
   placements: BlockPlacement[];
-  /** 段间跨接器方块 */
-  bridges: BlockPlacement[];
+  taps: Tap[];
 }
 
 export type LayoutWarning =

@@ -21,7 +21,7 @@ export function sliceRegions(result: LayoutResult): RegionSlice[] {
   const slices: RegionSlice[] = [];
 
   for (const tr of result.tracks) {
-    const all = [...tr.placements, ...tr.bridges];
+    const all = tr.placements;
     if (all.length === 0) continue;
 
     let minX = Number.POSITIVE_INFINITY;
