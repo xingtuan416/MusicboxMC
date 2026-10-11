@@ -30,6 +30,18 @@ export const COMMAND_SOUND_WARNING_THRESHOLD = 31;
  */
 export const COMMAND_STRUCTURE_WARNING_BLOCKS = 4096;
 
+/**
+ * Budget for the JSON payload of one bootstrap command.
+ *
+ * The frame table is shipped as `data modify storage ... set value [...]` commands,
+ * so each one has to fit inside an NBT string, which caps out at 65535 bytes. 24000
+ * leaves ample margin.
+ */
+const COMMAND_CHUNK_BUDGET_BYTES = 24000;
+
+/** Serialised length of an empty frame list, `[]`. */
+const EMPTY_FRAME_LIST_BYTES = 2;
+
 /** Command mode reuses pitch mapping but not redstone topology or merge overrides. */
 export interface CommandPlaybackOptions {
   baseTps?: number;
@@ -208,13 +220,13 @@ export function buildCommandPlayback(
   // Keep bootstrap commands below NBT's 65535-byte String limit with ample margin.
   const chunks: number[][][] = [];
   let chunk: number[][] = [];
-  let bytes = 2;
+  let bytes = EMPTY_FRAME_LIST_BYTES;
   for (const frame of frames) {
     const frameBytes = JSON.stringify(frame).length + 1;
-    if (bytes + frameBytes > 24000) {
+    if (bytes + frameBytes > COMMAND_CHUNK_BUDGET_BYTES) {
       chunks.push(chunk);
       chunk = [];
-      bytes = 2;
+      bytes = EMPTY_FRAME_LIST_BYTES;
     }
     chunk.push(frame);
     bytes += frameBytes;

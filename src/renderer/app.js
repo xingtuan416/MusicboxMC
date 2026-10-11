@@ -17,11 +17,14 @@ const state = {
 
 /* ---------------- Logging ---------------- */
 
+/** How many log lines the activity pane keeps before dropping the oldest. */
+const LOG_LINE_LIMIT = 400;
+
 const logLines = [];
 function log(line) {
   const ts = new Date().toLocaleTimeString('zh-CN', { hour12: false });
   logLines.push(`[${ts}] ${line}`);
-  if (logLines.length > 400) logLines.shift();
+  if (logLines.length > LOG_LINE_LIMIT) logLines.shift();
   $('log').textContent = logLines.join('\n');
 }
 
@@ -417,6 +420,9 @@ function fmtDuration(sec) {
 
 /* ---------------- Warning rendering ---------------- */
 
+/** How many individual warnings are listed before the rest are summarised. */
+const WARNING_DISPLAY_LIMIT = 500;
+
 const WARN_TEXT = {
   COMMAND_PLAYBACK_REQUIREMENTS: (w) =>
     `命令播放：${w.chainLength} 个链步骤，预算 ${w.budget}。需要启用命令方块、保留方块实体 NBT，并加载整个结构；世界 maxCommandChainLength 必须大于链步骤数。`,
@@ -485,7 +491,7 @@ function renderWarnings(warnings) {
 
   box.append(create('p', 'hint', [...counts.entries()].map(([c, n]) => `${c}×${n}`).join('　')));
 
-  const shown = warnings.slice(0, 500);
+  const shown = warnings.slice(0, WARNING_DISPLAY_LIMIT);
   for (const w of shown) {
     const item = create('div', `warnitem ${warnSeverity(w.code)}`);
     item.append(
@@ -567,6 +573,19 @@ const HEAD_BG = '#e9e7e2';
 /** Chromium caps canvas dimensions, so leave headroom for long songs. */
 const MAX_CANVAS_PIXELS = 30000;
 const MAX_CANVAS_AREA = 16000000;
+/** Narrowest CSS width the preview canvas may be compressed to. */
+const MIN_CANVAS_CSS_WIDTH = 640;
+/** Zoom bounds for the manual zoom buttons. */
+const ZOOM_MIN = 0.45;
+const ZOOM_MAX = 1.8;
+/** Ceiling for "fit to window", which should not zoom in as far as the buttons. */
+const ZOOM_FIT_MAX = 1.35;
+/** Smallest viewport the fit calculation will consider, and the margin it leaves. */
+const MIN_FIT_WIDTH = 320;
+const MIN_FIT_HEIGHT = 220;
+const FIT_PADDING = 40;
+/** Below this the zoom label is reporting the render scale, not the user's setting. */
+const ZOOM_LABEL_EPSILON = 0.005;
 
 /** One colour per region, used for the track stripe in the gutter. */
 const REGION_COLORS = ['#c97962', '#c29a65', '#879b79', '#ad8971', '#c58f9c', '#7d9690', '#aa9161'];
@@ -649,7 +668,7 @@ function renderPreview(res) {
 
   const { x, z } = preview.size;
   const dpr = window.devicePixelRatio || 1;
-  const maxCssWidth = Math.max(640, MAX_CANVAS_PIXELS / Math.max(1, dpr));
+  const maxCssWidth = Math.max(MIN_CANVAS_CSS_WIDTH, MAX_CANVAS_PIXELS / Math.max(1, dpr));
   const dimensionCell = Math.min(
     (maxCssWidth - GUTTER) / Math.max(1, x),
     (maxCssWidth - RULER) / Math.max(1, z),
@@ -1041,7 +1060,7 @@ function renderPreview(res) {
       ? `${res.regions[0].size.x}×${res.regions[0].size.y}×${res.regions[0].size.z} 格 · 命令播放器 · 俯视图`
       : `一行 = 一个 Z 行，一列 = 一格 X（向右为时间）　·　${x}×${z} 格　·　` +
         `${trackCount} 条音轨 / ${(res.regions || []).length} 个区域　·　可见方块 ${nonEmpty} 个` +
-        (renderScale < state.previewScale - 0.005 ? '　·　长曲目已自动缩小预览' : '');
+        (renderScale < state.previewScale - ZOOM_LABEL_EPSILON ? '　·　长曲目已自动缩小预览' : '');
 
   // Legend
   const legend = $('legend');
@@ -1068,7 +1087,7 @@ function updatePreviewZoomLabel() {
 }
 
 function setPreviewScale(scale) {
-  state.previewScale = Math.min(1.8, Math.max(0.45, scale));
+  state.previewScale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, scale));
   updatePreviewZoomLabel();
   if (state.generated) renderPreview(state.generated);
 }
@@ -1077,11 +1096,11 @@ function fitPreview() {
   const preview = state.generated?.preview;
   const wrap = $('canvasWrap');
   if (!preview || !preview.size?.x || !wrap) return;
-  const availableWidth = Math.max(320, wrap.clientWidth - 40);
-  const availableHeight = Math.max(220, wrap.clientHeight - 40);
+  const availableWidth = Math.max(MIN_FIT_WIDTH, wrap.clientWidth - FIT_PADDING);
+  const availableHeight = Math.max(MIN_FIT_HEIGHT, wrap.clientHeight - FIT_PADDING);
   const widthScale = availableWidth / (GUTTER + preview.size.x * BASE_CELL);
   const heightScale = availableHeight / (RULER + preview.size.z * BASE_CELL);
-  setPreviewScale(Math.min(1.35, Math.max(0.45, Math.min(widthScale, heightScale))));
+  setPreviewScale(Math.min(ZOOM_FIT_MAX, Math.max(ZOOM_MIN, Math.min(widthScale, heightScale))));
 }
 
 /* ---------------- Track list ---------------- */
