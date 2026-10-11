@@ -13,11 +13,7 @@ export interface SpeedRow {
  * 变速换算表（文档 §4.4）。
  * 实际时长 = 曲目时长 × (20 / tick rate)，即 tickRate = 20 × factor。
  */
-export function speedTable(
-  durationSec: number,
-  presets: number[],
-  baseTps: number = BASE_TPS,
-): SpeedRow[] {
+export function speedTable(durationSec: number, presets: number[], baseTps: number = BASE_TPS): SpeedRow[] {
   return presets.map((factor) => {
     const tickRate = baseTps * factor;
     return {

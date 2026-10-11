@@ -7,11 +7,13 @@ import type { SongModel } from '../src/core/midi/types';
 import { DEFAULT_REGIONS } from '../src/core/palette/pitchMap';
 import { TagType } from '../src/core/nbt/tag';
 
-function song(tracks: Array<{
-  index: number;
-  instrument: string;
-  notes: Array<{ tick: number; midi: number }>;
-}>): SongModel {
+function song(
+  tracks: Array<{
+    index: number;
+    instrument: string;
+    notes: Array<{ tick: number; midi: number }>;
+  }>,
+): SongModel {
   return {
     name: 'regression',
     ppq: 480,
@@ -53,8 +55,7 @@ describe('回归：布局参数与合轨空间', () => {
     );
 
     const noteBlocks = result.tracks.reduce(
-      (count, track) =>
-        count + track.placements.filter((p) => p.block === 'minecraft:note_block').length,
+      (count, track) => count + track.placements.filter((p) => p.block === 'minecraft:note_block').length,
       0,
     );
     expect(noteBlocks).toBe(1);
@@ -85,8 +86,7 @@ describe('回归：布局参数与合轨空间', () => {
       limit: 5,
     });
     const noteBlocks = result.tracks.reduce(
-      (count, track) =>
-        count + track.placements.filter((p) => p.block === 'minecraft:note_block').length,
+      (count, track) => count + track.placements.filter((p) => p.block === 'minecraft:note_block').length,
       0,
     );
     expect(noteBlocks).toBe(7);
@@ -115,7 +115,9 @@ describe('回归：布局参数与合轨空间', () => {
       const zs = track.placements.map((p) => p.pos.z);
       return [Math.min(...zs), Math.max(...zs)] as const;
     });
-    expect(Math.min(ranges[0]![1], ranges[1]![1]) - Math.max(ranges[0]![0], ranges[1]![0])).toBeLessThanOrEqual(0);
+    expect(
+      Math.min(ranges[0]![1], ranges[1]![1]) - Math.max(ranges[0]![0], ranges[1]![0]),
+    ).toBeLessThanOrEqual(0);
   });
 });
 

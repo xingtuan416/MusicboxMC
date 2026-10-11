@@ -48,9 +48,7 @@ describe('blockTable 选方块解析层', () => {
     // 音区覆盖赢过音轨覆盖
     expect(r({ slot: 'noteBase', trackIndex: 0, region: 'A' })).toBe('minecraft:obsidian');
     // 音区没覆盖的槽位走音轨覆盖
-    expect(r({ slot: 'wireSupport', trackIndex: 0, region: 'A' })).toBe(
-      DEFAULT_BLOCK_TABLE.wireSupport,
-    );
+    expect(r({ slot: 'wireSupport', trackIndex: 0, region: 'A' })).toBe(DEFAULT_BLOCK_TABLE.wireSupport);
     // 音区覆盖赢过音区默认
     expect(r({ slot: 'noteBase', region: 'A' })).toBe('minecraft:obsidian');
   });

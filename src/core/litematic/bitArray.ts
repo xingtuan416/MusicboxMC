@@ -58,11 +58,7 @@ export function packLongArray(indices: ArrayLike<number>, bits: number): bigint[
 }
 
 /** 从 long 数组解包出索引数组。 */
-export function unpackLongArray(
-  longs: bigint[],
-  volume: number,
-  bits: number,
-): Uint32Array {
+export function unpackLongArray(longs: bigint[], volume: number, bits: number): Uint32Array {
   const out = new Uint32Array(volume);
   const mask = (1n << BigInt(bits)) - 1n;
 

@@ -15,9 +15,7 @@ export function parseMidi(buffer: Buffer | Uint8Array): SongModel {
   }
 
   const ts = midi.header.timeSignatures[0];
-  const timeSignature: [number, number] | null = ts
-    ? [ts.timeSignature[0]!, ts.timeSignature[1]!]
-    : null;
+  const timeSignature: [number, number] | null = ts ? [ts.timeSignature[0]!, ts.timeSignature[1]!] : null;
 
   const tracks: TrackModel[] = midi.tracks.map((track, index) => {
     const notes: NoteEvent[] = track.notes.map((n) => ({

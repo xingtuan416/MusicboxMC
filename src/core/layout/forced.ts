@@ -10,8 +10,15 @@ import {
   type TrackNote,
 } from './track';
 import type {
-  BlockPlacement, DelayStep, LayoutConfig, LayoutResult, LayoutWarning,
-  PlacedNote, Tap, TrackSkeleton, Vec3,
+  BlockPlacement,
+  DelayStep,
+  LayoutConfig,
+  LayoutResult,
+  LayoutWarning,
+  PlacedNote,
+  Tap,
+  TrackSkeleton,
+  Vec3,
 } from './types';
 import { validateForcedTrack } from './forcedValidation';
 
@@ -48,9 +55,13 @@ export function forcedNotesPerSide(dMax: number): number {
  */
 export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): LayoutResult {
   const { config, regions, resolve } = opts;
-  if (!Number.isFinite(config.baseTps) || config.baseTps <= 0 ||
-    !Number.isInteger(config.circuitY) || !Number.isInteger(config.floorY) ||
-    (config.trackPitch !== 'auto' && (!Number.isFinite(config.trackPitch) || config.trackPitch <= 0))) {
+  if (
+    !Number.isFinite(config.baseTps) ||
+    config.baseTps <= 0 ||
+    !Number.isInteger(config.circuitY) ||
+    !Number.isInteger(config.floorY) ||
+    (config.trackPitch !== 'auto' && (!Number.isFinite(config.trackPitch) || config.trackPitch <= 0))
+  ) {
     throw new Error('强制合并要求有效的 TPS、电路层坐标和主线间距');
   }
   if (config.floorY !== config.circuitY - 1) {
@@ -64,10 +75,20 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
   const prepared = inputs.map((input) => {
     const byRt = new Map<number, Group>();
     for (const note of input.notes) {
-      if (!Number.isSafeInteger(note.tick) || note.tick < 0) throw new Error('强制合并音符时间必须是非负整数游戏刻');
-      const mapped = mapPitch(note.midi, regions, opts.outOfRange ?? 'warn', opts.transpose?.[input.index] ?? 0);
+      if (!Number.isSafeInteger(note.tick) || note.tick < 0)
+        throw new Error('强制合并音符时间必须是非负整数游戏刻');
+      const mapped = mapPitch(
+        note.midi,
+        regions,
+        opts.outOfRange ?? 'warn',
+        opts.transpose?.[input.index] ?? 0,
+      );
       if (mapped.dropped || (mapped.degraded && opts.outOfRange !== 'octave')) {
-        warnings.push({ code: 'OUT_OF_RANGE', midi: note.midi, action: mapped.dropped ? 'drop' : opts.outOfRange ?? 'warn' });
+        warnings.push({
+          code: 'OUT_OF_RANGE',
+          midi: note.midi,
+          action: mapped.dropped ? 'drop' : (opts.outOfRange ?? 'warn'),
+        });
       }
       if (mapped.dropped) continue;
       const rt = gameTickToRedstone(note.tick);
@@ -91,13 +112,18 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
   if (mainRun > MAX_PAD_RUN) {
     throw new Error(
       `强制合并峰值 ${peakNotes} 音需要 ${branchDelay} 红石刻同步补偿，` +
-      `主线需 ${mainRun} 格连续红石粉，超过安全预算 ${MAX_PAD_RUN}；未生成投影`,
+        `主线需 ${mainRun} 格连续红石粉，超过安全预算 ${MAX_PAD_RUN}；未生成投影`,
     );
   }
   const base = minRt === 0 ? 1 : 0;
   const startupDelayTicks = (base + branchDelay) * GAME_TICKS_PER_REDSTONE_TICK;
   if (peakNotes > 0) {
-    warnings.push({ code: 'FORCE_MERGE_LEAD_IN', ticks: startupDelayTicks, peakNotes, sectionCapacity: perSide * 2 });
+    warnings.push({
+      code: 'FORCE_MERGE_LEAD_IN',
+      ticks: startupDelayTicks,
+      peakNotes,
+      sectionCapacity: perSide * 2,
+    });
   }
 
   const tracks: TrackSkeleton[] = [];
@@ -131,7 +157,12 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
       if (main) steps.push({ kind: 'wire', ticks: 1 });
     };
     const relay = (x: number, z: number, delay: number, facing: string, main = false): void => {
-      supported(x, z, 'minecraft:repeater', { delay: String(delay), facing, powered: 'false', locked: 'false' });
+      supported(x, z, 'minecraft:repeater', {
+        delay: String(delay),
+        facing,
+        powered: 'false',
+        locked: 'false',
+      });
       if (main) steps.push({ kind: 'repeater', ticks: delay as 1 | 2 | 3 | 4 });
     };
     let x = 0;
@@ -182,18 +213,28 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
         const blockPos = { x: noteX, y: config.floorY, z };
         const block = resolve({ slot: 'noteBase', trackIndex: input.index, region: note.region });
         put(notePos.x, notePos.y, notePos.z, 'minecraft:note_block', {
-          instrument: note.instrument, note: String(note.note), powered: 'false',
+          instrument: note.instrument,
+          note: String(note.note),
+          powered: 'false',
         });
         put(blockPos.x, blockPos.y, blockPos.z, block);
         notePlacements.push({ notePos, blockPos, note: note.note, block, path });
       });
       taps.push({ id: taps.length, x: rootX, t: group.rt, d: branchDelay, notes: notePlacements });
-      placed.push({ trackIndex: input.index, zBase, tick: group.tick, actual: group.rt * 2 + startupDelayTicks });
+      placed.push({
+        trackIndex: input.index,
+        zBase,
+        tick: group.tick,
+        actual: group.rt * 2 + startupDelayTicks,
+      });
       totalTicks = Math.max(totalTicks, group.tick);
       if (group.notes.length > perSide * 2) {
         warnings.push({
-          code: 'FANOUT_EXPANDED', tick: group.tick, n: group.notes.length,
-          limit: perSide * 2, stages: Math.floor((Math.ceil(group.notes.length / 2) - 1) / perSide) + 1,
+          code: 'FANOUT_EXPANDED',
+          tick: group.tick,
+          n: group.notes.length,
+          limit: perSide * 2,
+          stages: Math.floor((Math.ceil(group.notes.length / 2) - 1) / perSide) + 1,
         });
       }
       prevRt = group.rt + base;
@@ -205,14 +246,17 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
     }
 
     const directions = [
-      { name: 'east', dx: 1, dz: 0 }, { name: 'west', dx: -1, dz: 0 },
-      { name: 'south', dx: 0, dz: 1 }, { name: 'north', dx: 0, dz: -1 },
+      { name: 'east', dx: 1, dz: 0 },
+      { name: 'west', dx: -1, dz: 0 },
+      { name: 'south', dx: 0, dz: 1 },
+      { name: 'north', dx: 0, dz: -1 },
     ];
     for (const p of placements) {
       if (p.block !== 'minecraft:redstone_wire') continue;
       for (const dir of directions) {
         const neighbor = occupied.get(key({ x: p.pos.x + dir.dx, y: p.pos.y, z: p.pos.z + dir.dz }));
-        const connected = neighbor?.block === 'minecraft:redstone_wire' ||
+        const connected =
+          neighbor?.block === 'minecraft:redstone_wire' ||
           neighbor?.block === 'minecraft:stone' ||
           (neighbor?.block === 'minecraft:repeater' &&
             (dir.dx !== 0 ? ['east', 'west'] : ['north', 'south']).includes(neighbor.props?.facing ?? ''));
@@ -220,24 +264,50 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
       }
     }
     const track: TrackSkeleton = {
-      trackIndex: input.index, zBase, placements, bridges: [],
-      segments: [{
-        startTick: 0, endTick: prevRt, startX: 0, endX: x, dir: 1,
-        yRow: config.circuitY, steps, taps,
-      }],
+      trackIndex: input.index,
+      zBase,
+      placements,
+      bridges: [],
+      segments: [
+        {
+          startTick: 0,
+          endTick: prevRt,
+          startX: 0,
+          endX: x,
+          dir: 1,
+          yRow: config.circuitY,
+          steps,
+          taps,
+        },
+      ],
     };
-    validateForcedTrack(track, config.circuitY, input.groups.map((group) => group.rt * 2 + startupDelayTicks));
+    validateForcedTrack(
+      track,
+      config.circuitY,
+      input.groups.map((group) => group.rt * 2 + startupDelayTicks),
+    );
     tracks.push(track);
   }
   const min: Vec3 = { x: Infinity, y: Infinity, z: Infinity };
   const max: Vec3 = { x: -Infinity, y: -Infinity, z: -Infinity };
-  for (const track of tracks) for (const p of track.placements) {
-    for (const axis of ['x', 'y', 'z'] as const) {
-      min[axis] = Math.min(min[axis], p.pos[axis]);
-      max[axis] = Math.max(max[axis], p.pos[axis]);
+  for (const track of tracks)
+    for (const p of track.placements) {
+      for (const axis of ['x', 'y', 'z'] as const) {
+        min[axis] = Math.min(min[axis], p.pos[axis]);
+        max[axis] = Math.max(max[axis], p.pos[axis]);
+      }
     }
-  }
-  const size = tracks.length === 0 ? { x: 1, y: 2, z: 1 } :
-    { x: max.x - min.x + 1, y: max.y - min.y + 1, z: max.z - min.z + 1 };
-  return { tracks, min: tracks.length === 0 ? { x: 0, y: 0, z: 0 } : min, size, totalTicks, warnings, placed, startupDelayTicks };
+  const size =
+    tracks.length === 0
+      ? { x: 1, y: 2, z: 1 }
+      : { x: max.x - min.x + 1, y: max.y - min.y + 1, z: max.z - min.z + 1 };
+  return {
+    tracks,
+    min: tracks.length === 0 ? { x: 0, y: 0, z: 0 } : min,
+    size,
+    totalTicks,
+    warnings,
+    placed,
+    startupDelayTicks,
+  };
 }

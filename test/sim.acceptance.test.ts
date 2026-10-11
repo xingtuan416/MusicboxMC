@@ -79,8 +79,7 @@ describe('布局验收：结构与音符守恒', () => {
     });
     for (let i = 0; i < ranges.length; i++) {
       for (let j = i + 1; j < ranges.length; j++) {
-        const overlap =
-          Math.min(ranges[i]![1], ranges[j]![1]) - Math.max(ranges[i]![0], ranges[j]![0]);
+        const overlap = Math.min(ranges[i]![1], ranges[j]![1]) - Math.max(ranges[i]![0], ranges[j]![0]);
         expect(overlap).toBeLessThanOrEqual(0);
       }
     }
@@ -126,13 +125,10 @@ describe('布局验收：时序不变量', () => {
   it('跨轨相对时序守恒：轨 A 首音 rt0、轨 B 首音 rt10，实际差必须为 20 游刻', () => {
     // 锁住"全曲统一前导"：中继器最小 1 档使 rt0 的音只能 1 红刻后发声，
     // 前导必须全曲统一，否则不同轨的首音偏移会互相不一致。
-    const res = layout(
-      song([
-        [{ tick: 0, midi: 60 }],
-        [{ tick: 20, midi: 62 }],
-      ]),
-      { config: cfg, regions: DEFAULT_REGIONS },
-    );
+    const res = layout(song([[{ tick: 0, midi: 60 }], [{ tick: 20, midi: 62 }]]), {
+      config: cfg,
+      regions: DEFAULT_REGIONS,
+    });
     const a = res.placed.find((p) => p.trackIndex === 0)!;
     const b = res.placed.find((p) => p.trackIndex === 1)!;
     expect(a.actual).toBe(2); // rt 0 + 全曲前导 1 红刻
@@ -152,8 +148,7 @@ describe('布局验收：时序不变量', () => {
       const placed = [...res.placed].sort((a, b) => a.tick - b.tick);
       expect(placed.length).toBeGreaterThan(0);
       for (let i = 1; i < placed.length; i++) {
-        const dExp =
-          (gameTickToRedstone(placed[i]!.tick) - gameTickToRedstone(placed[i - 1]!.tick)) * 2;
+        const dExp = (gameTickToRedstone(placed[i]!.tick) - gameTickToRedstone(placed[i - 1]!.tick)) * 2;
         expect(placed[i]!.actual - placed[i - 1]!.actual).toBe(dExp);
       }
     }

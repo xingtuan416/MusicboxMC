@@ -147,12 +147,9 @@ describe('多轨空间对齐：X 由曲中时刻决定', () => {
 
     // 每轨相邻音组的实际触发差 == 2·红刻差（补齐没有改变任何时刻）
     for (const trackIdx of [0, 1]) {
-      const placed = res.placed
-        .filter((p) => p.trackIndex === trackIdx)
-        .sort((x, y) => x.tick - y.tick);
+      const placed = res.placed.filter((p) => p.trackIndex === trackIdx).sort((x, y) => x.tick - y.tick);
       for (let i = 1; i < placed.length; i++) {
-        const dExp =
-          (gameTickToRedstone(placed[i]!.tick) - gameTickToRedstone(placed[i - 1]!.tick)) * 2;
+        const dExp = (gameTickToRedstone(placed[i]!.tick) - gameTickToRedstone(placed[i - 1]!.tick)) * 2;
         expect(placed[i]!.actual - placed[i - 1]!.actual).toBe(dExp);
       }
     }
@@ -173,9 +170,7 @@ describe('多轨空间对齐：X 由曲中时刻决定', () => {
     const a = noteXs(res, 0);
     const b = noteXs(res, 1);
     for (const rt of [10, 20]) {
-      expect(a.find((sample) => sample.rt === rt)?.x).toBe(
-        b.find((sample) => sample.rt === rt)?.x,
-      );
+      expect(a.find((sample) => sample.rt === rt)?.x).toBe(b.find((sample) => sample.rt === rt)?.x);
     }
   });
 
@@ -196,9 +191,7 @@ describe('多轨空间对齐：X 由曲中时刻决定', () => {
     const b = noteXs(res, 1);
 
     expect(Math.abs(a.find((sample) => sample.rt === 20)!.x - 20)).toBe(0);
-    expect(b.find((sample) => sample.rt === 20)?.x).toBe(
-      a.find((sample) => sample.rt === 20)?.x,
-    );
+    expect(b.find((sample) => sample.rt === 20)?.x).toBe(a.find((sample) => sample.rt === 20)?.x);
     expect(res.warnings.some((w) => w.code === 'SPATIAL_DRIFT')).toBe(false);
   });
 

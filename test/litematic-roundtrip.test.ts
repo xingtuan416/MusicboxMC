@@ -60,7 +60,15 @@ describe('litematic 组装与回读', () => {
         },
       },
       { x: 0, y: 0, z: 0, state: { name: 'minecraft:grass_block' } },
-      { x: 1, y: 2, z: 0, state: { name: 'minecraft:repeater', properties: { facing: 'east', delay: '4', locked: 'false', powered: 'false' } } },
+      {
+        x: 1,
+        y: 2,
+        z: 0,
+        state: {
+          name: 'minecraft:repeater',
+          properties: { facing: 'east', delay: '4', locked: 'false', powered: 'false' },
+        },
+      },
     ],
   };
 
@@ -109,10 +117,13 @@ describe('litematic 组装与回读', () => {
 
   it('超出区域尺寸的方块坐标会报错', () => {
     expect(() =>
-      buildLitematic(
-        [{ ...region, blocks: [{ x: 99, y: 0, z: 0, state: { name: 'minecraft:stone' } }] }],
-        { name: 'x', author: 'x', description: '', dataVersion: 3700, version: 6 },
-      ),
+      buildLitematic([{ ...region, blocks: [{ x: 99, y: 0, z: 0, state: { name: 'minecraft:stone' } }] }], {
+        name: 'x',
+        author: 'x',
+        description: '',
+        dataVersion: 3700,
+        version: 6,
+      }),
     ).toThrow(/越界/);
   });
 });

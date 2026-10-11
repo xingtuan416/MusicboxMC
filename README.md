@@ -77,28 +77,33 @@ MusicboxMC/
 ### 环境准备
 
 确保您的本地计算机已安装：
+
 - [Node.js](https://nodejs.org/) (推荐 LTS 18.x 或更高版本)
 - npm (随 Node.js 一并安装)
 
 ### 安装与运行
 
 1. **克隆仓库**
+
    ```bash
    git clone https://github.com/wezzs0406/MusicboxMC.git
    cd MusicboxMC
    ```
 
 2. **安装依赖**
+
    ```bash
    npm install
    ```
 
 3. **启动客户端**
+
    ```bash
    npm start
    ```
 
 4. **运行自动化测试**
+
    ```bash
    npm test
    ```
@@ -111,6 +116,7 @@ MusicboxMC/
 ### 命令行工具 (CLI)
 
 如需快速查看某个 MIDI 文件的音乐结构而无需打开图形界面，可运行：
+
 ```bash
 npm run cli -- --midi <path/to/your/song.mid>
 ```
@@ -178,7 +184,7 @@ npm run cli -- --midi <path/to/your/song.mid>
 - “命令链预算”应不高于世界的 `maxCommandChainLength`，默认 65536。链步骤数必须小于该预算；
   超限明确失败，不截断音乐。生成器不会修改世界规则。若服务器修改了规则，应填写实际预算。
 - 每次播放向所有玩家发送声音，因此多人服务器命令执行、网络和客户端声音开销会增加。
-可按需手动关闭世界 `commandBlockOutput` 防止管理员聊天被反馈刷屏；生成器不自动更改该规则。
+  可按需手动关闭世界 `commandBlockOutput` 防止管理员聊天被反馈刷屏；生成器不自动更改该规则。
 
 **命令模式解决声源距离与红石容量，不等于无限声音容量。** 客户端声音池、采样余音重叠、
 服务器 TPS、命令执行预算仍会限制播放。同刻超过 31 音时生成器明确告警；这只是压力提示，

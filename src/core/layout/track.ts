@@ -9,12 +9,7 @@ import type {
   TrackSkeleton,
   Vec3,
 } from './types';
-import {
-  mapPitch,
-  type NoteBlockInstrument,
-  type PitchRegion,
-  type RegionTable,
-} from '../palette/pitchMap';
+import { mapPitch, type NoteBlockInstrument, type PitchRegion, type RegionTable } from '../palette/pitchMap';
 import type { BlockResolver } from '../palette/blockTable';
 
 /** 单个音符的时间/音高输入。tick 为游戏刻（默认 20/秒）。 */
@@ -196,9 +191,7 @@ export function groupByTick(notes: TrackNote[]): Array<{ tick: number; midi: num
     if (arr) arr.push(n.midi);
     else map.set(n.tick, [n.midi]);
   }
-  return [...map.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([tick, midi]) => ({ tick, midi }));
+  return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([tick, midi]) => ({ tick, midi }));
 }
 
 /** 和弦第 j 个分支音所在的行：+1, −1, +2, −2, …（两侧交替） */
@@ -454,8 +447,7 @@ export function buildTrack(opts: BuildTrackOptions): {
     const atRt = g.rt + base;
     const targetX = opts.plan ? opts.plan.targetX(atRt) : noteXNatural;
     const deficit = Math.max(0, targetX - noteXNatural);
-    const tolerance =
-      opts.plan?.isSynchronized(atRt) === true ? 0 : ALIGN_TOLERANCE_CELLS;
+    const tolerance = opts.plan?.isSynchronized(atRt) === true ? 0 : ALIGN_TOLERANCE_CELLS;
     const padNeeded = Math.max(0, deficit - tolerance);
     const slots = restCells + 1; // 槽 0 在组前中继器之前，其后每个中继器之后各一槽
     const pad = Math.min(padNeeded, slots * MAX_PAD_RUN);
@@ -520,7 +512,12 @@ export function buildTrack(opts: BuildTrackOptions): {
     const placedNotes: PlacedNote[] = [];
     placedNotes.push(
       // 无分线列时输入直接来自背后的方块（上一个音符盒 / 上一个中继器），路径为空
-      putNote(xNote, opts.zBase, g.notes[0]!, needColumn ? [{ x: xCol, y: opts.config.circuitY, z: opts.zBase }] : []),
+      putNote(
+        xNote,
+        opts.zBase,
+        g.notes[0]!,
+        needColumn ? [{ x: xCol, y: opts.config.circuitY, z: opts.zBase }] : [],
+      ),
     );
     g.notes.slice(1).forEach((n, j) => {
       const b = branches[j]!;

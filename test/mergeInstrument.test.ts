@@ -102,11 +102,17 @@ describe('同乐器并轨', () => {
 
   it('合并后同刻音变为和弦（走同一分线列），超容量仍按既有规则拆轨且不丢音', () => {
     const notes = Array.from({ length: 40 }, (_, i) => ({ tick: 0, midi: 48 + (i % 12) }));
-    const res = layout(song([{ instrument: 'Piano', notes }, { instrument: 'Piano', notes }]), {
-      config: cfg,
-      regions: DEFAULT_REGIONS,
-      mergeSameInstrument: true,
-    });
+    const res = layout(
+      song([
+        { instrument: 'Piano', notes },
+        { instrument: 'Piano', notes },
+      ]),
+      {
+        config: cfg,
+        regions: DEFAULT_REGIONS,
+        mergeSameInstrument: true,
+      },
+    );
     // 80 音同刻 → 单列容量 29 → 拆成多条线，但音符不丢
     expect(res.tracks.length).toBeGreaterThanOrEqual(3);
     expect(noteBlocks(res)).toBe(80);

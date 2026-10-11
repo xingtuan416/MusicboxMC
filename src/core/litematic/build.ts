@@ -30,13 +30,7 @@ export const MC_1_20_4_DATA_VERSION = 3700;
 export const LITEMATIC_VERSION_1_20_4 = 6;
 
 /** 索引顺序：index = y * (sizeX * sizeZ) + z * sizeX + x */
-export function blockIndex(
-  x: number,
-  y: number,
-  z: number,
-  sizeX: number,
-  sizeZ: number,
-): number {
+export function blockIndex(x: number, y: number, z: number, sizeX: number, sizeZ: number): number {
   return y * (sizeX * sizeZ) + z * sizeX + x;
 }
 
@@ -51,7 +45,8 @@ function buildRegion(region: RegionData): PackedRegion {
   const { x: sx, y: sy, z: sz } = region.size;
   const volume = sx * sy * sz;
   const blockPositions = region.tileEntities?.length
-    ? new Set(region.blocks.map((block) => `${block.x},${block.y},${block.z}`)) : new Set<string>();
+    ? new Set(region.blocks.map((block) => `${block.x},${block.y},${block.z}`))
+    : new Set<string>();
   const entityPositions = new Set<string>();
   for (const entity of region.tileEntities ?? []) {
     const pos = ['x', 'y', 'z'].map((axis) => getInt(entity, axis));
@@ -271,8 +266,10 @@ export function parseLitematic(buf: Buffer): ParsedLitematic {
     const bits = requiredBits(palette.length);
     const indices = unpackLongArray(statesTag.value, volume, bits);
     const entitiesTag = regionTag.value.get('TileEntities');
-    const tileEntities = entitiesTag?.type === TagType.List
-      ? entitiesTag.value.filter((entry): entry is NbtCompound => entry.type === TagType.Compound) : [];
+    const tileEntities =
+      entitiesTag?.type === TagType.List
+        ? entitiesTag.value.filter((entry): entry is NbtCompound => entry.type === TagType.Compound)
+        : [];
     regions.push({ name, position, size, palette, indices, tileEntities });
   }
 

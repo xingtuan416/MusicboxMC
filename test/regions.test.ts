@@ -36,9 +36,16 @@ function song(notes: Array<{ tick: number; midi: number }>): SongModel {
 describe('sliceRegions', () => {
   it('region 内所有方块坐标均非负且落在 size 内', () => {
     // 3 音和弦会沿 ±Z 展开支线，历史 bug 就是这里产生负 z
-    const res = layout(song([{ tick: 0, midi: 60 }, { tick: 0, midi: 64 }, { tick: 0, midi: 67 }]), {
-      regions: DEFAULT_REGIONS,
-    });
+    const res = layout(
+      song([
+        { tick: 0, midi: 60 },
+        { tick: 0, midi: 64 },
+        { tick: 0, midi: 67 },
+      ]),
+      {
+        regions: DEFAULT_REGIONS,
+      },
+    );
 
     const slices = sliceRegions(res);
     expect(slices.length).toBeGreaterThan(0);
@@ -56,9 +63,16 @@ describe('sliceRegions', () => {
   });
 
   it('切片可直接喂给 buildLitematic 而不抛越界', () => {
-    const res = layout(song([{ tick: 0, midi: 60 }, { tick: 0, midi: 64 }, { tick: 0, midi: 67 }]), {
-      regions: DEFAULT_REGIONS,
-    });
+    const res = layout(
+      song([
+        { tick: 0, midi: 60 },
+        { tick: 0, midi: 64 },
+        { tick: 0, midi: 67 },
+      ]),
+      {
+        regions: DEFAULT_REGIONS,
+      },
+    );
     const slices = sliceRegions(res);
 
     const buf = buildLitematic(
@@ -123,9 +137,16 @@ describe('sliceRegions', () => {
   });
 
   it('回读的方块落在与原布局相同的相对位置', () => {
-    const res = layout(song([{ tick: 0, midi: 60 }, { tick: 0, midi: 64 }, { tick: 0, midi: 67 }]), {
-      regions: DEFAULT_REGIONS,
-    });
+    const res = layout(
+      song([
+        { tick: 0, midi: 60 },
+        { tick: 0, midi: 64 },
+        { tick: 0, midi: 67 },
+      ]),
+      {
+        regions: DEFAULT_REGIONS,
+      },
+    );
     const slices = sliceRegions(res);
     const src = slices[0]!;
 

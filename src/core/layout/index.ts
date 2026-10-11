@@ -63,9 +63,7 @@ function instrumentKey(t: TrackModel): string {
   return t.percussion ? 'percussion' : t.instrument;
 }
 
-function mergeByInstrument<T extends { index: number; notes: TrackNote[]; key: string }>(
-  inputs: T[],
-): T[] {
+function mergeByInstrument<T extends { index: number; notes: TrackNote[]; key: string }>(inputs: T[]): T[] {
   const groups = new Map<string, T>();
   for (const input of inputs) {
     const hit = groups.get(input.key);
@@ -112,7 +110,7 @@ function buildXPlan(samples: Array<{ atRt: number; x: number; trackId: number }>
   // 同刻音符应该尽量共用 X 轴；自然位置差只决定补线是否可能完成，
   // 不能再作为“不尝试对齐”的门槛。否则密集轨与稀疏轨在长曲后段
   // 只要自然差超过检查窗口，就会稳定地落在不同轴上。
-  for (let i = 0; i < sorted.length; ) {
+  for (let i = 0; i < sorted.length;) {
     const atRt = sorted[i]!.atRt;
     const sameTime = [];
     while (i < sorted.length && sorted[i]!.atRt === atRt) {
@@ -175,7 +173,11 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   // 合轨会增加同刻音符数量，必须先合轨再计算轨距和首音前导。
   if (opts.forceMergeSameInstrument) {
     return buildForcedLayout(mergeByInstrument(inputs), {
-      config, regions, resolve, transpose: opts.transpose, outOfRange: opts.outOfRange,
+      config,
+      regions,
+      resolve,
+      transpose: opts.transpose,
+      outOfRange: opts.outOfRange,
     });
   }
   const trackInputs = opts.mergeSameInstrument ? mergeByInstrument(inputs) : inputs;
@@ -214,14 +216,18 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   let trackSlot = 0;
 
   for (const { index, notes } of trackInputs) {
-
     // 超出单列和弦容量的音群改派到新音轨（TRACK_SPLIT）：每条轨有独立的
     // 主线与分线列容量；各轨共用启动时刻，同 rt 的音在新轨按剩余音数
     // 重新铺线，触发时刻不变。
     let pending = notes;
     for (let lane = 0; pending.length > 0; lane++) {
       const zBase = maxRows + trackSlot * pitch;
-      const { track, warnings: w, overflow, placed: pl } = buildTrack({
+      const {
+        track,
+        warnings: w,
+        overflow,
+        placed: pl,
+      } = buildTrack({
         trackIndex: index,
         zBase,
         notes: pending,

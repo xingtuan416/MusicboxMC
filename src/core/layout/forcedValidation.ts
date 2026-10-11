@@ -55,7 +55,7 @@ export function validateForcedTrack(
         throw new Error(`强制合并校验：无效中继器状态 ${k}`);
       }
       // A repeater output pointing into another repeater's side locks it.
-      for (const side of DIRECTIONS.filter((dir) => facing.dx !== 0 ? dir.dz !== 0 : dir.dx !== 0)) {
+      for (const side of DIRECTIONS.filter((dir) => (facing.dx !== 0 ? dir.dz !== 0 : dir.dx !== 0))) {
         const neighbor = byPos.get(key(block.pos.x + side.dx, block.pos.z + side.dz));
         if (neighbor?.block === 'minecraft:repeater' && neighbor.props?.facing === side.name) {
           throw new Error(`强制合并校验：中继器可能被侧向锁定 ${k}`);
@@ -63,14 +63,19 @@ export function validateForcedTrack(
       }
     }
   }
-  interface Signal { block: BlockPlacement; tick: number; strength: number }
+  interface Signal {
+    block: BlockPlacement;
+    tick: number;
+    strength: number;
+  }
   const queue: Signal[] = [];
   const arrivals = new Map<string, { tick: number; strength: number }>();
   const emit = (block: BlockPlacement | undefined, tick: number, strength: number): void => {
     if (!block || strength < 1) return;
     const k = key(block.pos.x, block.pos.z);
     const previous = arrivals.get(k);
-    if (previous && (previous.tick < tick || (previous.tick === tick && previous.strength >= strength))) return;
+    if (previous && (previous.tick < tick || (previous.tick === tick && previous.strength >= strength)))
+      return;
     arrivals.set(k, { tick, strength });
     queue.push({ block, tick, strength });
   };
@@ -81,9 +86,10 @@ export function validateForcedTrack(
     const signal = queue[head]!;
     const { block, tick, strength } = signal;
     if (block.block === 'minecraft:note_block') continue;
-    const output = block.block === 'minecraft:repeater'
-      ? DIRECTIONS.find((dir) => dir.opposite === block.props?.facing)
-      : undefined;
+    const output =
+      block.block === 'minecraft:repeater'
+        ? DIRECTIONS.find((dir) => dir.opposite === block.props?.facing)
+        : undefined;
     for (const dir of output ? [output] : DIRECTIONS) {
       const neighbor = byPos.get(key(block.pos.x + dir.dx, block.pos.z + dir.dz));
       if (!neighbor) continue;
@@ -107,7 +113,8 @@ export function validateForcedTrack(
   for (const [k, block] of byPos) {
     const signal = arrivals.get(k);
     if (!signal) throw new Error(`强制合并校验：信号无法到达 ${block.block} (${k})`);
-    if (block.block === 'minecraft:redstone_wire') minWireStrength = Math.min(minWireStrength, signal.strength);
+    if (block.block === 'minecraft:redstone_wire')
+      minWireStrength = Math.min(minWireStrength, signal.strength);
     if (block.block === 'minecraft:note_block') {
       if (signal.tick !== expected.get(k)) {
         throw new Error(`强制合并校验：音符盒 (${k}) 实际 ${signal.tick} 游戏刻，期望 ${expected.get(k)}`);

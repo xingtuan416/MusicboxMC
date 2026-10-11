@@ -281,7 +281,10 @@ function buildPreview(slices: ReturnType<typeof sliceRegions>, topDown = false):
 }
 
 function generateCommands(
-  song: SongModel, base: AnalyzeResult, options: GenerateOptions, start: number,
+  song: SongModel,
+  base: AnalyzeResult,
+  options: GenerateOptions,
+  start: number,
 ): { result: GenerateResult; buffer: Buffer | null } {
   const presets = options.speedPresets ?? DEFAULT_PRESETS;
   const baseTps = options.baseTps ?? DEFAULT_LAYOUT_CONFIG.baseTps;
@@ -289,37 +292,64 @@ function generateCommands(
     const compiled = buildCommandPlayback(song, options);
     const region = compiled.region;
     const buffer = buildLitematic([region], {
-      name: song.name || base.file, author: options.author ?? 'MusicboxMC',
+      name: song.name || base.file,
+      author: options.author ?? 'MusicboxMC',
       description: `MusicboxMC command playback / ${compiled.info.playedNotes} notes / ${compiled.totalTicks} game ticks`,
-      dataVersion: MC_1_20_4_DATA_VERSION, version: LITEMATIC_VERSION_1_20_4,
+      dataVersion: MC_1_20_4_DATA_VERSION,
+      version: LITEMATIC_VERSION_1_20_4,
     });
     // Commands are vertically packed; the preview shows their top-down footprint.
     const slice = {
-      trackIndex: -1, position: region.position, size: region.size,
-      blocks: region.blocks.filter((block) => block.state.name !== 'minecraft:air').map((block) => ({
-        pos: { x: block.x, y: block.y, z: block.z }, block: block.state.name, props: block.state.properties,
-      })),
+      trackIndex: -1,
+      position: region.position,
+      size: region.size,
+      blocks: region.blocks
+        .filter((block) => block.state.name !== 'minecraft:air')
+        .map((block) => ({
+          pos: { x: block.x, y: block.y, z: block.z },
+          block: block.state.name,
+          props: block.state.properties,
+        })),
     };
     return {
       buffer,
       result: {
-        ...base, success: true, bytes: buffer.length, playbackMode: 'command', commandPlayback: compiled.info,
+        ...base,
+        success: true,
+        bytes: buffer.length,
+        playbackMode: 'command',
+        commandPlayback: compiled.info,
         outOfRangeNotes: compiled.warnings.filter((warning) => warning.code === 'OUT_OF_RANGE').length,
         stats: {
-          tickCount: compiled.totalTicks, noteBlockCount: 0, commandBlockCount: compiled.commandBlockCount,
-          circuitBlocks: slice.blocks.length, regionCount: 1, elapsedMs: Date.now() - start,
-          outputTrackCount: 1, startupDelayTicks: 0,
+          tickCount: compiled.totalTicks,
+          noteBlockCount: 0,
+          commandBlockCount: compiled.commandBlockCount,
+          circuitBlocks: slice.blocks.length,
+          regionCount: 1,
+          elapsedMs: Date.now() - start,
+          outputTrackCount: 1,
+          startupDelayTicks: 0,
         },
-        speedTable: speedTable(song.durationSec, presets, baseTps), warnings: compiled.warnings,
-        regions: [{
-          name: 'region_0', trackIndex: -1, position: region.position, size: region.size, blockCount: slice.blocks.length,
-        }],
+        speedTable: speedTable(song.durationSec, presets, baseTps),
+        warnings: compiled.warnings,
+        regions: [
+          {
+            name: 'region_0',
+            trackIndex: -1,
+            position: region.position,
+            size: region.size,
+            blockCount: slice.blocks.length,
+          },
+        ],
         preview: buildPreview([slice], true),
       },
     };
   } catch (error) {
     const result = failure({
-      base, durationSec: song.durationSec, presets, baseTps,
+      base,
+      durationSec: song.durationSec,
+      presets,
+      baseTps,
       error: `命令播放生成失败：${(error as Error).message}`,
     });
     result.playbackMode = 'command';
@@ -367,8 +397,13 @@ function failure(ctx: FailureContext): GenerateResult {
     bytes: 0,
     outOfRangeNotes: 0,
     stats: {
-      tickCount: 0, noteBlockCount: 0, circuitBlocks: 0, regionCount: 0, elapsedMs: 0,
-      outputTrackCount: 0, startupDelayTicks: 0,
+      tickCount: 0,
+      noteBlockCount: 0,
+      circuitBlocks: 0,
+      regionCount: 0,
+      elapsedMs: 0,
+      outputTrackCount: 0,
+      startupDelayTicks: 0,
     },
     speedTable: speedTable(ctx.durationSec, ctx.presets, ctx.baseTps),
     warnings: [],

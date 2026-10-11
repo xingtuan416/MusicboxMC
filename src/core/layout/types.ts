@@ -5,8 +5,7 @@ export interface Vec3 {
 }
 
 export type DelayStep =
-  | { kind: 'wire'; ticks: 1 }
-  | { kind: 'repeater'; ticks: 1 | 2 | 3 | 4; forced?: boolean };
+  { kind: 'wire'; ticks: 1 } | { kind: 'repeater'; ticks: 1 | 2 | 3 | 4; forced?: boolean };
 
 export interface PlacedNote {
   /** 音符盒坐标 */

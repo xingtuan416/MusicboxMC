@@ -57,9 +57,7 @@ function at(
   zRel: number,
 ): { block: string; props?: Record<string, string> } | undefined {
   const tr = res.tracks[trackIdx]!;
-  return tr.placements.find(
-    (p) => p.pos.x === x && p.pos.y === cfg.circuitY && p.pos.z === tr.zBase + zRel,
-  );
+  return tr.placements.find((p) => p.pos.x === x && p.pos.y === cfg.circuitY && p.pos.z === tr.zBase + zRel);
 }
 
 describe('音符电路几何（新拓扑：音符盒内联主线，分支行中继器直接供电）', () => {
@@ -109,9 +107,7 @@ describe('音符电路几何（新拓扑：音符盒内联主线，分支行中�
     const res = layout(song([{ tick: 0, midi: 60 }]), { config: cfg, regions: DEFAULT_REGIONS });
     expect(at(res, 0, 0, 0)?.block).toBe('minecraft:repeater');
     expect(at(res, 0, 1, 0)?.block).toBe('minecraft:note_block');
-    expect(
-      res.tracks[0]!.placements.some((p) => p.block === 'minecraft:redstone_wire'),
-    ).toBe(false);
+    expect(res.tracks[0]!.placements.some((p) => p.block === 'minecraft:redstone_wire')).toBe(false);
   });
 
   it('起始那格红石粉保留（首组有前置中继器时作为接电点）', () => {
@@ -158,9 +154,7 @@ describe('音符电路几何（新拓扑：音符盒内联主线，分支行中�
     expect(at(res, 0, 1, 0)?.block).toBe('minecraft:note_block');
     expect(at(res, 0, 1, 1)?.block).toBe('minecraft:note_block');
     expect(at(res, 0, 0, 1)).toBeUndefined();
-    const repeaters = res.tracks[0]!.placements.filter(
-      (p) => p.block === 'minecraft:repeater',
-    ).length;
+    const repeaters = res.tracks[0]!.placements.filter((p) => p.block === 'minecraft:repeater').length;
     expect(repeaters).toBe(1);
   });
 
@@ -176,9 +170,7 @@ describe('音符电路几何（新拓扑：音符盒内联主线，分支行中�
       expect(at(res4, 0, 1, zRel)?.block).toBe('minecraft:repeater');
     }
     expect(at(res4, 0, 2, -2)?.block).toBeUndefined();
-    const repeaters = res4.tracks[0]!.placements.filter(
-      (p) => p.block === 'minecraft:repeater',
-    ).length;
+    const repeaters = res4.tracks[0]!.placements.filter((p) => p.block === 'minecraft:repeater').length;
     expect(repeaters).toBe(4);
   });
 
@@ -224,13 +216,20 @@ describe('音符电路几何（新拓扑：音符盒内联主线，分支行中�
   });
 
   it('音符盒显式写入资源包所需的 instrument blockstate', () => {
-    const res = layout(song([{ tick: 0, midi: 30 }, { tick: 2, midi: 54 }, { tick: 4, midi: 78 }]), {
-      config: cfg,
-      regions: DEFAULT_REGIONS,
-    });
-    const instruments = res.tracks[0]!.placements
-      .filter((p) => p.block === 'minecraft:note_block')
-      .map((p) => p.props?.instrument);
+    const res = layout(
+      song([
+        { tick: 0, midi: 30 },
+        { tick: 2, midi: 54 },
+        { tick: 4, midi: 78 },
+      ]),
+      {
+        config: cfg,
+        regions: DEFAULT_REGIONS,
+      },
+    );
+    const instruments = res.tracks[0]!.placements.filter((p) => p.block === 'minecraft:note_block').map(
+      (p) => p.props?.instrument,
+    );
     expect(instruments).toEqual(['bass', 'guitar', 'flute']);
   });
 });

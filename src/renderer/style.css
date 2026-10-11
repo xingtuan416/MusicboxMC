@@ -18,7 +18,7 @@
   --danger: #ad4d49;
   --danger-soft: #fae9e7;
   --shadow: 0 10px 28px rgba(32, 36, 41, 0.055);
-  --mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, monospace;
+  --mono: ui-monospace, 'SFMono-Regular', 'Cascadia Mono', Consolas, monospace;
 }
 
 * {
@@ -54,7 +54,13 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font: 13px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+  font:
+    13px/1.5 system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'Microsoft YaHei',
+    sans-serif;
 }
 
 body {
@@ -85,8 +91,8 @@ select:focus-visible {
   outline-offset: 2px;
 }
 
-input[type="text"],
-input[type="number"],
+input[type='text'],
+input[type='number'],
 select {
   width: 100%;
   min-width: 0;
@@ -96,10 +102,13 @@ select {
   padding: 0 11px;
   background: var(--surface);
   color: var(--ink);
-  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
 }
 
-input[type="text"] {
+input[type='text'] {
   font-family: var(--mono);
   font-size: 12px;
 }
@@ -412,7 +421,11 @@ button:disabled {
   font-size: 12px;
   font-weight: 650;
   white-space: nowrap;
-  transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  transition:
+    transform 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .btn:hover:not(:disabled) {
@@ -637,7 +650,7 @@ button:disabled {
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
-  content: "";
+  content: '';
   transition: transform 160ms ease;
 }
 
@@ -775,7 +788,7 @@ button:disabled {
   left: 0;
   height: 2px;
   background: transparent;
-  content: "";
+  content: '';
   transition: background 160ms ease;
 }
 
@@ -1165,7 +1178,9 @@ tbody tr:hover {
   cursor: pointer;
   font-size: 17px;
   line-height: 1;
-  transition: background 160ms ease, color 160ms ease;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
 }
 
 .icon-button:hover {

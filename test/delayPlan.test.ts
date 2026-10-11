@@ -131,8 +131,7 @@ describe('量化误差（不承诺零误差，但必须守恒且 ≤1 游刻/音
       const res = layout(song(notes), { config: cfg, regions: DEFAULT_REGIONS });
       const placed = [...res.placed].sort((a, b) => a.tick - b.tick);
       for (let i = 1; i < placed.length; i++) {
-        const dExp =
-          (gameTickToRedstone(placed[i]!.tick) - gameTickToRedstone(placed[i - 1]!.tick)) * 2;
+        const dExp = (gameTickToRedstone(placed[i]!.tick) - gameTickToRedstone(placed[i - 1]!.tick)) * 2;
         expect(placed[i]!.actual - placed[i - 1]!.actual).toBe(dExp);
       }
     }

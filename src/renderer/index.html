@@ -68,8 +68,15 @@
         </div>
         <div class="filepick">
           <label class="sr-only" for="filePath">MIDI 文件路径</label>
-          <input id="filePath" type="text" placeholder="拖入或粘贴 .mid / .midi 文件路径" spellcheck="false" />
-          <button id="btnBrowse" class="btn secondary" type="button"><span aria-hidden="true">⌕</span> 浏览文件</button>
+          <input
+            id="filePath"
+            type="text"
+            placeholder="拖入或粘贴 .mid / .midi 文件路径"
+            spellcheck="false"
+          />
+          <button id="btnBrowse" class="btn secondary" type="button">
+            <span aria-hidden="true">⌕</span> 浏览文件
+          </button>
           <button id="btnAnalyze" class="btn dark" type="button">读取曲目</button>
         </div>
         <div class="source-foot">
@@ -118,8 +125,7 @@
               </select>
               <small>
                 通过资源包扩展音域：会失去 bass、guitar、harp、flute、bell 五种原版音色，
-                改用钢琴采样，使音域达到 F#1-F#7（MIDI 30-102）。只有仍超出此范围的音符
-                才按上方策略处理。
+                改用钢琴采样，使音域达到 F#1-F#7（MIDI 30-102）。只有仍超出此范围的音符 才按上方策略处理。
               </small>
             </label>
             <div class="switch-row">
@@ -182,8 +188,12 @@
               <span class="label">保存位置</span>
               <input id="outputPath" type="text" placeholder="点击选择保存位置" spellcheck="false" />
             </label>
-            <button id="btnSaveAs" class="btn secondary full" type="button"><span aria-hidden="true">↗</span> 选择保存位置</button>
-            <button id="btnGenerate" class="btn primary full" type="button" disabled><span aria-hidden="true">✦</span> 生成投影</button>
+            <button id="btnSaveAs" class="btn secondary full" type="button">
+              <span aria-hidden="true">↗</span> 选择保存位置
+            </button>
+            <button id="btnGenerate" class="btn primary full" type="button" disabled>
+              <span aria-hidden="true">✦</span> 生成投影
+            </button>
           </section>
         </aside>
 
@@ -208,7 +218,8 @@
               <span class="tab-icon" aria-hidden="true">⌘</span>电路预览
             </button>
             <button class="tab" data-tab="warnings" role="tab" aria-selected="false">
-              <span class="tab-icon" aria-hidden="true">!</span>需要注意 <span id="warnCount" class="badge">0</span>
+              <span class="tab-icon" aria-hidden="true">!</span>需要注意
+              <span id="warnCount" class="badge">0</span>
             </button>
             <button class="tab" data-tab="log" role="tab" aria-selected="false">
               <span class="tab-icon" aria-hidden="true">≡</span>运行记录
@@ -232,19 +243,46 @@
                   <div class="preview-heading">
                     <p class="eyebrow">CIRCUIT VIEW</p>
                     <h3>电路预览</h3>
-                    <p class="preview-subtitle" id="previewDescription">向右是时间，向下是不同音轨的空间排布。</p>
+                    <p class="preview-subtitle" id="previewDescription">
+                      向右是时间，向下是不同音轨的空间排布。
+                    </p>
                   </div>
                   <div class="preview-actions" aria-label="预览工具">
                     <div class="preview-toggle">
-                      <label class="check-control"><input id="showGrid" type="checkbox" checked /> <span>网格</span></label>
-                      <label class="check-control"><input id="showNotes" type="checkbox" checked /> <span>音符盒</span></label>
+                      <label class="check-control"
+                        ><input id="showGrid" type="checkbox" checked /> <span>网格</span></label
+                      >
+                      <label class="check-control"
+                        ><input id="showNotes" type="checkbox" checked /> <span>音符盒</span></label
+                      >
                     </div>
                     <div class="zoom-control" aria-label="缩放">
-                      <button id="previewZoomOut" class="icon-button" type="button" title="缩小预览" aria-label="缩小预览">−</button>
+                      <button
+                        id="previewZoomOut"
+                        class="icon-button"
+                        type="button"
+                        title="缩小预览"
+                        aria-label="缩小预览"
+                      >
+                        −
+                      </button>
                       <span id="previewZoom" class="zoom-label">100%</span>
-                      <button id="previewZoomIn" class="icon-button" type="button" title="放大预览" aria-label="放大预览">＋</button>
+                      <button
+                        id="previewZoomIn"
+                        class="icon-button"
+                        type="button"
+                        title="放大预览"
+                        aria-label="放大预览"
+                      >
+                        ＋
+                      </button>
                     </div>
-                    <button id="previewFit" class="btn secondary preview-fit" type="button" title="让电路适配当前窗口">
+                    <button
+                      id="previewFit"
+                      class="btn secondary preview-fit"
+                      type="button"
+                      title="让电路适配当前窗口"
+                    >
                       <span aria-hidden="true">⌗</span> 适配窗口
                     </button>
                   </div>

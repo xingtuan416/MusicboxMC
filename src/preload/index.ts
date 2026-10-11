@@ -29,8 +29,7 @@ const api: MusicboxApi = {
   chooseMidi: () => ipcRenderer.invoke('dialog:choose-midi'),
   chooseOutput: (defaultName) => ipcRenderer.invoke('dialog:choose-output', defaultName),
   analyze: (path) => ipcRenderer.invoke('song:analyze', path),
-  generate: (path, options, outputPath) =>
-    ipcRenderer.invoke('song:generate', path, options, outputPath),
+  generate: (path, options, outputPath) => ipcRenderer.invoke('song:generate', path, options, outputPath),
   reveal: (path) => ipcRenderer.invoke('shell:reveal', path),
   open: (path) => ipcRenderer.invoke('shell:open', path),
   onLog: (handler) => {
