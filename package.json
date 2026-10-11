@@ -8,7 +8,7 @@
   "main": "dist/src/main/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "start": "npm run build && electron dist/src/main/index.js",
     "cli": "tsx scripts/cli.ts",
     "resourcepack:check": "node scripts/check-piano-pack.mjs",
