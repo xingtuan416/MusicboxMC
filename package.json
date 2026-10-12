@@ -5,6 +5,17 @@
   "description": "MIDI → Minecraft 红石音乐 .litematic 投影生成器",
   "license": "GPL-3.0-or-later",
   "author": "xingtuan416",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xingtuan416/MusicboxMC.git"
+  },
+  "bugs": {
+    "url": "https://github.com/xingtuan416/MusicboxMC/issues"
+  },
+  "homepage": "https://github.com/xingtuan416/MusicboxMC#readme",
+  "engines": {
+    "node": ">=20"
+  },
   "main": "dist/src/main/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
@@ -25,7 +36,6 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@rollup/rollup-win32-x64-msvc": "^4.64.0",
     "@types/node": "^22.10.2",
     "electron": "^33.3.1",
     "electron-builder": "^26.15.3",
