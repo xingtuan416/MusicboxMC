@@ -1,206 +1,183 @@
 # MusicboxMC
 
 <p align="center">
-  <img src="icon.png" alt="MusicboxMC Logo" width="128" height="128" />
+  <img src="icon.png" alt="MusicboxMC" width="120" height="120" />
 </p>
 
 <p align="center">
-  <strong>MIDI → Minecraft 红石音乐 <code>.litematic</code> 投影生成器</strong>
+  <strong>Turn a MIDI file into a Minecraft redstone music schematic.</strong><br />
+  Import a song, press generate, paste a <code>.litematic</code>, and listen.
 </p>
 
 <p align="center">
-  基于 Electron + TypeScript 构建的桌面端工具，一键将任意 MIDI 文件转换为可直接在 Minecraft 中自动演奏的红石音乐投影结构。
+  <a href="https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.1.0"><img alt="Download v0.1.0" src="https://img.shields.io/badge/download-v0.1.0-2ea44f"></a>
+  <a href="https://github.com/xingtuan416/MusicboxMC/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/xingtuan416/MusicboxMC/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue"></a>
 </p>
 
----
+![The MusicboxMC interface](docs/images/interface.png)
 
-## 项目简介
+MusicboxMC reads a MIDI file, compiles it into a redstone circuit, and writes that
+circuit as a Litematica `.litematic` schematic. Paste it into a world, apply
+redstone power at the start, and the song plays.
 
-**MusicboxMC** 旨在解决传统 Minecraft 红石音乐制作门槛高、耗时长、音域受限以及多轨排线容易错拍的问题。通过自动化的电路布局算法，将输入的 MIDI 乐曲精确量化并编译为符合原版游戏特性的红石电路网络，最终导出为 Litematica 投影模组支持的 `.litematic` 格式。
+The hard part is not placing note blocks, it is timing. The generator quantises
+every note onto the redstone tick grid, works out the repeater delays that carry
+the gap between groups, and pads tracks with redstone dust — which adds no delay —
+so that independent tracks stay aligned instead of drifting apart over the length
+of a song.
 
-玩家只需将生成的投影粘贴至单机存档或服务器中，在起点接通红石信号，即可获得高保真、同刻对齐、原汁原味的红石音乐体验。
+## Download
 
----
+Windows x64. Grab either file from the
+[latest release](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.1.0).
 
-## 核心特性
+| File                                 | What it is                                                                   |
+| ------------------------------------ | ---------------------------------------------------------------------------- |
+| `MusicboxMC-Setup-0.1.0-win-x64.exe` | Installer. Choose a directory, get Start menu and desktop shortcuts.         |
+| `MusicboxMC-0.1.0-win-x64.zip`       | Portable. Unzip and run `MusicboxMC.exe`; writes nothing outside its folder. |
 
-- **智能化红石拓扑与电路布局**
-  - **内联式主线排布**：中继器与音符盒内联布置，采用强充能传导机制，省去冗余布线，信号稳定不丢音。
-  - **自适应和弦与复音结构**：支持单音与 $\le 3$ 音和弦一跳导电，密集多音和弦自适应横向分支，同刻发声零延迟偏差。
-  - **多轨空间对齐（Spatial Alignment）**：各音轨按曲中时刻统一协同推进，消除稀疏轨与密集轨在长曲中因走线长度累积导致的物理空间漂移，确保近距离聆听各声部平衡。
-  - **同乐器自动并轨（可选）**：支持将相同乐器/通道合并至同一物理主线，进一步精简电路占地。
+You also need Minecraft Java Edition **1.20.4**, and the
+[Litematica](https://masa.dy.fi/mcmods/client_mods/?mod=litematica) mod to paste
+what it generates.
 
-- **严格的游戏刻/红石刻对齐与变速**
-  - 按曲目 BPM 精确将 MIDI 绝对时间量化为红石刻（$1\text{ 红石刻} = 2\text{ 游戏刻} = 0.1\text{s}$）。
-  - 自动组合中继器档位（1~4 档），毫秒级控制音符时值。
-  - 输出与原版 `/tick rate` 命令兼容的速度换算表，支持全曲无损整体变速。
+> **The interface is currently in Chinese.** Other locales are not implemented yet.
+> The schematic it generates is language-independent.
 
-- **全音域拓展与音色映射**
-  - 完美适配 88 键钢琴全音域资源包，突破 Minecraft 原版音符盒 2 个八度（24 个半音）的物理限制。
-  - 通过音符盒下方垫块材质划分五个音区槽位（木板 / 羊毛 / 泥土 / 黏土 / 金块，
-    依次对应 bass / guitar / harp / flute / bell），还原真实乐器跨八度音色。
-  - 具备智能音域越界检测与降级提醒，保证旋律完整。
+## Quick start
 
-- **现代桌面端交互与 NBS 风格电路预览**
-  - 简洁美观的桌面界面，支持 MIDI 元数据（曲名、拍号、BPM、轨道乐器、音符数）一览。
-  - **类 NBS (Note Block Studio) 的交互式电路预览**：高清晰度展示各音轨 Z 轴空间排布、X 轴时间推进线、中继器指向与档位、音符盒位置，支持缩放与平移查看。
+1. **Import.** Open the app and pick a `.mid` or `.midi` file. It shows the tempo,
+   time signature, track list and note count straight away.
+2. **Adjust.** Most songs need nothing changed. The settings that matter are `dMax`
+   — how wide one chord column may be — and what to do with notes outside the
+   covered range.
+3. **Generate.** The preview draws the circuit before you commit to it: one row per
+   Z row, one column per X cell, time running to the right.
 
-- **纯原生 Litematica 格式构建**
-  - 内部实现纯 TypeScript 的 NBT 二进制编解码器与 Litematica BitArray 紧凑位打包算法。
-  - 产出完全符合 1.20.4+ 格式规范的 `.litematic` 投影文件，可直接被 Litematica 模组加载。
+   ![The circuit preview](docs/images/preview.png)
 
----
+4. **Paste.** Put the `.litematic` in `.minecraft/schematics/`, load it with
+   Litematica in game, and power the circuit at its start.
 
-## 技术架构
+## What it does
 
-```text
-MusicboxMC/
-├── src/
-│   ├── core/                  # 核心计算与转换引擎（纯逻辑、无 GUI 依赖）
-│   │   ├── midi/              # MIDI 解析与音符流规范化 (@tonejs/midi)
-│   │   ├── tempo/             # BPM、Tick 网格量化与变速计算
-│   │   ├── palette/           # 音高档位映射与音符盒垫块方案
-│   │   ├── layout/            # 红石拓扑布线、和弦分支与多轨空间对齐算法
-│   │   ├── command/           # 命令方块播放后端（帧表 + 音色槽位复用）
-│   │   ├── nbt/               # NBT 二进制序列化与反序列化
-│   │   └── litematic/         # Litematica 投影文件打包与 GZIP 压缩
-│   ├── main/                  # Electron 主进程与 IPC 服务
-│   ├── preload/               # 上下文隔离安全桥接层
-│   └── renderer/              # 客户端 UI 界面与 Canvas 电路预览器
-├── docs/                      # 架构、红石模型、命令播放与 litematic 格式说明
-├── scripts/                   # 构建脚本与开发辅助工具
-└── test/                      # Vitest 自动化单元/集成测试套件
-```
+**Inline main line.** Repeaters and note blocks share one line instead of sitting
+on separate wiring layers, so there is no redundant dust and less to mis-align. A
+note block must have air directly above it to sound, which is why everything has to
+share a single layer.
 
-设计说明见 [`docs/`](docs/)：电路与时序模型、命令播放后端、输出文件格式。
+**Chords that fit.** Up to three notes fire from one repeater: the inline note block
+lights its immediate neighbours, one hop, with no extra dust or repeaters. From four
+notes up the chord switches to branch rows, each with its own repeater, so the whole
+chord still fires on a single redstone tick.
 
----
+**Tracks that stay together.** A sparse track and a dense one consume different
+numbers of cells per beat. Left alone they drift hundreds of cells apart and the
+song stops sounding like one performance. Every track follows a shared time-to-X
+reference line, padded forward with dust, which never changes when a note fires.
 
-## 快速上手
+**Merging, if you want it.** Tracks that share an instrument can be merged onto one
+line. There is also a stricter mode that builds one connected spine per instrument,
+audits the block graph it actually produced — reachability, exact trigger ticks,
+repeater locking, support blocks — and refuses to write a file when the result would
+not work.
 
-### 环境准备
+## Two playback backends
 
-确保您的本地计算机已安装：
+The default backend builds a redstone circuit of note blocks. It is what the
+screenshots show, and it is what you want if you are building in a world.
 
-- [Node.js](https://nodejs.org/) (推荐 LTS 18.x 或更高版本)
-- npm (随 Node.js 一并安装)
+There is also an opt-in **command block playback** backend. It places no note
+blocks, dust or repeaters at all: every note becomes a `playsound` command, run for
+each player at their own position and quantised to game ticks. That removes the two
+things a circuit cannot escape — you must be near it to hear it, and its polyphony
+is capped by signal strength — at the cost of needing command blocks and loading the
+server.
 
-### 安装与运行
+It is worth knowing that the obvious implementation does not scale. One command
+block per note turns a 46,000-note song into 46,308 blocks and a 348 KB schematic,
+and the chain then walks all of it every tick. This implementation stores the
+schedule as a small table and replays it through a bounded number of reused
+commands, which keeps the same song at 798 blocks, 764 chain steps and **27.9 KB**.
 
-1. **克隆仓库**
+Requirements and limitations are in
+[docs/command-playback.md](docs/command-playback.md); read it before planning
+anything long.
 
-   ```bash
-   git clone https://github.com/wezzs0406/MusicboxMC.git
-   cd MusicboxMC
-   ```
+## Range, and what the resource pack is for
 
-2. **安装依赖**
+A note block has two octaves on its own. Between them, the five note-block
+instruments — bass, guitar, harp, flute and bell — cover **F#1 to F#7** (MIDI 30 to
+102), and that is the span this generator uses.
 
-   ```bash
-   npm install
-   ```
+**All five are vanilla instruments, so a generated schematic plays correctly with no
+resource pack at all.** The five octave bands simply have different timbres, which
+is audible on a melody that crosses them.
 
-3. **启动客户端**
+A companion resource pack that replaces those five sound events with piano samples,
+so the whole range sounds like one piano, is a separate optional download. It is not
+part of this repository, and nothing in the generator requires it.
+`npm run resourcepack:check <pack.zip>` validates a pack against the mapping the
+generator expects.
 
-   ```bash
-   npm start
-   ```
+## How this compares to Note Block Studio
 
-4. **运行自动化测试**
+Different tools, and it is worth being clear about which one you want.
 
-   ```bash
-   npm test
-   ```
+|                    | MusicboxMC                           | Note Block Studio                        |
+| ------------------ | ------------------------------------ | ---------------------------------------- |
+| Purpose            | Convert a MIDI file into a schematic | Write and edit note block music          |
+| Input              | `.mid` / `.midi`                     | Its own `.nbs` project, or a MIDI import |
+| Output             | `.litematic`, ready to paste         | `.nbs`, exported through other tooling   |
+| Editing the result | None; change the MIDI and regenerate | A full piano-roll editor                 |
+| Audio preview      | None; you check it in game           | Built in                                 |
+| Maturity           | New                                  | Years of use and a large community       |
 
-5. **执行类型检查与构建**
-   ```bash
-   npm run build
-   ```
+If you want to arrange, adjust individual notes, or hear it before you build it, use
+Note Block Studio. If you already have a MIDI and want the circuit, this skips the
+arranging step.
 
-### 命令行工具 (CLI)
+## Building from source
 
-如需快速查看某个 MIDI 文件的音乐结构而无需打开图形界面，可运行：
+Node.js 20 or newer.
 
 ```bash
-npm run cli -- --midi <path/to/your/song.mid>
+git clone https://github.com/xingtuan416/MusicboxMC.git
+cd MusicboxMC
+npm ci
+npm test
+npm start          # compiles with tsc, then launches Electron
 ```
 
----
+Packaging a Windows build needs Windows:
 
-## 游戏内使用方法
+```bash
+npm run dist       # NSIS installer plus a portable zip, into release/
+npm run dist:dir   # unpacked directory only, much faster for testing
+```
 
-1. 在 MusicboxMC 中点击 **选择 MIDI 文件** 导入您的乐曲。
-2. 在右侧配置面板调整需要生成的参数（如：主线间距、是否同乐器并轨、全音域拓展等）。
-3. 点击 **生成 .litematic 投影** 并选择保存路径。
-4. 将生成的 `.litematic` 文件放入您的 Minecraft 游戏目录：
-   ```text
-   .minecraft/schematics/
-   ```
-5. 安装 [Litematica](https://masa.dy.fi/mcmods/client_mods/?mod=litematica) 模组并进入游戏。
-6. 按 `M` 打开模组菜单，加载该投影并放置在世界中。
-7. 在主线起点红石粉处接入拉杆或信号脉冲，即可享受演奏！
+The other checks are `npm run lint`, `npm run typecheck` and `npm run build`. Those
+three plus `npm test` are what CI runs.
 
-### 强制合并同乐器轨道
+The engine under `src/core/` is pure logic with no Electron or DOM dependency, so it
+runs and is tested in plain Node. That is where the layout, timing, NBT and litematic
+code lives, and the part worth reading if you want to change how a circuit is built.
 
-“合并同乐器音轨”默认关闭。打开后显示“开启强制合并”子选项，子选项默认关闭；
-关闭合并会同时关闭强制合并。子选项关闭时仍使用旧合并算法，超过单列容量时自动拆轨。
-强制模式不受轨道间距或音符时间间隔限制，
-每种 MIDI 乐器只有一条连接的时间主线；打击乐统一归类，移调与方块覆盖沿用组内
-第一个未排除的轨道。
+## Documentation
 
-强制模式把密集音群放在主线的侧向总线上。音符间隔两行以隔离相邻供电，
-每段红石粉最多延伸 14 行，之后用 1 档中继器恢复信号。不同深度的音符分别
-补足中继器延迟，所有乐器共用全曲最大补偿量：仅增加统一启动等待，不排队、
-不丢弃超容量音符、不改变曲内量化后的相对时序。`dMax` 在此模式限制单段容量，
-不再限制整条主线的音符总量。
+- [Architecture](docs/architecture.md) — layering, data flow, where to change what
+- [The redstone model](docs/redstone-model.md) — topology, timing, alignment, and
+  what is deliberately not simulated
+- [Command playback](docs/command-playback.md) — the schedule, the chain, the
+  budgets, and the in-game requirements
+- [Litematic format](docs/litematic-format.md) — bit packing, index order, region
+  rules
+- [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Security](SECURITY.md)
 
-默认 `dMax=14` 时每段两侧最多容纳 14 个音，当前布局支持峰值 616 音；更高峰值
-或更小 `dMax` 可能使同步链超过主线安全长度，会明确报错并阻止写出文件。
-生成前会遍历实际方块连接，检查强度、方向、锁定风险及触发时间。该检查只覆盖
-静态结构和上升沿延迟，不能替代 Minecraft 内的更新顺序、区块加载及服务器性能验证。
-强制模式不代表结构更紧凑，长而密集的曲目可能显著增加占地与启动等待。
+## License
 
-### 全部使用命令方块播放
-
-独立开关，默认关闭。开启后使用命令播放后端，输出仍是 Java 1.20.4 格式 `.litematic`，
-但不再放置音符盒、红石线或中继器。红石密度与合并设置暂时禁用，关闭命令模式后恢复原设置。
-音轨排除、音域处理与每轨移调仍有效；音高/钢琴资源包沿用现有五个声音事件。
-方块材质覆盖不会改变命令模式音色。
-
-每个音符对应一条 `execute ... as @a at @s run playsound ... record @s ~ ~ ~` 命令，
-分别在所有在线玩家的当前位置发声，不依赖播放器距离。按游戏刻（默认 50ms）量化，
-而非红石刻；同刻音符在同一次链遍历执行，不排队、不去重、不延后部分音符。
-这一后端与现有音符盒规则一样不使用 MIDI 音长/力度控制采样。
-
-**命令方块本身都写成非条件（`conditional=false`），判定写在命令内部**
-（`execute if score #playing ... matches 1`）。因此整条命令链每个游戏刻都会被完整
-遍历一遍，**停止后也一样**，只是命令退化为空操作。链长 = 帧数 + 音色数 + 复用槽位数，
-链越长每刻的固定开销越大，不能据此保证服务器 TPS。结构过大时（超过 4096 个命令方块）
-生成前会给出告警。
-
-播放器采用 32×32 的逐层蛇形命令链，附有带按钮、标牌的 Start / Restart 和 Stop 控制。
-坐标相对于投影原点，界面列出具体位置。停止时会移除计时器旁的电源并停止五个钢琴
-声音事件，可能影响同类外部声音。同一输入/参数生成的副本共用一个计分板命名空间；
-不要同时运行这些副本。
-
-使用条件：
-
-- 需要创造模式/管理员权限，并启用命令方块（专用服务器 `enable-command-block=true`）。
-- 必须用保留方块实体 NBT 的方式粘贴。普通生存投影搭建不能自动填入命令；
-  仅粘贴方块外观、丢失 `TileEntities` 的结构不会工作。粘贴后检查命令和 Always Active 设置。
-- 整个命令结构必须处于已加载、可执行的区块中。播放器不能因向远处玩家发声而免除区块加载要求。
-- “命令链预算”应不高于世界的 `maxCommandChainLength`，默认 65536。链步骤数必须小于该预算；
-  超限明确失败，不截断音乐。生成器不会修改世界规则。若服务器修改了规则，应填写实际预算。
-- 每次播放向所有玩家发送声音，因此多人服务器命令执行、网络和客户端声音开销会增加。
-  可按需手动关闭世界 `commandBlockOutput` 防止管理员聊天被反馈刷屏；生成器不自动更改该规则。
-
-**命令模式解决声源距离与红石容量，不等于无限声音容量。** 客户端声音池、采样余音重叠、
-服务器 TPS、命令执行预算仍会限制播放。同刻超过 31 音时生成器明确告警；这只是压力提示，
-不是对所有版本/声卡的统一安全容量。即使峰值更低，也可能因余音占用而缺声。
-自动测试核对导出、链连接和调度，不能替代游戏内听觉及性能实测。
+[GNU General Public License v3.0 or later](LICENSE).
 
 ---
 
-## 开源许可证
-
-本项目采用 [GNU General Public License v3.0 (GPL-3.0)](LICENSE) 开源。
+<sub>中文说明见 [README.zh-CN.md](README.zh-CN.md)。</sub>
