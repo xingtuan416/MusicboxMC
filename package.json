@@ -34,6 +34,13 @@
   "dependencies": {
     "@tonejs/midi": "^2.0.28"
   },
+  "optionalDependencies": {
+    "@rollup/rollup-darwin-arm64": "4.64.0",
+    "@rollup/rollup-darwin-x64": "4.64.0",
+    "@rollup/rollup-linux-arm64-gnu": "4.64.0",
+    "@rollup/rollup-linux-x64-gnu": "4.64.0",
+    "@rollup/rollup-win32-x64-msvc": "4.64.0"
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.10.2",
