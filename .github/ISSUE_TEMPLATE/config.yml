@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: How the circuit and its timing work
+    url: https://github.com/xingtuan416/MusicboxMC/blob/main/docs/redstone-model.md
+    about: Read this before reporting that a schematic does not sound right in game.
+  - name: Using the command playback backend
+    url: https://github.com/xingtuan416/MusicboxMC/blob/main/docs/command-playback.md
+    about: Requirements in game, chain budgets, and the known limitations.
+  - name: Contributing
+    url: https://github.com/xingtuan416/MusicboxMC/blob/main/CONTRIBUTING.md
+    about: How to set up, what the tests enforce, and the conventions to follow.

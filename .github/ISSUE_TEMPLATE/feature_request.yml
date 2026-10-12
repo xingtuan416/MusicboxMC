@@ -1,0 +1,55 @@
+name: Feature request
+description: Suggest something the tool should do
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please describe the problem first. A feature request that starts from a
+        concrete song or a concrete limitation is much easier to judge than one
+        that starts from a proposed implementation.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What can you not do today?
+      description: The song, the setting, or the workflow where it goes wrong.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Anything you tried instead
+      description: Including whether another tool, such as Note Block Studio, handles it.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Which part of the project does this touch?
+      options:
+        - Circuit layout or timing
+        - Pitch range or resource pack
+        - Command playback
+        - The interface
+        - Output file format
+        - Not sure
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Would you like to work on it?
+      options:
+        - label: I would be willing to open a pull request for this.
+          required: false

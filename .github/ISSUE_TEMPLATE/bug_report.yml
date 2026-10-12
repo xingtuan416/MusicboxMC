@@ -1,0 +1,92 @@
+name: Bug report
+description: Something did not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. The more precisely you can describe what you
+        did, the faster this can be tracked down.
+
+        For a wrong schematic, a MIDI file that shows the problem (or the
+        smallest one that still does) is worth more than any description.
+
+  - type: input
+    id: version
+    attributes:
+      label: MusicboxMC version
+      description: Shown in the installer or zip filename.
+      placeholder: '0.1.0'
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How are you running it?
+      options:
+        - Installed with the setup executable
+        - Portable zip
+        - From source (npm start)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Which playback backend?
+      options:
+        - Redstone note blocks (default)
+        - Command block playback
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: minecraft
+    attributes:
+      label: Minecraft version
+      placeholder: '1.20.4'
+    validations:
+      required: false
+
+  - type: textarea
+    id: settings
+    attributes:
+      label: Settings you used
+      description: dMax, out-of-range policy, excluded tracks, merge options, chain budget — whatever you changed from the defaults.
+    validations:
+      required: false
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Include the exact message if one was shown.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: warnings
+    attributes:
+      label: Anything in the "needs attention" tab?
+      description: Paste it if the app reported OUT_OF_RANGE, TRACK_SPLIT, SPATIAL_DRIFT, TIMING_ADJUSTED or anything else.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues.
+          required: true
+        - label: If this is about a generated structure in game, I am reporting what the file contains, not how Litematica pastes it.
+          required: true
