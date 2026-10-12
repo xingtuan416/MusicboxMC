@@ -12,3 +12,7 @@ docs/code-quality-plan.md
 net26.2源码/
 *.jar
 钢琴全音域拓展.zip
+
+# Test songs: third-party music, used locally to exercise the generator
+*.mid
+*.midi
