@@ -1,19 +1,18 @@
 import { $, state } from './state.js';
 import { colorOf, displayBlockName } from './blocks.js';
 import { create } from './dom.js';
+import {
+  BASE_CELL,
+  dustSizes,
+  GUTTER,
+  noteBlockSizes,
+  previewGeometry,
+  repeaterSizes,
+  RULER,
+} from './previewGeometry.js';
 
-const BASE_CELL = 38;
-/** Width of the left gutter, which shows the Z row and its track. */
-const GUTTER = 150;
-/** Height of the top ruler (X is the time axis). */
-const RULER = 28;
 /** Background of the gutter and ruler. */
 const HEAD_BG = '#e9e7e2';
-/** Chromium caps canvas dimensions, so leave headroom for long songs. */
-const MAX_CANVAS_PIXELS = 30000;
-const MAX_CANVAS_AREA = 16000000;
-/** Narrowest CSS width the preview canvas may be compressed to. */
-const MIN_CANVAS_CSS_WIDTH = 640;
 /** Zoom bounds for the manual zoom buttons. */
 const ZOOM_MIN = 0.45;
 const ZOOM_MAX = 1.8;
@@ -107,27 +106,15 @@ function renderPreview(res) {
 
   const { x, z } = preview.size;
   const dpr = window.devicePixelRatio || 1;
-  const maxCssWidth = Math.max(MIN_CANVAS_CSS_WIDTH, MAX_CANVAS_PIXELS / Math.max(1, dpr));
-  const dimensionCell = Math.min(
-    (maxCssWidth - GUTTER) / Math.max(1, x),
-    (maxCssWidth - RULER) / Math.max(1, z),
-  );
-  // Include fixed headers in the area budget, not just the circuit rectangle.
-  const cssArea = MAX_CANVAS_AREA / (dpr * dpr);
-  const areaB = GUTTER * z + RULER * x;
-  const areaCell =
-    (2 * Math.max(1, cssArea - GUTTER * RULER)) /
-    (areaB + Math.sqrt(areaB * areaB + 4 * x * z * Math.max(1, cssArea - GUTTER * RULER)));
-  const requestedCell = BASE_CELL * state.previewScale;
-  // Scale long songs down to a safe canvas size; past Chromium's dimension cap the
-  // whole canvas renders blank.
-  const CELL = Math.min(requestedCell, dimensionCell, areaCell);
-  const renderScale = CELL / BASE_CELL;
-  state.previewRenderScale = renderScale;
+  // Scales long songs down to a safe canvas size - past Chromium's dimension cap the
+  // whole canvas renders blank - and reports whether the detailed tile art still fits.
+  const geometry = previewGeometry({ x, z, dpr, previewScale: state.previewScale });
+  const { cell: CELL, detail, gap } = geometry;
+  state.previewRenderScale = geometry.renderScale;
   const showGrid = $('showGrid').checked;
   const showNotes = $('showNotes').checked;
-  const w = GUTTER + x * CELL;
-  const h = RULER + z * CELL;
+  const w = geometry.width;
+  const h = geometry.height;
   const gridX0 = GUTTER;
   const gridY0 = RULER;
 
@@ -205,7 +192,7 @@ function renderPreview(res) {
       ctx.fillStyle = colorOf(base, preview);
       ctx.fillRect(px(gx), pz(gz), CELL, CELL);
       ctx.globalAlpha = 1;
-      if (base.includes('command_block') && CELL >= 18) {
+      if (base.includes('command_block') && detail) {
         label(
           ctx,
           base === 'minecraft:repeating_command_block' ? 'R' : base === 'minecraft:command_block' ? 'I' : 'C',
@@ -240,16 +227,17 @@ function renderPreview(res) {
     up: linkAt(gx, gz - 1),
     down: linkAt(gx, gz + 1),
   });
-  const wireStroke = Math.max(3, CELL * 0.12);
+  const dustPlain = dustSizes(CELL, false);
+  const dustBranch = dustSizes(CELL, true);
   ctx.strokeStyle = '#c74e4a';
-  ctx.lineWidth = wireStroke;
+  ctx.lineWidth = dustPlain.stroke;
   ctx.lineCap = 'round';
   for (let gz = 0; gz < z; gz++) {
     for (let gx = 0; gx < x; gx++) {
       if (!wireAt(gx, gz)) continue;
-      if (CELL < 8) {
+      if (!detail) {
         ctx.fillStyle = '#c74e4a';
-        ctx.fillRect(px(gx), pz(gz), CELL, CELL);
+        ctx.fillRect(px(gx), pz(gz), CELL - gap, CELL - gap);
         continue;
       }
       const cx = px(gx) + CELL / 2;
@@ -273,14 +261,14 @@ function renderPreview(res) {
       ctx.stroke();
 
       const degree = Object.values(directions).filter(Boolean).length;
-      const nodeRadius = Math.max(3.5, CELL * (degree > 2 ? 0.11 : 0.09));
+      const node = degree > 2 ? dustBranch : dustPlain;
       ctx.fillStyle = '#fff8f5';
       ctx.beginPath();
-      ctx.arc(cx, cy, nodeRadius + 2, 0, Math.PI * 2);
+      ctx.arc(cx, cy, node.haloRadius, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = '#bf4744';
       ctx.beginPath();
-      ctx.arc(cx, cy, nodeRadius, 0, Math.PI * 2);
+      ctx.arc(cx, cy, node.nodeRadius, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -292,30 +280,24 @@ function renderPreview(res) {
       if (preview.wireCells[gz * x + gx] !== 'minecraft:repeater') continue;
       const x0 = px(gx);
       const y0 = pz(gz);
-      if (CELL < 8) {
+      if (!detail) {
         ctx.fillStyle = '#777975';
-        ctx.fillRect(x0, y0, CELL, CELL);
+        ctx.fillRect(x0, y0, CELL - gap, CELL - gap);
         continue;
       }
       const cx = x0 + CELL / 2;
       const cy = y0 + CELL / 2;
-      const inset = Math.max(3, CELL * 0.09);
+      const repeater = repeaterSizes(CELL);
+      const { inset, radius } = repeater;
 
-      drawTileShadow(
-        ctx,
-        x0 + inset,
-        y0 + inset,
-        CELL - inset * 2,
-        CELL - inset * 2,
-        Math.max(4, CELL * 0.12),
-      );
+      drawTileShadow(ctx, x0 + inset, y0 + inset, CELL - inset * 2, CELL - inset * 2, radius);
       fillRoundedRect(
         ctx,
         x0 + inset,
         y0 + inset,
         CELL - inset * 2,
         CELL - inset * 2,
-        Math.max(4, CELL * 0.12),
+        radius,
         '#e1e1de',
         '#a3a19b',
       );
@@ -329,16 +311,16 @@ function renderPreview(res) {
       // Input and output terminals
       ctx.fillStyle = '#bd4d49';
       ctx.beginPath();
-      ctx.arc(x0 + Math.max(8, CELL * 0.19), cy, Math.max(3, CELL * 0.08), 0, Math.PI * 2);
+      ctx.arc(x0 + repeater.terminalOffset, cy, repeater.terminalRadius, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = '#e88962';
       ctx.beginPath();
-      ctx.arc(x0 + CELL - Math.max(8, CELL * 0.19), cy, Math.max(3, CELL * 0.08), 0, Math.PI * 2);
+      ctx.arc(x0 + CELL - repeater.terminalOffset, cy, repeater.terminalRadius, 0, Math.PI * 2);
       ctx.fill();
 
       // Centre track and arrow
       ctx.strokeStyle = '#8e8b84';
-      ctx.lineWidth = Math.max(2, CELL * 0.055);
+      ctx.lineWidth = repeater.centerStroke;
       ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(x0 + CELL * 0.28, cy);
@@ -354,16 +336,15 @@ function renderPreview(res) {
       ctx.restore();
 
       const delay = (preview.repeaterDelays || [])[gz * x + gx] || '';
-      if (delay) {
-        const badgeWidth = Math.max(22, CELL * 0.62);
-        const badgeHeight = Math.max(14, CELL * 0.34);
+      if (delay && repeater.showBadge) {
+        const top = y0 + Math.max(2, CELL * 0.05);
         fillRoundedRect(
           ctx,
-          cx - badgeWidth / 2,
-          y0 + Math.max(2, CELL * 0.05),
-          badgeWidth,
-          badgeHeight,
-          badgeHeight / 2,
+          cx - repeater.badgeWidth / 2,
+          top,
+          repeater.badgeWidth,
+          repeater.badgeHeight,
+          repeater.badgeRadius,
           '#6c6860',
           '#4f4b45',
         );
@@ -372,9 +353,9 @@ function renderPreview(res) {
           ctx,
           `${delay}t`,
           cx,
-          y0 + badgeHeight / 2 + Math.max(2, CELL * 0.05),
+          top + repeater.badgeHeight / 2,
           '#fffaf2',
-          `bold ${Math.max(9, CELL * 0.22)}px ui-monospace, monospace`,
+          `bold ${repeater.badgeFont}px ui-monospace, monospace`,
         );
       }
     }
@@ -388,58 +369,40 @@ function renderPreview(res) {
         if (preview.noteCells[idx] !== 'minecraft:note_block') continue;
         const x0 = px(gx);
         const y0 = pz(gz);
-        if (CELL < 8) {
+        if (!detail) {
           ctx.fillStyle = '#a86839';
-          ctx.fillRect(x0, y0, CELL, CELL);
+          ctx.fillRect(x0, y0, CELL - gap, CELL - gap);
           continue;
         }
         const cx = x0 + CELL / 2;
         const cy = y0 + CELL / 2 + 2;
-        const inset = Math.max(3, CELL * 0.08);
+        const note = noteBlockSizes(CELL);
+        const { inset, radius } = note;
 
-        drawTileShadow(
-          ctx,
-          x0 + inset,
-          y0 + inset,
-          CELL - inset * 2,
-          CELL - inset * 2,
-          Math.max(4, CELL * 0.12),
-        );
+        drawTileShadow(ctx, x0 + inset, y0 + inset, CELL - inset * 2, CELL - inset * 2, radius);
         fillRoundedRect(
           ctx,
           x0 + inset,
           y0 + inset,
           CELL - inset * 2,
           CELL - inset * 2,
-          Math.max(4, CELL * 0.12),
+          radius,
           '#a86839',
           '#70401f',
         );
 
         // Grain stripes, so it reads clearly as something other than dust or a repeater.
         ctx.fillStyle = 'rgba(255, 232, 193, 0.32)';
-        ctx.fillRect(x0 + inset + 2, y0 + inset + 3, CELL - inset * 2 - 4, Math.max(2, CELL * 0.07));
+        ctx.fillRect(x0 + inset + 2, y0 + inset + 3, CELL - inset * 2 - 4, note.grain);
         ctx.fillStyle = 'rgba(65, 31, 13, 0.24)';
-        ctx.fillRect(
-          x0 + inset + 2,
-          y0 + CELL - inset - Math.max(4, CELL * 0.13),
-          CELL - inset * 2 - 4,
-          Math.max(2, CELL * 0.07),
-        );
+        ctx.fillRect(x0 + inset + 2, y0 + CELL - inset - note.grainInset, CELL - inset * 2 - 4, note.grain);
 
         // Note glyph
-        const noteStem = Math.max(9, CELL * 0.3);
-        const noteHead = Math.max(4, CELL * 0.13);
         ctx.fillStyle = '#fff6e7';
-        ctx.fillRect(cx + CELL * 0.02, cy - noteStem * 0.9, Math.max(2, CELL * 0.07), noteStem);
-        ctx.fillRect(
-          cx + CELL * 0.02,
-          cy - noteStem * 0.9,
-          Math.max(7, CELL * 0.22),
-          Math.max(2, CELL * 0.07),
-        );
+        ctx.fillRect(cx + CELL * 0.02, cy - note.stem * 0.9, note.stemWidth, note.stem);
+        ctx.fillRect(cx + CELL * 0.02, cy - note.stem * 0.9, note.headOffset, note.stemWidth);
         ctx.beginPath();
-        ctx.ellipse(cx - CELL * 0.11, cy + CELL * 0.12, noteHead, noteHead * 0.78, -0.2, 0, Math.PI * 2);
+        ctx.ellipse(cx - CELL * 0.11, cy + CELL * 0.12, note.head, note.head * 0.78, -0.2, 0, Math.PI * 2);
         ctx.fill();
 
         // The bottom stripe shows the block under the note block, which is its timbre.
@@ -447,11 +410,11 @@ function renderPreview(res) {
         const toneColor = base ? colorOf(base, preview) : '#d7d2c8';
         fillRoundedRect(
           ctx,
-          x0 + inset + 3,
-          y0 + CELL - inset - Math.max(7, CELL * 0.18),
-          CELL - inset * 2 - 6,
-          Math.max(7, CELL * 0.18),
-          Math.max(2, CELL * 0.06),
+          x0 + inset + note.stripeInset,
+          y0 + CELL - inset - note.stripeHeight,
+          CELL - inset * 2 - note.stripeInset * 2,
+          note.stripeHeight,
+          note.stripeRadius,
           toneColor,
           'rgba(50, 27, 13, 0.35)',
         );
@@ -499,7 +462,7 @@ function renderPreview(res) {
       ? `${res.regions[0].size.x}×${res.regions[0].size.y}×${res.regions[0].size.z} 格 · 命令播放器 · 俯视图`
       : `一行 = 一个 Z 行，一列 = 一格 X（向右为时间）　·　${x}×${z} 格　·　` +
         `${trackCount} 条音轨 / ${(res.regions || []).length} 个区域　·　可见方块 ${nonEmpty} 个` +
-        (renderScale < state.previewScale - ZOOM_LABEL_EPSILON ? '　·　长曲目已自动缩小预览' : '');
+        (geometry.renderScale < state.previewScale - ZOOM_LABEL_EPSILON ? '　·　长曲目已自动缩小预览' : '');
 
   // Legend
   const legend = $('legend');

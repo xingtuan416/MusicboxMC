@@ -1,7 +1,10 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "noEmit": true
+    "noEmit": true,
+    // The renderer is plain ES modules, not TypeScript. Its pure helpers are worth
+    // testing, so let the tests import them without checking the JS itself.
+    "allowJs": true
   },
   "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"],
   "exclude": ["node_modules", "dist", "release"]
