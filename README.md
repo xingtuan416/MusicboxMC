@@ -114,10 +114,14 @@ instruments — bass, guitar, harp, flute and bell — cover **F#1 to F#7** (MID
 resource pack at all.** The five octave bands simply have different timbres, which
 is audible on a melody that crosses them.
 
-A companion resource pack that replaces those five sound events with piano samples,
-so the whole range sounds like one piano, is a separate optional download. It is not
-part of this repository, and nothing in the generator requires it.
-`npm run resourcepack:check <pack.zip>` validates a pack against the mapping the
+A companion resource pack replaces those five sound events with piano samples, so the
+whole range sounds like a single piano. **It is optional**: nothing in the generator
+requires it, and the schematic is identical either way.
+
+- [`MusicboxMC-piano-pack-1.20.4.zip`](https://github.com/xingtuan416/MusicboxMC/releases/download/v0.1.0/MusicboxMC-piano-pack-1.20.4.zip)
+  (50 KB) — drop it into `.minecraft/resourcepacks/` and enable it.
+
+`npm run resourcepack:check <pack.zip>` validates any pack against the mapping the
 generator expects.
 
 ## How this compares to Note Block Studio

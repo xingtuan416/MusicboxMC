@@ -92,8 +92,12 @@ Windows x64。两个文件任选其一，均来自
 八度段的**音色不同**，旋律跨越多个八度时听得出来。
 
 另有一个配套资源包，把这五个声音事件替换成钢琴采样，让整个音域听起来是同一架钢琴。
-它是独立的可选下载，不在本仓库内，生成器不依赖它。
-`npm run resourcepack:check <pack.zip>` 可以按生成器期望的映射校验一个资源包。
+**它是可选的**：生成器不依赖它，装与不装生成的投影完全相同。
+
+- [`MusicboxMC-piano-pack-1.20.4.zip`](https://github.com/xingtuan416/MusicboxMC/releases/download/v0.1.0/MusicboxMC-piano-pack-1.20.4.zip)
+  （50 KB）—— 放进 `.minecraft/resourcepacks/` 并启用即可。
+
+`npm run resourcepack:check <pack.zip>` 可以按生成器期望的映射校验任意资源包。
 
 ## 与 Note Block Studio 的区别
 
