@@ -1524,3 +1524,54 @@ pre#log {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Keeps the always-available resource pack button attached to the switch above it. */
+.pack-action {
+  margin: -2px 0 14px;
+}
+
+/* One-time nudge offering the bundled resource pack. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(32, 36, 41, 0.4);
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 460px;
+  padding: 22px 24px 18px;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 18px 48px rgba(32, 36, 41, 0.24);
+}
+
+.modal-card h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.modal-card p {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+.modal-card p:last-of-type {
+  margin-bottom: 0;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 18px;
+}

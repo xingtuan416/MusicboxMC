@@ -14,6 +14,8 @@ export interface MusicboxApi {
   chooseMidi(): Promise<string | null>;
   /** Choose where to save the .litematic; returns null on cancel */
   chooseOutput(defaultName: string): Promise<string | null>;
+  /** Write a copy of the bundled resource pack where the user chooses; null on cancel */
+  saveResourcePack(): Promise<string | null>;
   /** Parse only, without generating circuits */
   analyze(path: string): Promise<AnalyzeResult>;
   /** Full generation; when the output path is empty, generate without writing to disk */
@@ -29,6 +31,7 @@ export interface MusicboxApi {
 const api: MusicboxApi = {
   chooseMidi: () => ipcRenderer.invoke('dialog:choose-midi'),
   chooseOutput: (defaultName) => ipcRenderer.invoke('dialog:choose-output', defaultName),
+  saveResourcePack: () => ipcRenderer.invoke('dialog:save-resource-pack'),
   analyze: (path) => ipcRenderer.invoke('song:analyze', path),
   generate: (path, options, outputPath) => ipcRenderer.invoke('song:generate', path, options, outputPath),
   reveal: (path) => ipcRenderer.invoke('shell:reveal', path),

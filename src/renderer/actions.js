@@ -7,6 +7,7 @@ import { renderOverview } from './overview.js';
 import { renderTrackList } from './tracklist.js';
 import { renderWarnings } from './warnings.js';
 import { renderPreview } from './preview.js';
+import { maybePromptForPack } from './resourcepack.js';
 import { fmtBytes } from './dom.js';
 
 function setBusy(on) {
@@ -119,6 +120,8 @@ async function doGenerate() {
     state.generated = res;
     renderOverview(res);
     renderWarnings(res.warnings, res.pitchRange);
+    // Nudge once, and only when the full range is in use.
+    if (res.success) maybePromptForPack();
     renderPreview(res);
     updateWorkflowUI(res.success ? 'generated' : 'error', res);
     log(

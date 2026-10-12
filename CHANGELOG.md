@@ -50,6 +50,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   five vanilla note-block instruments to reach F#1-F#7; off, it uses the harp slot
   alone for F#3-F#5, which needs no resource pack at all. It applies to both the
   redstone and the command playback backends.
+- The companion resource pack now ships inside the application. It is offered by a
+  button under the full-range switch, and once on the first full-range export, so it
+  no longer has to be found online.
 
 ## [0.1.0] - 2026-10-11
 

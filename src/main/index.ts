@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu, dialog, ipcMain, net, protocol, shell } from 'electron';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { existsSync } from 'node:fs';
+import { copyFileSync, existsSync } from 'node:fs';
 import { analyzeFile, generate, generateToFile, type GenerateOptions } from './service';
 import { describeCoreError } from './messages';
 
@@ -10,6 +10,14 @@ import { describeCoreError } from './messages';
  * i.e. __dirname = <root>/dist/src/main, so a single ".." goes back to <root>/dist/src.
  */
 const RENDERER_DIR = join(__dirname, '..', 'renderer');
+
+/**
+ * The companion resource pack, bundled so the user never has to find it online.
+ *
+ * It is small (about 50 KB) and the app only copies it out on request; the generator
+ * itself does not read it.
+ */
+const RESOURCE_PACK_FILE = join(__dirname, '..', 'assets', 'musicboxmc-piano-pack-1.20.4.zip');
 const PRELOAD_FILE = join(__dirname, '..', 'preload', 'index.js');
 const ICON_FILE = existsSync(join(__dirname, 'icon.png'))
   ? join(__dirname, 'icon.png')
@@ -101,6 +109,21 @@ function registerIpc(): void {
       filters: [{ name: 'Litematica 投影', extensions: ['litematic'] }],
     });
     return res.canceled || !res.filePath ? null : res.filePath;
+  });
+
+  // Hand the user a copy of the bundled resource pack. Nothing else reads it.
+  ipcMain.handle('dialog:save-resource-pack', async () => {
+    if (!existsSync(RESOURCE_PACK_FILE)) {
+      throw new Error('安装包内的资源包缺失，请重新安装或从 Release 下载');
+    }
+    const res = await dialog.showSaveDialog(win ?? undefined!, {
+      title: '保存配套资源包',
+      defaultPath: basename(RESOURCE_PACK_FILE),
+      filters: [{ name: 'Minecraft 资源包', extensions: ['zip'] }],
+    });
+    if (res.canceled || !res.filePath) return null;
+    copyFileSync(RESOURCE_PACK_FILE, res.filePath);
+    return res.filePath;
   });
 
   ipcMain.handle('song:analyze', (_e, path: unknown) => {

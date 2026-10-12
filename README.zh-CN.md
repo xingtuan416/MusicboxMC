@@ -97,8 +97,11 @@ Windows x64。两个文件任选其一，均来自
 另有一个配套资源包，把这五个声音事件替换成钢琴采样，让整个音域听起来是同一架钢琴。
 **它是可选的**：生成器不依赖它，装与不装生成的投影完全相同。
 
-- [`MusicboxMC-piano-pack-1.20.4.zip`](https://github.com/xingtuan416/MusicboxMC/releases/download/v0.1.0/MusicboxMC-piano-pack-1.20.4.zip)
-  （50 KB）—— 放进 `.minecraft/resourcepacks/` 并启用即可。
+资源包**已内置在应用里**：「全音域拓展」开关下方有一个"保存配套资源包"按钮，第一次用
+全音域导出时也会提示一次。把它放进 `.minecraft/resourcepacks/` 并在游戏里启用即可。
+想直接下载的话，
+[Release 页面](https://github.com/xingtuan416/MusicboxMC/releases/download/v0.1.0/MusicboxMC-piano-pack-1.20.4.zip)
+也有。
 
 `npm run resourcepack:check <pack.zip>` 可以按生成器期望的映射校验任意资源包。
 

@@ -4,6 +4,7 @@ import { updateWorkflowUI, switchTab } from './workflow.js';
 import { renderPreview, setPreviewScale, fitPreview } from './preview.js';
 import { doAnalyze, doBrowse, doGenerate } from './actions.js';
 import { syncPitchRangeHint } from './options.js';
+import { saveResourcePack } from './resourcepack.js';
 
 function bind() {
   const syncPlaybackSettings = () => {
@@ -20,6 +21,7 @@ function bind() {
   $('commandPlayback').addEventListener('change', syncPlaybackSettings);
   syncPlaybackSettings();
   $('extendedRange').addEventListener('change', syncPitchRangeHint);
+  $('btnSavePack').addEventListener('click', () => saveResourcePack());
   syncPitchRangeHint();
   $('btnBrowse').addEventListener('click', doBrowse);
   $('btnAnalyze').addEventListener('click', doAnalyze);

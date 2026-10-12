@@ -122,8 +122,11 @@ A companion resource pack replaces those five sound events with piano samples, s
 whole range sounds like a single piano. **It is optional**: nothing in the generator
 requires it, and the schematic is identical either way.
 
-- [`MusicboxMC-piano-pack-1.20.4.zip`](https://github.com/xingtuan416/MusicboxMC/releases/download/v0.1.0/MusicboxMC-piano-pack-1.20.4.zip)
-  (50 KB) — drop it into `.minecraft/resourcepacks/` and enable it.
+The pack **ships inside the application**. A _Save companion resource pack_ button sits
+under the full-range switch, and the first full-range export offers it once. Put the
+file in `.minecraft/resourcepacks/` and enable it in game. It is also on the
+[release page](https://github.com/xingtuan416/MusicboxMC/releases/download/v0.1.0/MusicboxMC-piano-pack-1.20.4.zip)
+if you would rather download it directly.
 
 `npm run resourcepack:check <pack.zip>` validates any pack against the mapping the
 generator expects.
