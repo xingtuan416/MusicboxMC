@@ -1,5 +1,6 @@
 import { Midi } from '@tonejs/midi';
 import type { NoteEvent, SongModel, TempoSegment, TrackModel } from './types';
+import { decodeMidiText } from './textEncoding';
 
 /** Parse MIDI binary into a normalized SongModel. */
 export function parseMidi(buffer: Buffer | Uint8Array): SongModel {
@@ -28,7 +29,7 @@ export function parseMidi(buffer: Buffer | Uint8Array): SongModel {
     notes.sort((a, b) => a.timeSec - b.timeSec || a.midi - b.midi);
     return {
       index,
-      name: track.name,
+      name: decodeMidiText(track.name),
       channel: track.channel,
       instrument: track.instrument?.name ?? 'unknown',
       percussion: track.instrument?.percussion ?? false,
@@ -37,7 +38,7 @@ export function parseMidi(buffer: Buffer | Uint8Array): SongModel {
   });
 
   return {
-    name: midi.name || '',
+    name: decodeMidiText(midi.name || ''),
     ppq: midi.header.ppq,
     durationSec: midi.duration,
     baseBpm: tempos[0]!.bpm,
