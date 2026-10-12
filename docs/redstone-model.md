@@ -119,13 +119,13 @@ therefore cannot hold a piano piece.
 Between them, the five note-block instruments reach **F#1 to F#7** (MIDI 30 to 102),
 because each starts at its own F# anchor:
 
-| Slot | Base block | Instrument | Starts at |
-| --- | --- | --- | --- |
-| A | oak planks | bass | F#1 (MIDI 30) |
-| B | white wool | guitar | F#2 (MIDI 42) |
-| C | dirt | harp | F#3 (MIDI 54) |
-| D | clay | flute | F#4 (MIDI 66) |
-| E | gold block | bell | F#5 (MIDI 78) |
+| Slot | Base block | Instrument | Starts at     |
+| ---- | ---------- | ---------- | ------------- |
+| A    | oak planks | bass       | F#1 (MIDI 30) |
+| B    | white wool | guitar     | F#2 (MIDI 42) |
+| C    | dirt       | harp       | F#3 (MIDI 54) |
+| D    | clay       | flute      | F#4 (MIDI 66) |
+| E    | gold block | bell       | F#5 (MIDI 78) |
 
 The slots overlap, so most pitches are reachable from two of them. `mapPitch` picks
 the one whose note value is closest to 12, because 12 is the pitch each sample was
