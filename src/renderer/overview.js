@@ -2,6 +2,7 @@ import { $ } from './state.js';
 import { card, create, fmtBytes, kv, table } from './dom.js';
 import { banner, resetBanner } from './banner.js';
 import { WARN_TEXT } from './warnings.js';
+import { pitchRangeLabel } from './pitch.js';
 
 function renderOverview(res) {
   const box = $('overview');
@@ -190,7 +191,7 @@ function renderOverview(res) {
     if (res.outOfRangeNotes > 0) {
       banner(
         'warn',
-        `⚠ 音域提醒：${res.outOfRangeNotes} 个音符超出资源包音域 F#1-F#7。` +
+        `⚠ 音域提醒：${res.outOfRangeNotes} 个音符超出电路音域 ${pitchRangeLabel(res.pitchRange)}。` +
           `这些音符已按当前策略处理；八度移调和最近可用音会改变音高，跳过则不会写入这些音符。`,
       );
     }

@@ -46,7 +46,7 @@ async function doAnalyze() {
     state.analyze = res;
     renderOverview(res);
     renderTrackList(res);
-    renderWarnings([]);
+    renderWarnings([], null);
 
     // Build the layout in memory right after parsing so the circuit preview works
     // without writing a file.
@@ -57,7 +57,7 @@ async function doAnalyze() {
       const previewRes = await api.generate(path, collectOptions());
       state.generated = previewRes;
       if (!previewRes.success) renderOverview(previewRes);
-      renderWarnings(previewRes.warnings || []);
+      renderWarnings(previewRes.warnings || [], previewRes.pitchRange);
       renderPreview(previewRes);
       updateWorkflowUI(previewRes.success ? 'ready' : 'error', previewRes);
       if (previewRes.success) {
@@ -118,7 +118,7 @@ async function doGenerate() {
     const res = await api.generate(path, collectOptions(), out || undefined);
     state.generated = res;
     renderOverview(res);
-    renderWarnings(res.warnings);
+    renderWarnings(res.warnings, res.pitchRange);
     renderPreview(res);
     updateWorkflowUI(res.success ? 'generated' : 'error', res);
     log(

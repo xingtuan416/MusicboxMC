@@ -1,5 +1,6 @@
 import { $ } from './state.js';
 import { create } from './dom.js';
+import { pitchName, pitchRangeLabel } from './pitch.js';
 
 const WARNING_DISPLAY_LIMIT = 500;
 
@@ -17,8 +18,9 @@ const WARN_TEXT = {
     `强制合并：全曲统一启动等待 ${w.ticks} 游戏刻，峰值 ${w.peakNotes} 音；曲内相对时序不变`,
   FANOUT_EXPANDED: (w) =>
     `tick ${w.tick}：${w.n} 个音使用 ${w.stages} 级续电分支，单级两侧容量 ${w.limit}；仍为同一主线且同刻发声`,
-  OUT_OF_RANGE: (w) =>
-    `MIDI ${w.midi} 超出资源包音域 F#1-F#7，处理方式：${OUT_OF_RANGE_ACTION_TEXT[w.action] || w.action}`,
+  OUT_OF_RANGE: (w, range) =>
+    `MIDI ${w.midi}（${pitchName(w.midi)}）超出电路音域 ${pitchRangeLabel(range)}，` +
+    `处理方式：${OUT_OF_RANGE_ACTION_TEXT[w.action] || w.action}`,
   TIMING_ADJUSTED: (w) => `tick ${w.tick} 的音实际在 tick ${w.actual} 触发，偏移 ${w.actual - w.tick} tick`,
   TRACK_SPLIT: (w) => `tick ${w.tick}：${w.notes} 个音密集放不下，已自动拆到新音轨`,
   SPATIAL_DRIFT: (w) => `tick ${w.tick}：该处空间偏差 ${w.drift} 格，超出多轨对齐容差`,
@@ -46,7 +48,7 @@ function warnSeverity(code) {
   return 'info';
 }
 
-function renderWarnings(warnings) {
+function renderWarnings(warnings, range) {
   const box = $('warnings');
   box.className = warnings.length === 0 ? 'empty-state compact-empty' : '';
   box.replaceChildren();
@@ -76,7 +78,7 @@ function renderWarnings(warnings) {
     const item = create('div', `warnitem ${warnSeverity(w.code)}`);
     item.append(
       create('span', 'code', w.code),
-      create('span', 'detail', (WARN_TEXT[w.code] || (() => JSON.stringify(w)))(w)),
+      create('span', 'detail', (WARN_TEXT[w.code] || (() => JSON.stringify(w)))(w, range)),
     );
     box.append(item);
   }

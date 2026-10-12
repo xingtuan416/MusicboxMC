@@ -115,18 +115,22 @@
                 <small>单侧最多行数</small>
               </label>
             </div>
+            <div class="switch-row">
+              <span class="label">全音域拓展</span>
+              <label class="switch">
+                <input id="extendedRange" type="checkbox" aria-label="全音域拓展" checked />
+                <span class="switch-ui" aria-hidden="true"></span>
+              </label>
+            </div>
             <label class="field">
-              <span class="label">仍超出资源包音域时</span>
+              <span class="label">仍超出电路音域时</span>
               <select id="outOfRange">
                 <option value="warn">提示并八度移调</option>
                 <option value="octave">自动八度移调</option>
                 <option value="clamp">改用最近可用音</option>
                 <option value="drop">跳过超出音域的音符</option>
               </select>
-              <small>
-                通过资源包扩展音域：会失去 bass、guitar、harp、flute、bell 五种原版音色，
-                改用钢琴采样，使音域达到 F#1-F#7（MIDI 30-102）。只有仍超出此范围的音符 才按上方策略处理。
-              </small>
+              <small id="pitchRangeHint"></small>
             </label>
             <div class="switch-row">
               <span class="label">全部使用命令方块播放</span>

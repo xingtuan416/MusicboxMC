@@ -3,6 +3,7 @@ import { log } from './log.js';
 import { updateWorkflowUI, switchTab } from './workflow.js';
 import { renderPreview, setPreviewScale, fitPreview } from './preview.js';
 import { doAnalyze, doBrowse, doGenerate } from './actions.js';
+import { syncPitchRangeHint } from './options.js';
 
 function bind() {
   const syncPlaybackSettings = () => {
@@ -18,6 +19,8 @@ function bind() {
   $('mergeSameInstrument').addEventListener('change', syncPlaybackSettings);
   $('commandPlayback').addEventListener('change', syncPlaybackSettings);
   syncPlaybackSettings();
+  $('extendedRange').addEventListener('change', syncPitchRangeHint);
+  syncPitchRangeHint();
   $('btnBrowse').addEventListener('click', doBrowse);
   $('btnAnalyze').addEventListener('click', doAnalyze);
   $('btnGenerate').addEventListener('click', doGenerate);
