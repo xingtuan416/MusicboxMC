@@ -3,58 +3,85 @@ import {
   BASE_CELL,
   BADGE_MIN_CELL,
   DETAIL_MIN_CELL,
+  MAX_CELL,
+  MIN_CELL,
+  cellForScale,
+  clampView,
   dustSizes,
+  fitCell,
   noteBlockSizes,
-  previewGeometry,
   repeaterSizes,
+  scaleForCell,
+  viewGeometry,
+  visibleCells,
 } from '../src/renderer/previewGeometry.js';
 
 /**
- * The preview draws each cell as a small piece of art whose parts used to be sized
- * with `Math.max(minimum, CELL * fraction)` alone. The minimums suit the default
- * 38 px cell, so on a long song - where the canvas budget caps the cell at 10-20 px -
- * the delay badge, the terminals and the note stem were drawn larger than the cell
- * and spilled into their neighbours.
+ * Two properties keep the wiring view honest, and both are pinned here.
  *
- * These tests pin the two properties that keep that from coming back: nothing a cell
- * draws may exceed the cell, and the default size must be pixel-for-pixel unchanged.
+ * First, the preview is a viewport: the zoom factor alone decides how big a cell is, so
+ * a long song can be inspected cell by cell like a short one. It used to be solved
+ * against a canvas budget, which pinned long songs at two or three pixels per cell.
+ *
+ * Second, no part of the cell art may exceed the cell. The parts are sized with
+ * `Math.max(minimum, CELL * fraction)` and the minimums suit the default 38 px cell, so
+ * in the middle of the range a 22 px delay badge used to be painted across its
+ * neighbours.
  */
 const CELLS = Array.from({ length: 96 }, (_, index) => index + 1);
 
-describe('preview geometry', () => {
-  it('keeps a short song at full detail', () => {
-    const geometry = previewGeometry({ x: 47, z: 10, dpr: 1, previewScale: 1 });
+describe('preview viewport', () => {
+  it('renders the default zoom at the base cell size', () => {
+    const geometry = viewGeometry({ previewScale: 1 });
     expect(geometry.cell).toBe(BASE_CELL);
-    expect(geometry.detail).toBe(true);
     expect(geometry.renderScale).toBe(1);
+    expect(geometry.detail).toBe(true);
   });
 
-  it('drops to flat fills once a long song forces the cell down', () => {
-    const geometry = previewGeometry({ x: 1893, z: 1034, dpr: 1, previewScale: 1 });
-    expect(geometry.cell).toBeLessThan(DETAIL_MIN_CELL);
-    expect(geometry.detail).toBe(false);
-  });
-
-  it('never lets the canvas exceed the budget it is solving for', () => {
-    for (const [x, z] of [
-      [47, 10],
-      [500, 40],
-      [1893, 1034],
-      [20000, 16],
-    ] as const) {
-      const geometry = previewGeometry({ x, z, dpr: 1, previewScale: 1 });
-      const area = geometry.width * geometry.height;
-      // The solve includes the fixed headers, so allow a hair over the rectangle.
-      expect(area, `${x}x${z}`).toBeLessThan(16_000_000 * 1.02);
-      expect(geometry.width).toBeLessThanOrEqual(30000);
-      expect(geometry.height).toBeLessThanOrEqual(30000);
+  it('keeps the cell inside the zoom bounds for any factor', () => {
+    for (const factor of [0.001, 0.05, 0.5, 1, 3, 40, 1000]) {
+      const cell = cellForScale(factor);
+      expect(cell, `factor ${factor}`).toBeGreaterThanOrEqual(MIN_CELL);
+      expect(cell, `factor ${factor}`).toBeLessThanOrEqual(MAX_CELL);
     }
   });
 
-  it('keeps the level of detail tied to the cell size', () => {
-    expect(previewGeometry({ x: 10, z: 10, dpr: 1, previewScale: 1 }).detail).toBe(true);
-    const tiny = previewGeometry({ x: 4000, z: 4000, dpr: 1, previewScale: 1 });
-    expect(tiny.detail).toBe(tiny.cell >= DETAIL_MIN_CELL);
+  it('round-trips cell size and scale', () => {
+    for (const cell of [MIN_CELL, 12, BASE_CELL, MAX_CELL]) {
+      expect(cellForScale(scaleForCell(cell))).toBeCloseTo(cell, 9);
+    }
+  });
+
+  it('ties the level of detail to the cell size', () => {
+    expect(viewGeometry({ previewScale: 1 }).detail).toBe(true);
+    expect(viewGeometry({ previewScale: DETAIL_MIN_CELL / BASE_CELL }).detail).toBe(true);
+    expect(viewGeometry({ previewScale: (DETAIL_MIN_CELL - 0.5) / BASE_CELL }).detail).toBe(false);
+  });
+
+  it('never makes fit shrink a long song below a countable cell', () => {
+    // A 20,000-column song in a 1200 x 700 panel: fitting it all would need 0.05 px.
+    const cell = fitCell({ x: 20000, z: 16, availableWidth: 1200, availableHeight: 700 });
+    expect(cell).toBe(MIN_CELL);
+    // A short song still fits comfortably.
+    expect(fitCell({ x: 40, z: 10, availableWidth: 1200, availableHeight: 700 })).toBeGreaterThan(20);
+  });
+
+  it('fits whole cells into the viewport', () => {
+    const { cols, rows } = visibleCells({ viewportWidth: 1200, viewportHeight: 700, cell: 38 });
+    expect(cols).toBe(Math.floor((1200 - 150) / 38));
+    expect(rows).toBe(Math.floor((700 - 28) / 38));
+    // Even a tiny viewport reports at least one cell rather than nothing.
+    expect(visibleCells({ viewportWidth: 10, viewportHeight: 10, cell: 38 }).cols).toBe(1);
+  });
+
+  it('keeps the view inside the grid', () => {
+    const grid = { x: 100, z: 20 };
+    const visible = { cols: 10, rows: 5 };
+    expect(clampView(grid, { x0: -5, z0: -5 }, visible)).toEqual({ x0: 0, z0: 0 });
+    expect(clampView(grid, { x0: 500, z0: 500 }, visible)).toEqual({ x0: 90, z0: 15 });
+    expect(clampView(grid, { x0: 12.4, z0: 3.6 }, visible)).toEqual({ x0: 12, z0: 4 });
+    // A grid smaller than the viewport cannot be scrolled away from its first cell.
+    expect(clampView({ x: 4, z: 2 }, { x0: 9, z0: 9 }, visible)).toEqual({ x0: 0, z0: 0 });
   });
 
   it('never lets a drawn part exceed its cell', () => {

@@ -97,8 +97,19 @@ export interface LayoutResult {
   /** Uniform startup latency in game ticks for the opt-in forced layout. */
   startupDelayTicks?: number;
   warnings: LayoutWarning[];
-  /** Intended and actual trigger tick of every placed group, in track order. */
-  placed: Array<{ trackIndex: number; zBase: number; tick: number; actual: number }>;
+  /**
+   * Intended and actual trigger tick of every placed group, in track order.
+   *
+   * `x` and `zBase` are the cell it landed on, which is what lets the interface point
+   * at the group a warning is about.
+   */
+  placed: Array<{
+    trackIndex: number;
+    zBase: number;
+    tick: number;
+    actual: number;
+    x: number;
+  }>;
 }
 
 export interface LayoutConfig {

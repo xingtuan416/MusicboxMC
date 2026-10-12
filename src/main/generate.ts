@@ -93,6 +93,8 @@ function generateCommands(
         },
         speedTable: speedTable(song.durationSec, presets, baseTps),
         warnings: compiled.warnings,
+        // Command playback places no grouped cells, so there is nothing to point at.
+        placed: [],
         regions: [
           {
             name: 'region_0',
@@ -163,6 +165,7 @@ function failure(ctx: FailureContext): GenerateResult {
     },
     speedTable: speedTable(ctx.durationSec, ctx.presets, ctx.baseTps),
     warnings: [],
+    placed: [],
     regions: [],
     preview: EMPTY_PREVIEW,
   };
@@ -275,6 +278,7 @@ export function generate(
       },
       speedTable: speedTable(song.durationSec, presets, baseTps),
       warnings: result.warnings,
+      placed: result.placed,
       regions: slices.map((s, i) => ({
         name: `region_${i}`,
         trackIndex: s.trackIndex,

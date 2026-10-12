@@ -2,28 +2,33 @@ import { $, state } from './state.js';
 import { colorOf, displayBlockName } from './blocks.js';
 import { create } from './dom.js';
 import {
-  BASE_CELL,
+  cellForScale,
+  clampView,
+  DETAIL_MIN_CELL,
   dustSizes,
+  fitCell,
   GUTTER,
   noteBlockSizes,
-  previewGeometry,
   repeaterSizes,
   RULER,
+  scaleForCell,
+  viewGeometry,
+  visibleCells,
 } from './previewGeometry.js';
 
 /** Background of the gutter and ruler. */
 const HEAD_BG = '#e9e7e2';
-/** Zoom bounds for the manual zoom buttons. */
-const ZOOM_MIN = 0.45;
-const ZOOM_MAX = 1.8;
-/** Ceiling for "fit to window", which should not zoom in as far as the buttons. */
-const ZOOM_FIT_MAX = 1.35;
-/** Smallest viewport the fit calculation will consider, and the margin it leaves. */
+/** The result the view was last fitted to, so a new one re-fits instead of scrolling. */
+let fittedFor = null;
+/** Multiplicative zoom step: the range is far wider than the old fit-only zoom. */
+const ZOOM_STEP = 1.3;
+/** Smallest panel the fit calculation will consider, and the margin it leaves. */
 const MIN_FIT_WIDTH = 320;
 const MIN_FIT_HEIGHT = 220;
-const FIT_PADDING = 40;
-/** Below this the zoom label is reporting the render scale, not the user's setting. */
-const ZOOM_LABEL_EPSILON = 0.005;
+const FIT_PADDING = 24;
+/** Smallest canvas to draw, so a collapsed panel cannot produce a zero-sized one. */
+const MIN_CANVAS_WIDTH = 320;
+const MIN_CANVAS_HEIGHT = 200;
 
 /** One colour per region, used for the track stripe in the gutter. */
 const REGION_COLORS = ['#c97962', '#c29a65', '#879b79', '#ad8971', '#c58f9c', '#7d9690', '#aa9161'];
@@ -104,17 +109,45 @@ function renderPreview(res) {
     return;
   }
 
+  if (fittedFor !== res) {
+    fittedFor = res;
+    // A new result: show as much of it as stays legible rather than the first sliver.
+    state.previewScale = fitScaleFor(res);
+    state.previewView = { x0: 0, z0: 0 };
+    state.previewFocus = null;
+  }
+
   const { x, z } = preview.size;
   const dpr = window.devicePixelRatio || 1;
-  // Scales long songs down to a safe canvas size - past Chromium's dimension cap the
-  // whole canvas renders blank - and reports whether the detailed tile art still fits.
-  const geometry = previewGeometry({ x, z, dpr, previewScale: state.previewScale });
+  const geometry = viewGeometry({ previewScale: state.previewScale });
   const { cell: CELL, detail, gap } = geometry;
   state.previewRenderScale = geometry.renderScale;
   const showGrid = $('showGrid').checked;
   const showNotes = $('showNotes').checked;
-  const w = geometry.width;
-  const h = geometry.height;
+
+  // The canvas is exactly the viewport and only the visible cells are drawn. Nothing is
+  // solved against a canvas budget any more, so a long song no longer caps how far in
+  // you can zoom, and the grid may extend well past the right and bottom edges.
+  // The wrap has padding, and clientWidth/clientHeight include it; sizing the canvas to
+  // those would overflow the padding box and reintroduce a scrollbar.
+  const box = getComputedStyle(wrap);
+  const inset = (side) => Number.parseFloat(box[side]) || 0;
+  const viewportWidth = Math.max(
+    MIN_CANVAS_WIDTH,
+    wrap.clientWidth - inset('paddingLeft') - inset('paddingRight'),
+  );
+  const viewportHeight = Math.max(
+    MIN_CANVAS_HEIGHT,
+    wrap.clientHeight - inset('paddingTop') - inset('paddingBottom'),
+  );
+  const w = viewportWidth;
+  const h = viewportHeight;
+  const { cols, rows } = visibleCells({ viewportWidth, viewportHeight, cell: CELL });
+  const view = (state.previewView = clampView({ x, z }, state.previewView, { cols, rows }));
+  const gx0 = view.x0;
+  const gz0 = view.z0;
+  const gx1 = Math.min(x, gx0 + cols);
+  const gz1 = Math.min(z, gz0 + rows);
   const gridX0 = GUTTER;
   const gridY0 = RULER;
 
@@ -128,8 +161,9 @@ function renderPreview(res) {
   ctx.clearRect(0, 0, w, h);
   ctx.textBaseline = 'middle';
 
-  const px = (gx) => gridX0 + gx * CELL;
-  const pz = (gz) => gridY0 + gz * CELL;
+  // Cell coordinates are absolute; the viewport decides where they land on the canvas.
+  const px = (gx) => gridX0 + (gx - gx0) * CELL;
+  const pz = (gz) => gridY0 + (gz - gz0) * CELL;
 
   // ── Top ruler (X is the time axis) ──
   ctx.fillStyle = HEAD_BG;
@@ -137,8 +171,10 @@ function renderPreview(res) {
   ctx.font = '10px ui-monospace, monospace';
   ctx.fillStyle = '#716d64';
   ctx.fillText(res.playbackMode === 'command' ? 'X（立体命令链）' : 'X →（时间）', 8, RULER / 2);
-  const step = 10;
-  for (let gx = 0; gx <= x; gx += step) {
+  // Label spacing follows the zoom: a fixed step collides when zoomed in and falls off
+  // screen when zoomed out.
+  const step = CELL >= 26 ? 5 : CELL >= 12 ? 10 : CELL >= 6 ? 20 : 50;
+  for (let gx = Math.floor(gx0 / step) * step; gx <= gx1; gx += step) {
     const cx = px(gx);
     ctx.strokeStyle = '#c5c1b8';
     ctx.beginPath();
@@ -154,7 +190,7 @@ function renderPreview(res) {
   ctx.fillRect(0, 0, GUTTER, h);
   const trackOf = new Map();
   for (const t of res.tracks || []) trackOf.set(t.index, t);
-  for (let gz = 0; gz < z; gz++) {
+  for (let gz = gz0; gz < gz1; gz++) {
     const y = pz(gz);
     const absoluteZ = gz + preview.origin.z;
     const ri = regionOfRow(res, absoluteZ);
@@ -165,7 +201,15 @@ function renderPreview(res) {
     // belong to the same track.
     ctx.fillStyle = color;
     ctx.fillRect(0, y, 3, CELL);
-    if (region && absoluteZ === region.position.z) {
+    // Row labels only where there is room. A fixed 11 px font on a four-pixel row piles
+    // every number on top of the next, so below roughly 13 px per row only every
+    // step-th row is labelled.
+    const zStep = Math.max(1, Math.ceil(13 / CELL));
+    const onStep = (gz - gz0) % zStep === 0;
+    const regionTop = region ? region.position.z : Number.POSITIVE_INFINITY;
+    // A track's name takes the first stepped row inside its region and replaces that
+    // row's number, so the two labels can never land on the same line.
+    if (region && onStep && absoluteZ >= regionTop && absoluteZ - regionTop < zStep) {
       const t = trackOf.get(region.trackIndex);
       const label =
         res.playbackMode === 'command'
@@ -175,17 +219,20 @@ function renderPreview(res) {
             : `轨${region.trackIndex + 1}`;
       ctx.fillStyle = '#4d4a44';
       ctx.font = '12px system-ui, sans-serif';
-      ctx.fillText(label.slice(0, 18), 10, y + CELL / 2);
+      // Leave the number column clear: the gutter is 150 px and the number sits at 116.
+      const room = 14;
+      ctx.fillText(label.length > room ? `${label.slice(0, room - 1)}…` : label, 10, y + CELL / 2);
+    } else if (onStep) {
+      ctx.fillStyle = '#8d887f';
+      ctx.font = '11px ui-monospace, monospace';
+      ctx.fillText(`z${gz}`, GUTTER - 34, y + CELL / 2);
     }
-    ctx.fillStyle = '#8d887f';
-    ctx.font = '11px ui-monospace, monospace';
-    ctx.fillText(`z${gz}`, GUTTER - 34, y + CELL / 2);
   }
 
   // ── Cells ──
   // Base blocks: a faint wash so the material underneath is still readable.
-  for (let gz = 0; gz < z; gz++) {
-    for (let gx = 0; gx < x; gx++) {
+  for (let gz = gz0; gz < gz1; gz++) {
+    for (let gx = gx0; gx < gx1; gx++) {
       const base = preview.baseCells[gz * x + gx];
       if (!base) continue;
       ctx.globalAlpha = base.includes('command_block') ? 1 : 0.22;
@@ -232,8 +279,8 @@ function renderPreview(res) {
   ctx.strokeStyle = '#c74e4a';
   ctx.lineWidth = dustPlain.stroke;
   ctx.lineCap = 'round';
-  for (let gz = 0; gz < z; gz++) {
-    for (let gx = 0; gx < x; gx++) {
+  for (let gz = gz0; gz < gz1; gz++) {
+    for (let gx = gx0; gx < gx1; gx++) {
       if (!wireAt(gx, gz)) continue;
       if (!detail) {
         ctx.fillStyle = '#c74e4a';
@@ -275,8 +322,8 @@ function renderPreview(res) {
 
   // Repeaters: drawn as a clear input -> delay -> output module so direction and delay
   // setting are readable at a glance.
-  for (let gz = 0; gz < z; gz++) {
-    for (let gx = 0; gx < x; gx++) {
+  for (let gz = gz0; gz < gz1; gz++) {
+    for (let gx = gx0; gx < gx1; gx++) {
       if (preview.wireCells[gz * x + gx] !== 'minecraft:repeater') continue;
       const x0 = px(gx);
       const y0 = pz(gz);
@@ -363,8 +410,8 @@ function renderPreview(res) {
 
   // Note blocks: wooden body, clear note glyph and a timbre stripe along the bottom.
   if (showNotes) {
-    for (let gz = 0; gz < z; gz++) {
-      for (let gx = 0; gx < x; gx++) {
+    for (let gz = gz0; gz < gz1; gz++) {
+      for (let gx = gx0; gx < gx1; gx++) {
         const idx = gz * x + gx;
         if (preview.noteCells[idx] !== 'minecraft:note_block') continue;
         const x0 = px(gx);
@@ -425,13 +472,13 @@ function renderPreview(res) {
   if (showGrid) {
     ctx.strokeStyle = 'rgba(103, 97, 86, 0.14)';
     ctx.lineWidth = 1;
-    for (let gx = 0; gx <= x; gx++) {
+    for (let gx = gx0; gx <= gx1; gx++) {
       ctx.beginPath();
       ctx.moveTo(px(gx) + 0.5, gridY0);
       ctx.lineTo(px(gx) + 0.5, h);
       ctx.stroke();
     }
-    for (let gz = 0; gz <= z; gz++) {
+    for (let gz = gz0; gz <= gz1; gz++) {
       ctx.beginPath();
       ctx.moveTo(gridX0, pz(gz) + 0.5);
       ctx.lineTo(w, pz(gz) + 0.5);
@@ -448,6 +495,17 @@ function renderPreview(res) {
   ctx.lineTo(w, gridY0 + 0.5);
   ctx.stroke();
 
+  // Ring the cell a warning was jumped to, so the eye lands on it straight away.
+  if (state.previewFocus) {
+    const { x: fx, z: fz } = state.previewFocus;
+    if (fx >= gx0 && fx < gx1 && fz >= gz0 && fz < gz1) {
+      ctx.strokeStyle = '#a35f35';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(px(fx) + 1, pz(fz) + 1, CELL - 2, CELL - 2);
+      ctx.lineWidth = 1;
+    }
+  }
+
   const nonEmpty =
     preview.wireCells.filter(Boolean).length +
     preview.baseCells.filter(Boolean).length +
@@ -457,12 +515,15 @@ function renderPreview(res) {
   $('previewRegions').textContent = String((res.regions || []).length);
   $('previewTracks').textContent = String(trackCount);
   $('previewBlocks').textContent = String(nonEmpty);
+  // Where the viewport currently sits, since the whole grid is no longer on screen.
+  const visible =
+    `视口 X ${gx0}–${Math.max(gx0, gx1 - 1)} / Z ${gz0}–${Math.max(gz0, gz1 - 1)}　·　` +
+    `一格 ${CELL.toFixed(CELL < 10 ? 1 : 0)} px`;
   hint.textContent =
     res.playbackMode === 'command'
-      ? `${res.regions[0].size.x}×${res.regions[0].size.y}×${res.regions[0].size.z} 格 · 命令播放器 · 俯视图`
+      ? `${res.regions[0].size.x}×${res.regions[0].size.y}×${res.regions[0].size.z} 格 · 命令播放器 · 俯视图　·　${visible}`
       : `一行 = 一个 Z 行，一列 = 一格 X（向右为时间）　·　${x}×${z} 格　·　` +
-        `${trackCount} 条音轨 / ${(res.regions || []).length} 个区域　·　可见方块 ${nonEmpty} 个` +
-        (geometry.renderScale < state.previewScale - ZOOM_LABEL_EPSILON ? '　·　长曲目已自动缩小预览' : '');
+        `${trackCount} 条音轨 / ${(res.regions || []).length} 个区域　·　可见方块 ${nonEmpty} 个　·　${visible}`;
 
   // Legend
   const legend = $('legend');
@@ -478,31 +539,82 @@ function renderPreview(res) {
     legend.append(create('span', 'legend-note', '红石线 · 中继器档位 · 音符盒底色代表音色'));
   }
 
-  wrap.scrollTop = 0;
-  wrap.scrollLeft = 0;
   updatePreviewZoomLabel();
 }
 
 function updatePreviewZoomLabel() {
-  const scale = state.generated ? state.previewRenderScale : state.previewScale;
-  $('previewZoom').textContent = `${Math.round(scale * 100)}%`;
+  $('previewZoom').textContent = `${Math.round(scaleForCell(cellForScale(state.previewScale)) * 100)}%`;
 }
 
-function setPreviewScale(scale) {
-  state.previewScale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, scale));
+/** Scale at which as much of the grid as stays legible is visible. */
+function fitScaleFor(res) {
+  const preview = res?.preview;
+  const wrap = $('canvasWrap');
+  if (!preview || !preview.size?.x || !wrap) return state.previewScale;
+  return scaleForCell(
+    fitCell({
+      x: preview.size.x,
+      z: preview.size.z,
+      availableWidth: Math.max(MIN_FIT_WIDTH, wrap.clientWidth - FIT_PADDING),
+      availableHeight: Math.max(MIN_FIT_HEIGHT, wrap.clientHeight - FIT_PADDING),
+    }),
+  );
+}
+
+/** Zoom about the centre of the view, so what you are looking at stays where it is. */
+function zoomPreview(factor) {
+  const wrap = $('canvasWrap');
+  const halfWidth = (wrap?.clientWidth ?? 0) / 2;
+  const halfHeight = (wrap?.clientHeight ?? 0) / 2;
+  const before = viewGeometry({ previewScale: state.previewScale });
+  const centre = {
+    x: state.previewView.x0 + halfWidth / before.cell,
+    z: state.previewView.z0 + halfHeight / before.cell,
+  };
+
+  state.previewScale *= factor;
+  const after = viewGeometry({ previewScale: state.previewScale });
+  state.previewView = {
+    x0: centre.x - halfWidth / after.cell,
+    z0: centre.z - halfHeight / after.cell,
+  };
+  state.previewFocus = null;
   updatePreviewZoomLabel();
   if (state.generated) renderPreview(state.generated);
 }
 
-function fitPreview() {
-  const preview = state.generated?.preview;
-  const wrap = $('canvasWrap');
-  if (!preview || !preview.size?.x || !wrap) return;
-  const availableWidth = Math.max(MIN_FIT_WIDTH, wrap.clientWidth - FIT_PADDING);
-  const availableHeight = Math.max(MIN_FIT_HEIGHT, wrap.clientHeight - FIT_PADDING);
-  const widthScale = availableWidth / (GUTTER + preview.size.x * BASE_CELL);
-  const heightScale = availableHeight / (RULER + preview.size.z * BASE_CELL);
-  setPreviewScale(Math.min(ZOOM_FIT_MAX, Math.max(ZOOM_MIN, Math.min(widthScale, heightScale))));
+/** Scroll the view by a pixel offset, which is what a wheel or drag produces. */
+function panPreview(pixelsX, pixelsZ) {
+  if (!state.generated) return;
+  const { cell } = viewGeometry({ previewScale: state.previewScale });
+  state.previewView = {
+    x0: state.previewView.x0 + pixelsX / cell,
+    z0: state.previewView.z0 + pixelsZ / cell,
+  };
+  state.previewFocus = null;
+  renderPreview(state.generated);
 }
 
-export { renderPreview, setPreviewScale, fitPreview };
+/** Put a given cell in the middle of the view; the warning list uses this. */
+function focusPreviewCell(x, z) {
+  const wrap = $('canvasWrap');
+  // Being sent to a cell you cannot see is no use, so a jump never lands below the size
+  // at which the cell is actually drawn rather than filled flat.
+  state.previewScale = scaleForCell(Math.max(cellForScale(state.previewScale), DETAIL_MIN_CELL));
+  const geometry = viewGeometry({ previewScale: state.previewScale });
+  state.previewView = {
+    x0: x - (wrap?.clientWidth ?? 0) / 2 / geometry.cell,
+    z0: z - (wrap?.clientHeight ?? 0) / 2 / geometry.cell,
+  };
+  state.previewFocus = { x, z };
+  if (state.generated) renderPreview(state.generated);
+}
+
+function fitPreview() {
+  if (!state.generated) return;
+  state.previewScale = fitScaleFor(state.generated);
+  state.previewView = { x0: 0, z0: 0 };
+  renderPreview(state.generated);
+}
+
+export { renderPreview, zoomPreview, panPreview, fitPreview, focusPreviewCell, ZOOM_STEP };

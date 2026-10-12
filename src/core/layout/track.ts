@@ -86,7 +86,7 @@ export function buildTrack(opts: BuildTrackOptions): {
   /** Only ever non-empty when collectOverflow = true. */
   overflow: OverflowGroup[];
   /** Intended and actual trigger tick for each placed group, in game ticks (actual = 2*rt). */
-  placed: Array<{ tick: number; actual: number }>;
+  placed: Array<{ tick: number; actual: number; x: number }>;
 } {
   const maxChordNotes = chordCapacity(opts.config.dMax);
 
@@ -108,7 +108,7 @@ export function buildTrack(opts: BuildTrackOptions): {
   // 3) Lay the main line along +X: [pre-group repeaters][branch column][repeaters][notes]
   const placements: BlockPlacement[] = [];
   const taps: Tap[] = [];
-  const placed: Array<{ tick: number; actual: number }> = [];
+  const placed: Array<{ tick: number; actual: number; x: number }> = [];
 
   const putWire = (x: number, z: number): void => {
     // A schematic is pasted **unpowered**: dust is always written with power=0 and
@@ -278,7 +278,7 @@ export function buildTrack(opts: BuildTrackOptions): {
     taps.push({ x: xCol, t: g.rt, notes: placedNotes });
 
     const actual = (g.rt + base) * GAME_TICKS_PER_REDSTONE_TICK;
-    placed.push({ tick: g.tick, actual });
+    placed.push({ tick: g.tick, actual, x: xCol });
     // The quantisation offset already includes the 2*base lead-in, so only a deviation
     // beyond the lead-in plus one game tick of grid error is worth reporting.
     if (Math.abs(actual - g.tick - 2 * base) > MAX_TRIGGER_SHIFT) {

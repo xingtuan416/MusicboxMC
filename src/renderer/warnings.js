@@ -1,6 +1,8 @@
 import { $ } from './state.js';
 import { create } from './dom.js';
 import { pitchName, pitchRangeLabel } from './pitch.js';
+import { switchTab } from './workflow.js';
+import { focusPreviewCell } from './preview.js';
 
 const WARNING_DISPLAY_LIMIT = 500;
 
@@ -54,6 +56,26 @@ function warnSeverity(code) {
   return 'info';
 }
 
+/**
+ * The cell a warning is about, when that can be worked out.
+ *
+ * A placed note carries its own cell. A note that was dropped before placement has
+ * none, so fall back to the nearest group in time on the same track: that is where it
+ * would have been, which is enough to go and look.
+ */
+function locateWarning(result, warning) {
+  if (Number.isFinite(warning.x) && Number.isFinite(warning.z)) {
+    return { x: warning.x, z: warning.z };
+  }
+  const groups = (result?.placed || []).filter((group) => group.trackIndex === warning.trackIndex);
+  if (groups.length === 0 || !Number.isFinite(warning.tick)) return null;
+  let best = groups[0];
+  for (const group of groups) {
+    if (Math.abs(group.tick - warning.tick) < Math.abs(best.tick - warning.tick)) best = group;
+  }
+  return { x: best.x, z: best.zBase };
+}
+
 /** Name the track a warning is about, falling back to its index. */
 function trackLabel(result, index) {
   const track = (result?.tracks || []).find((t) => t.index === index);
@@ -105,6 +127,17 @@ function renderWarnings(result) {
       create('span', 'code', w.code),
       create('span', 'detail', (WARN_TEXT[w.code] || (() => JSON.stringify(w)))(w, ctx)),
     );
+    const cell = locateWarning(result, w);
+    if (cell) {
+      const jump = create('button', 'warnjump', '定位');
+      jump.type = 'button';
+      jump.title = `在红石布线中定位 X${cell.x} · Z${cell.z}`;
+      jump.addEventListener('click', () => {
+        switchTab('preview');
+        focusPreviewCell(cell.x, cell.z);
+      });
+      item.append(jump);
+    }
     box.append(item);
   }
   if (warnings.length > shown.length) {

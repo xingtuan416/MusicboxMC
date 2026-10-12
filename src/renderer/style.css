@@ -1232,7 +1232,9 @@ tbody tr:hover {
 .canvaswrap {
   min-height: 265px;
   max-height: calc(100vh - 320px);
-  overflow: auto;
+  /* The canvas is the viewport, so it never scrolls itself; panning is handled in JS. */
+  overflow: hidden;
+  cursor: grab;
   padding: 13px;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -1240,10 +1242,12 @@ tbody tr:hover {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
+.canvaswrap:active {
+  cursor: grabbing;
+}
+
 .canvas-stage {
   display: flex;
-  min-width: max-content;
-  min-height: 235px;
   align-items: flex-start;
   justify-content: flex-start;
 }
@@ -1257,6 +1261,7 @@ tbody tr:hover {
 
 .preview-footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 15px;
@@ -1299,7 +1304,9 @@ tbody tr:hover {
 }
 
 .preview-footer .hint {
-  flex: 1;
+  /* The hint is a full sentence and the legend can be long: give the hint its own line
+     instead of letting the legend squeeze it into a column. */
+  flex: 1 1 100%;
   margin-top: 0;
 }
 
@@ -1333,6 +1340,25 @@ tbody tr:hover {
 
 .warnitem .detail {
   flex: 1;
+}
+
+/* Jumps to the cell a warning is about, so it does not have to be hunted for. */
+.warnitem .warnjump {
+  flex: none;
+  align-self: center;
+  padding: 3px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--accent-dark);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.warnitem .warnjump:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 pre#log {

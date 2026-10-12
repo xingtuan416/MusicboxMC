@@ -1,5 +1,5 @@
 import type { BlockOverrides } from '../core/palette/blockTable';
-import type { LayoutWarning } from '../core/layout/types';
+import type { LayoutResult, LayoutWarning } from '../core/layout/types';
 import type { SpeedRow } from '../core/tempo/speed';
 import type { CommandPlaybackInfo } from '../core/command';
 
@@ -134,6 +134,8 @@ export interface GenerateResult extends AnalyzeResult {
   };
   speedTable: SpeedRow[];
   warnings: LayoutWarning[];
+  /** Where each placed group landed, so the interface can point at one. */
+  placed: LayoutResult['placed'];
   regions: RegionSummary[];
   preview: PreviewData;
 }

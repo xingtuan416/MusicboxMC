@@ -1,22 +1,16 @@
 /**
  * Preview geometry, kept free of the DOM so it can be tested directly.
  *
- * The preview has two levels of detail. The detailed one draws each cell as a small
- * piece of art: a tile with a border, a shadow, terminals, a delay badge and, for
- * note blocks, a stem, a note head and a timbre stripe. Every one of those parts used
- * to be sized with `Math.max(minimum, CELL * fraction)`, and the minimums were picked
- * for the default cell of 38 px.
+ * The preview is a **viewport**: the canvas is only ever as large as the panel, and the
+ * zoom factor alone decides how big a cell is. Nothing is solved against a canvas
+ * budget any more, which is what used to cap long songs at two or three pixels per cell
+ * and put everything past Chromium's dimension limit out of reach.
  *
- * That is fine at full size and fine at 1-2 px, where the renderer falls back to flat
- * fills. In between it is not: a 22 px wide delay badge on a 14 px cell, or two
- * terminal dots 8 px in from either edge of a 14 px cell, are drawn on top of their
- * neighbours. Long songs land in exactly that band, because the canvas budget caps
- * the cell size - a 2000 x 16 circuit gets a 15 px cell and turns into a smear of
- * overlapping badges.
- *
- * So the sizes below are the same formulas, clamped so that no part can ever exceed
- * the cell it belongs to, and the detailed level is only used once the cell is big
- * enough for it to be legible.
+ * The detailed cell art has two levels. Its parts used to be sized with
+ * `Math.max(minimum, CELL * fraction)` alone, and the minimums were picked for the
+ * default 38 px cell, so at 8-24 px a 22 px delay badge and two terminal dots 8 px in
+ * from either edge were drawn on top of their neighbours. The sizes below are the same
+ * formulas, clamped so no part can exceed the cell it belongs to.
  */
 
 export const BASE_CELL = 38;
@@ -24,11 +18,15 @@ export const BASE_CELL = 38;
 export const GUTTER = 150;
 /** Height of the top ruler (X is the time axis). */
 export const RULER = 28;
-/** Chromium caps canvas dimensions, so leave headroom for long songs. */
-export const MAX_CANVAS_PIXELS = 30000;
-export const MAX_CANVAS_AREA = 16000000;
-/** Narrowest CSS width the preview canvas may be compressed to. */
-export const MIN_CANVAS_CSS_WIDTH = 640;
+
+/**
+ * Zoom bounds, in cell pixels.
+ *
+ * The low end stays countable rather than becoming a smear; the high end is where a
+ * cell stops being worth looking at closely.
+ */
+export const MIN_CELL = 4;
+export const MAX_CELL = 72;
 
 /**
  * Below this cell size the tile art cannot be drawn without its parts overrunning the
@@ -47,34 +45,65 @@ function fit(value, cell, maxFraction) {
   return Math.min(value, cell * maxFraction);
 }
 
-/**
- * Canvas size and level of detail for one preview.
- *
- * `cell` is in CSS pixels; the caller multiplies by the device pixel ratio.
- */
-export function previewGeometry({ x, z, dpr, previewScale }) {
-  const cols = Math.max(1, x);
-  const rows = Math.max(1, z);
-  const maxCssWidth = Math.max(MIN_CANVAS_CSS_WIDTH, MAX_CANVAS_PIXELS / Math.max(1, dpr));
-  const dimensionCell = Math.min((maxCssWidth - GUTTER) / cols, (maxCssWidth - RULER) / rows);
+/** The cell size a zoom factor actually renders at. */
+export function cellForScale(previewScale) {
+  return Math.min(MAX_CELL, Math.max(MIN_CELL, BASE_CELL * previewScale));
+}
 
-  // Include the fixed headers in the area budget, not just the circuit rectangle.
-  const cssArea = MAX_CANVAS_AREA / (dpr * dpr);
-  const budget = Math.max(1, cssArea - GUTTER * RULER);
-  const areaB = GUTTER * rows + RULER * cols;
-  const areaCell = (2 * budget) / (areaB + Math.sqrt(areaB * areaB + 4 * cols * rows * budget));
+/** Cell size back to a zoom factor, for the label. */
+export function scaleForCell(cell) {
+  return cell / BASE_CELL;
+}
 
-  const cell = Math.min(BASE_CELL * previewScale, dimensionCell, areaCell);
+/** Level of detail for one zoom factor. */
+export function viewGeometry({ previewScale }) {
+  const cell = cellForScale(previewScale);
   return {
     cell,
     renderScale: cell / BASE_CELL,
-    width: GUTTER + x * cell,
-    height: RULER + z * cell,
-    /** Detailed tile art, or flat fills. */
     detail: cell >= DETAIL_MIN_CELL,
     /** Cells need a hairline between them to stay countable, but not when tiny. */
     gap: cell >= 4 ? 1 : 0,
   };
+}
+
+/** How many whole cells fit beside the gutter and below the ruler. */
+export function visibleCells({ viewportWidth, viewportHeight, cell }) {
+  return {
+    cols: Math.max(1, Math.floor((viewportWidth - GUTTER) / cell)),
+    rows: Math.max(1, Math.floor((viewportHeight - RULER) / cell)),
+  };
+}
+
+/**
+ * Keep the view inside the grid.
+ *
+ * The limit leaves a whole viewport of cells on screen, so a grid shorter than the
+ * viewport cannot be scrolled at all and stays showing its first row. Allowing the
+ * offset up to the last cell instead let zooming a short song push the view to the
+ * bottom, showing one row and a lot of empty space.
+ */
+export function clampView({ x, z }, view, { cols, rows }) {
+  const limitX = Math.max(0, Math.ceil(x) - Math.max(1, cols));
+  const limitZ = Math.max(0, Math.ceil(z) - Math.max(1, rows));
+  return {
+    x0: Math.min(Math.max(0, Math.round(view.x0)), limitX),
+    z0: Math.min(Math.max(0, Math.round(view.z0)), limitZ),
+  };
+}
+
+/**
+ * Largest cell that still shows the whole grid in the given space.
+ *
+ * On a very long song even this lands on MIN_CELL, so "fit" shows as much as stays
+ * legible and leaves the rest to panning - more honest than shrinking every cell past
+ * the point of being countable.
+ */
+export function fitCell({ x, z, availableWidth, availableHeight }) {
+  const width = Math.max(1, availableWidth - GUTTER);
+  const height = Math.max(1, availableHeight - RULER);
+  const raw = Math.min(width / Math.max(1, x), height / Math.max(1, z));
+  return Math.min(MAX_CELL, Math.max(MIN_CELL, raw));
 }
 
 /** Sizes for redstone dust: a connector line with a node at each cell. */

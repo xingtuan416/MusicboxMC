@@ -229,6 +229,7 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
         zBase,
         tick: group.tick,
         actual: group.rt * 2 + startupDelayTicks,
+        x: rootX,
       });
       totalTicks = Math.max(totalTicks, group.tick);
       if (group.notes.length > perSide * 2) {
