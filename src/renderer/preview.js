@@ -20,6 +20,8 @@ import {
 const HEAD_BG = '#e9e7e2';
 /** The result the view was last fitted to, so a new one re-fits instead of scrolling. */
 let fittedFor = null;
+/** Whether that fit was measured against a panel that actually had a size. */
+let fittedMeasured = false;
 /** Multiplicative zoom step: the range is far wider than the old fit-only zoom. */
 const ZOOM_STEP = 1.3;
 /** Smallest panel the fit calculation will consider, and the margin it leaves. */
@@ -111,10 +113,18 @@ function renderPreview(res) {
 
   if (fittedFor !== res) {
     fittedFor = res;
-    // A new result: show as much of it as stays legible rather than the first sliver.
-    state.previewScale = fitScaleFor(res);
+    fittedMeasured = false;
     state.previewView = { x0: 0, z0: 0 };
     state.previewFocus = null;
+  }
+  if (!fittedMeasured) {
+    // Show as much of a new result as stays legible rather than the first sliver. The
+    // pane is often hidden at this point, so this is retried until it can be measured.
+    const fit = fitScaleFor(res);
+    if (fit !== null) {
+      fittedMeasured = true;
+      state.previewScale = fit;
+    }
   }
 
   const { x, z } = preview.size;
@@ -546,11 +556,17 @@ function updatePreviewZoomLabel() {
   $('previewZoom').textContent = `${Math.round(scaleForCell(cellForScale(state.previewScale)) * 100)}%`;
 }
 
-/** Scale at which as much of the grid as stays legible is visible. */
+/**
+ * Scale at which as much of the grid as stays legible is visible.
+ *
+ * Returns null when the panel has no size yet, which is the case while its pane is
+ * hidden. Fitting against the fallback size would produce a wrong zoom that then stuck,
+ * because the view is only fitted once per result.
+ */
 function fitScaleFor(res) {
   const preview = res?.preview;
   const wrap = $('canvasWrap');
-  if (!preview || !preview.size?.x || !wrap) return state.previewScale;
+  if (!preview || !preview.size?.x || !wrap || wrap.clientWidth === 0) return null;
   return scaleForCell(
     fitCell({
       x: preview.size.x,
@@ -612,8 +628,12 @@ function focusPreviewCell(x, z) {
 
 function fitPreview() {
   if (!state.generated) return;
-  state.previewScale = fitScaleFor(state.generated);
+  const fit = fitScaleFor(state.generated);
+  if (fit === null) return;
+  state.previewScale = fit;
   state.previewView = { x0: 0, z0: 0 };
+  state.previewFocus = null;
+  fittedMeasured = true;
   renderPreview(state.generated);
 }
 
