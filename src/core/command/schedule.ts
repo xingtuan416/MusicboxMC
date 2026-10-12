@@ -1,5 +1,5 @@
 import type { SongModel } from '../midi/types';
-import { mapPitch, DEFAULT_REGIONS, type OutOfRangePolicy } from '../palette/pitchMap';
+import { mapPitch, DEFAULT_REGIONS, type OutOfRangePolicy, type RegionTable } from '../palette/pitchMap';
 import type { LayoutWarning } from '../layout/types';
 import { secondsToTick } from '../tempo/tick';
 import { coreError } from '../errors';
@@ -43,6 +43,8 @@ export interface Schedule {
 export interface ScheduleOptions {
   baseTps: number;
   outOfRange: OutOfRangePolicy;
+  /** Which sample slots may be used; see PitchPalette. */
+  regions?: RegionTable;
   excludeTracks?: number[];
   transpose?: Record<number, number>;
 }
@@ -75,7 +77,7 @@ export function collectEvents(
     if (!Number.isFinite(transpose)) throw coreError('COMMAND_INVALID_TRANSPOSE');
 
     for (const note of track.notes) {
-      const mapped = mapPitch(note.midi, DEFAULT_REGIONS, options.outOfRange, transpose);
+      const mapped = mapPitch(note.midi, options.regions ?? DEFAULT_REGIONS, options.outOfRange, transpose);
       if (mapped.dropped || (mapped.degraded && options.outOfRange !== 'octave')) {
         warnings.push({
           code: 'OUT_OF_RANGE',

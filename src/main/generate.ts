@@ -5,7 +5,7 @@ import type { SongModel } from '../core/midi/types';
 import { layout, DEFAULT_LAYOUT_CONFIG } from '../core/layout/index';
 import { sliceRegions } from '../core/layout/regions';
 import type { LayoutConfig } from '../core/layout/types';
-import { DEFAULT_REGIONS } from '../core/palette/pitchMap';
+import { coveredRange, regionsFor, type RegionTable } from '../core/palette/pitchMap';
 import { buildLitematic, MC_1_20_4_DATA_VERSION, LITEMATIC_VERSION_1_20_4 } from '../core/litematic/build';
 import { speedTable } from '../core/tempo/speed';
 import { buildCommandPlayback } from '../core/command';
@@ -23,6 +23,23 @@ import type { AnalyzeResult, GenerateOptions, GenerateResult } from './types';
 
 const DEFAULT_PRESETS = [1.0, 0.75, 0.5, 1.5, 2.0];
 
+/**
+ * The note-block palette the user asked for.
+ *
+ * The five-slot palette is the default. Turning it off drops to the harp slot alone,
+ * which needs no resource pack at all but only reaches F#3-F#5; notes outside then
+ * fall to the out-of-range policy like any other out-of-range note.
+ */
+function paletteRegions(options: GenerateOptions): RegionTable {
+  return regionsFor(options.extendedRange === false ? 'piano' : 'full');
+}
+
+/** The MIDI span the chosen palette can sound, so the interface can name it. */
+function paletteRange(options: GenerateOptions): { low: number; high: number } {
+  const [low, high] = coveredRange(paletteRegions(options));
+  return { low, high };
+}
+
 function generateCommands(
   song: SongModel,
   base: AnalyzeResult,
@@ -32,7 +49,7 @@ function generateCommands(
   const presets = options.speedPresets ?? DEFAULT_PRESETS;
   const baseTps = options.baseTps ?? DEFAULT_LAYOUT_CONFIG.baseTps;
   try {
-    const compiled = buildCommandPlayback(song, options);
+    const compiled = buildCommandPlayback(song, { ...options, regions: paletteRegions(options) });
     const region = compiled.region;
     const buffer = buildLitematic([region], {
       name: song.name || base.file,
@@ -63,6 +80,7 @@ function generateCommands(
         playbackMode: 'command',
         commandPlayback: compiled.info,
         outOfRangeNotes: compiled.warnings.filter((warning) => warning.code === 'OUT_OF_RANGE').length,
+        pitchRange: paletteRange(options),
         stats: {
           tickCount: compiled.totalTicks,
           noteBlockCount: 0,
@@ -108,7 +126,7 @@ function layoutOptions(options: GenerateOptions) {
 
   return {
     config,
-    regions: DEFAULT_REGIONS,
+    regions: paletteRegions(options),
     outOfRange: options.outOfRange,
     excludeTracks: options.excludeTracks,
     transpose: options.transpose,
@@ -245,6 +263,7 @@ export function generate(
       playbackMode: 'redstone',
       bytes: buffer.length,
       outOfRangeNotes,
+      pitchRange: paletteRange(options),
       stats: {
         tickCount: result.totalTicks,
         noteBlockCount,

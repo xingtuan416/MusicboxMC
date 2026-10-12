@@ -15,6 +15,12 @@ export interface GenerateOptions {
   baseTps?: number;
   dMax?: number;
   outOfRange?: 'warn' | 'clamp' | 'octave' | 'drop';
+  /**
+   * Use all five note-block instruments to reach F#1-F#7 (the default), or the harp
+   * slot alone for F#3-F#5. Only the wide palette benefits from the companion
+   * resource pack; the narrow one never needs it.
+   */
+  extendedRange?: boolean;
   excludeTracks?: number[];
   transpose?: Record<number, number>;
   /** Block selection overrides (per track / pitch region) */
@@ -109,8 +115,10 @@ export interface GenerateResult extends AnalyzeResult {
   playbackMode?: 'redstone' | 'command';
   /** Command-mode controls, score namespace and execution budgets. */
   commandPlayback?: CommandPlaybackInfo;
-  /** Notes outside the resource-pack pitch range (F#1-F#7) that the frontend must report */
+  /** Notes outside the selected palette's range that the frontend must report */
   outOfRangeNotes: number;
+  /** MIDI span the selected palette can sound, so the interface can name it. */
+  pitchRange?: { low: number; high: number };
   stats: {
     tickCount: number;
     noteBlockCount: number;

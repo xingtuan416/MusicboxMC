@@ -1,5 +1,5 @@
 import type { SongModel } from '../midi/types';
-import type { OutOfRangePolicy } from '../palette/pitchMap';
+import type { OutOfRangePolicy, RegionTable } from '../palette/pitchMap';
 import type { RegionData } from '../litematic/build';
 import type { LayoutWarning, Vec3 } from '../layout/types';
 import { buildSchedule } from './schedule';
@@ -57,6 +57,8 @@ export const COMMAND_STRUCTURE_WARNING_BLOCKS = 4096;
 export interface CommandPlaybackOptions {
   baseTps?: number;
   outOfRange?: OutOfRangePolicy;
+  /** Which sample slots may be used; see PitchPalette. */
+  regions?: RegionTable;
   excludeTracks?: number[];
   transpose?: Record<number, number>;
   commandChainBudget?: number;
@@ -109,6 +111,7 @@ export function buildCommandPlayback(
   const { schedule, warnings } = buildSchedule(song, {
     baseTps,
     outOfRange: opts.outOfRange ?? 'warn',
+    regions: opts.regions,
     excludeTracks: opts.excludeTracks,
     transpose: opts.transpose,
   });
