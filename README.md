@@ -54,7 +54,7 @@ what it generates.
 3. **Generate.** The preview draws the circuit before you commit to it: one row per
    Z row, one column per X cell, time running to the right.
 
-   ![The circuit preview](docs/images/preview.png)
+   ![The redstone wiring view](docs/images/preview.png)
 
 4. **Paste.** Put the `.litematic` in `.minecraft/schematics/`, load it with
    Litematica in game, and power the circuit at its start.
