@@ -1,5 +1,6 @@
-import { app, BrowserWindow, Menu, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, Menu, dialog, ipcMain, net, protocol, shell } from 'electron';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { existsSync } from 'node:fs';
 import { analyzeFile, generate, generateToFile, type GenerateOptions } from './service';
 
@@ -12,6 +13,32 @@ const PRELOAD_FILE = join(__dirname, '..', 'preload', 'index.js');
 const ICON_FILE = existsSync(join(__dirname, 'icon.png'))
   ? join(__dirname, 'icon.png')
   : join(__dirname, '..', '..', '..', 'icon.png');
+
+/**
+ * The renderer is served over a custom `app://` scheme instead of `file://`.
+ *
+ * Chromium refuses to load ES module scripts from `file://` because the page has
+ * an opaque origin, so a renderer split into modules cannot run that way. Marking
+ * the scheme as standard and secure makes module loading work exactly like it does
+ * over HTTP, and it keeps the renderer off the file system at the same time.
+ *
+ * This has to be registered before the app is ready.
+ */
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+]);
+
+/** Serve the renderer directory over `app://`, refusing anything outside it. */
+function serveRenderer(): void {
+  protocol.handle('app', (request) => {
+    const { pathname } = new URL(request.url);
+    const target = join(RENDERER_DIR, decodeURIComponent(pathname));
+    if (!target.startsWith(RENDERER_DIR)) {
+      return new Response('forbidden', { status: 403 });
+    }
+    return net.fetch(pathToFileURL(target).toString());
+  });
+}
 
 let win: BrowserWindow | null = null;
 
@@ -37,7 +64,7 @@ function createWindow(): void {
     },
   });
 
-  win.loadFile(join(RENDERER_DIR, 'index.html'));
+  win.loadURL('app://musicbox/index.html');
 
   win.on('closed', () => {
     win = null;
@@ -109,6 +136,7 @@ function registerIpc(): void {
 app.whenReady().then(() => {
   // The renderer owns the application chrome; keep Electron's native File/Edit menu hidden.
   Menu.setApplicationMenu(null);
+  serveRenderer();
   registerIpc();
   createWindow();
 

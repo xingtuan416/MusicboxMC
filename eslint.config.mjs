@@ -31,7 +31,7 @@ export default tseslint.config(
     // The renderer is still plain JS running in a browser context.
     files: ['src/renderer/**/*.js'],
     languageOptions: {
-      sourceType: 'script',
+      sourceType: 'module',
       globals: { ...globals.browser },
     },
   },
