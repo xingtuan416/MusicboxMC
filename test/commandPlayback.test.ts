@@ -264,7 +264,9 @@ describe('command playback', () => {
       transpose: { 0: 1 },
     });
     expect(result.info.playedNotes).toBe(1);
-    expect(result.warnings).toContainEqual({ code: 'OUT_OF_RANGE', midi: 10, action: 'drop' });
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({ code: 'OUT_OF_RANGE', midi: 10, action: 'drop' }),
+    );
     const command = result.region
       .tileEntities!.map((entity) => entity.value.get('Command'))
       .find((tag) => tag?.type === TagType.String && tag.value.includes('playsound'));

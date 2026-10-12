@@ -164,11 +164,9 @@ describe('grouping notes and handling out-of-range pitches', () => {
     });
 
     expect(res.track.placements.some((p) => p.block === 'minecraft:note_block')).toBe(true);
-    expect(res.warnings).toContainEqual({
-      code: 'OUT_OF_RANGE',
-      midi: 10,
-      action: 'warn',
-    });
+    expect(res.warnings).toContainEqual(
+      expect.objectContaining({ code: 'OUT_OF_RANGE', midi: 10, action: 'warn', trackIndex: 0 }),
+    );
   });
 
   it('outOfRange=octave: shifts by octaves without an ordinary warning', () => {
@@ -198,10 +196,8 @@ describe('grouping notes and handling out-of-range pitches', () => {
     });
 
     expect(res.track.placements.some((p) => p.block === 'minecraft:note_block')).toBe(true);
-    expect(res.warnings).toContainEqual({
-      code: 'OUT_OF_RANGE',
-      midi: 10,
-      action: 'clamp',
-    });
+    expect(res.warnings).toContainEqual(
+      expect.objectContaining({ code: 'OUT_OF_RANGE', midi: 10, action: 'clamp', trackIndex: 0 }),
+    );
   });
 });

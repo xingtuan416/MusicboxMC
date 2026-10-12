@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_LAYOUT_CONFIG, layout } from '../src/core/layout/index';
 import { DEFAULT_REGIONS } from '../src/core/palette/pitchMap';
 import { gameTickToRedstone } from '../src/core/layout/track';
-import { song } from './helpers/song';
+import { song, songOfTracks } from './helpers/song';
 
 const cfg = { ...DEFAULT_LAYOUT_CONFIG };
 
@@ -76,14 +76,25 @@ describe('quantisation error (not zero, but bounded at 1 game tick per note and 
     }
   });
 
-  it('first group at rt 0: the track gets the +1 redstone tick lead-in and one TIMING_ADJUSTED', () => {
+  it('first group at rt 0: the song gets one STARTUP_LEAD_IN, not one warning per track', () => {
     const res = layout(song([{ tick: 0, midi: 60 }]), {
       config: cfg,
       regions: DEFAULT_REGIONS,
     });
     expect(res.placed[0]!.actual).toBe(2);
-    const ta = res.warnings.filter((w) => w.code === 'TIMING_ADJUSTED');
-    expect(ta).toHaveLength(1);
+    expect(res.warnings).toContainEqual({ code: 'STARTUP_LEAD_IN', ticks: 2 });
+    // The lead-in shifts every track equally, so it is not a per-note timing problem and
+    // must not be reported as one.
+    expect(res.warnings.filter((w) => w.code === 'TIMING_ADJUSTED')).toHaveLength(0);
+  });
+
+  it('reports the lead-in once no matter how many tracks start at rt 0', () => {
+    const multi = layout(
+      songOfTracks([[{ tick: 0, midi: 60 }], [{ tick: 0, midi: 64 }], [{ tick: 0, midi: 67 }]]),
+      { config: cfg, regions: DEFAULT_REGIONS },
+    );
+    expect(multi.warnings.filter((w) => w.code === 'STARTUP_LEAD_IN')).toHaveLength(1);
+    expect(multi.warnings.filter((w) => w.code === 'TIMING_ADJUSTED')).toHaveLength(0);
   });
 
   it('first group at rt >= 1: no lead-in, no warning, actual equals the original game tick', () => {
@@ -92,6 +103,7 @@ describe('quantisation error (not zero, but bounded at 1 game tick per note and 
       regions: DEFAULT_REGIONS,
     });
     expect(res.placed[0]!.actual).toBe(10);
+    expect(res.warnings.some((w) => w.code === 'STARTUP_LEAD_IN')).toBe(false);
     expect(res.warnings.some((w) => w.code === 'TIMING_ADJUSTED')).toBe(false);
   });
 

@@ -47,7 +47,7 @@ async function doAnalyze() {
     state.analyze = res;
     renderOverview(res);
     renderTrackList(res);
-    renderWarnings([], null);
+    renderWarnings(null);
 
     // Build the layout in memory right after parsing so the circuit preview works
     // without writing a file.
@@ -58,7 +58,7 @@ async function doAnalyze() {
       const previewRes = await api.generate(path, collectOptions());
       state.generated = previewRes;
       if (!previewRes.success) renderOverview(previewRes);
-      renderWarnings(previewRes.warnings || [], previewRes.pitchRange);
+      renderWarnings(previewRes);
       renderPreview(previewRes);
       updateWorkflowUI(previewRes.success ? 'ready' : 'error', previewRes);
       if (previewRes.success) {
@@ -119,7 +119,7 @@ async function doGenerate() {
     const res = await api.generate(path, collectOptions(), out || undefined);
     state.generated = res;
     renderOverview(res);
-    renderWarnings(res.warnings, res.pitchRange);
+    renderWarnings(res);
     // Nudge once, and only when the full range is in use.
     if (res.success) maybePromptForPack();
     renderPreview(res);

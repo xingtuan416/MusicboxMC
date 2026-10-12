@@ -18,10 +18,16 @@ const WARN_TEXT = {
     `强制合并：全曲统一启动等待 ${w.ticks} 游戏刻，峰值 ${w.peakNotes} 音；曲内相对时序不变`,
   FANOUT_EXPANDED: (w) =>
     `tick ${w.tick}：${w.n} 个音使用 ${w.stages} 级续电分支，单级两侧容量 ${w.limit}；仍为同一主线且同刻发声`,
-  OUT_OF_RANGE: (w, range) =>
-    `MIDI ${w.midi}（${pitchName(w.midi)}）超出电路音域 ${pitchRangeLabel(range)}，` +
-    `处理方式：${OUT_OF_RANGE_ACTION_TEXT[w.action] || w.action}`,
-  TIMING_ADJUSTED: (w) => `tick ${w.tick} 的音实际在 tick ${w.actual} 触发，偏移 ${w.actual - w.tick} tick`,
+  STARTUP_LEAD_IN: (w) =>
+    `全曲统一延后 ${w.ticks} 游戏刻（${(w.ticks / 20).toFixed(1)} 秒）：红石刻 0 上的音` +
+    `也需要一个中继器延迟才能驱动。曲内相对时序不变，不需要处理。`,
+  OUT_OF_RANGE: (w, ctx) =>
+    `${ctx.label(w.trackIndex)} · ${ctx.at(w.tick)} · MIDI ${w.midi}（${pitchName(w.midi)}）` +
+    `超出电路音域 ${pitchRangeLabel(ctx.range)}，处理方式：` +
+    `${OUT_OF_RANGE_ACTION_TEXT[w.action] || w.action}`,
+  TIMING_ADJUSTED: (w, ctx) =>
+    `${ctx.label(w.trackIndex)} · z${w.z} 行 · ${ctx.at(w.tick)} 的音实际在 ` +
+    `${ctx.at(w.actual)} 触发，偏移 ${w.actual - w.tick > 0 ? '+' : ''}${w.actual - w.tick} 游戏刻`,
   TRACK_SPLIT: (w) => `tick ${w.tick}：${w.notes} 个音密集放不下，已自动拆到新音轨`,
   SPATIAL_DRIFT: (w) => `tick ${w.tick}：该处空间偏差 ${w.drift} 格，超出多轨对齐容差`,
 };
@@ -48,7 +54,26 @@ function warnSeverity(code) {
   return 'info';
 }
 
-function renderWarnings(warnings, range) {
+/** Name the track a warning is about, falling back to its index. */
+function trackLabel(result, index) {
+  const track = (result?.tracks || []).find((t) => t.index === index);
+  return track && track.name ? `轨${index}「${track.name}」` : `轨${index}`;
+}
+
+/**
+ * Render the warning list for one result.
+ *
+ * Warnings carry where they are about - the track, the tick, and for a placed note the
+ * Z row - because "tick 846 is off by 4" is not actionable on a song with tens of
+ * thousands of ticks when nothing says which note block is meant.
+ */
+function renderWarnings(result) {
+  const warnings = result?.warnings ?? [];
+  const ctx = {
+    range: result?.pitchRange,
+    label: (index) => trackLabel(result, index),
+    at: (tick) => `tick ${tick}（${(tick / 20).toFixed(2)} 秒）`,
+  };
   const box = $('warnings');
   box.className = warnings.length === 0 ? 'empty-state compact-empty' : '';
   box.replaceChildren();
@@ -78,7 +103,7 @@ function renderWarnings(warnings, range) {
     const item = create('div', `warnitem ${warnSeverity(w.code)}`);
     item.append(
       create('span', 'code', w.code),
-      create('span', 'detail', (WARN_TEXT[w.code] || (() => JSON.stringify(w)))(w, range)),
+      create('span', 'detail', (WARN_TEXT[w.code] || (() => JSON.stringify(w)))(w, ctx)),
     );
     box.append(item);
   }

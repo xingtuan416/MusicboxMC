@@ -97,6 +97,8 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
           code: 'OUT_OF_RANGE',
           midi: note.midi,
           action: mapped.dropped ? 'drop' : (opts.outOfRange ?? 'warn'),
+          trackIndex: input.index,
+          tick: note.tick,
         });
       }
       if (mapped.dropped) continue;

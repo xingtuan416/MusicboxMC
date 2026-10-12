@@ -40,6 +40,8 @@ export interface PrepareGroupsOptions {
   regions: RegionTable;
   outOfRange: 'warn' | 'clamp' | 'octave' | 'drop';
   transpose: number;
+  /** Source MIDI track, carried into warnings so they can name the notes they mean. */
+  trackIndex: number;
   /** Capacity of one chord column, from `chordCapacity`. */
   maxChordNotes: number;
   /** When false, the surplus is dropped rather than reported for re-emission. */
@@ -51,7 +53,7 @@ export function prepareGroups(options: PrepareGroupsOptions): {
   overflow: OverflowGroup[];
   warnings: LayoutWarning[];
 } {
-  const { notes, regions, outOfRange, transpose, maxChordNotes, collectOverflow } = options;
+  const { notes, regions, outOfRange, transpose, maxChordNotes, collectOverflow, trackIndex } = options;
   const warnings: LayoutWarning[] = [];
   const overflow: OverflowGroup[] = [];
 
@@ -60,13 +62,25 @@ export function prepareGroups(options: PrepareGroupsOptions): {
   for (const note of notes) {
     const mapped = mapPitch(note.midi, regions, outOfRange, transpose);
     if (mapped.dropped) {
-      warnings.push({ code: 'OUT_OF_RANGE', midi: note.midi, action: 'drop' });
+      warnings.push({
+        code: 'OUT_OF_RANGE',
+        midi: note.midi,
+        action: 'drop',
+        trackIndex,
+        tick: note.tick,
+      });
       continue;
     }
     // Automatic octave shifting is an explicit user choice and stays silent; every
     // other degraded outcome is reported.
     if (mapped.degraded && outOfRange !== 'octave') {
-      warnings.push({ code: 'OUT_OF_RANGE', midi: note.midi, action: outOfRange });
+      warnings.push({
+        code: 'OUT_OF_RANGE',
+        midi: note.midi,
+        action: outOfRange,
+        trackIndex,
+        tick: note.tick,
+      });
     }
 
     const rt = gameTickToRedstone(note.tick);

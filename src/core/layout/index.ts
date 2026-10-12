@@ -1,6 +1,7 @@
 import {
   buildTrack,
   chordCapacity,
+  GAME_TICKS_PER_REDSTONE_TICK,
   gameTickToRedstone,
   groupByTick,
   maxChordRows,
@@ -214,6 +215,9 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   const pitch = config.trackPitch === 'auto' ? 2 * maxRows + 2 : config.trackPitch;
 
   const warnings: LayoutWarning[] = [];
+  // One notice for the whole song. Every track is shifted by the same lead-in, so this
+  // is not a per-note problem and must not be reported as one.
+  if (base === 1) warnings.push({ code: 'STARTUP_LEAD_IN', ticks: GAME_TICKS_PER_REDSTONE_TICK });
   const tracks = [];
   const placed: LayoutResult['placed'] = [];
   let maxTick = 0;

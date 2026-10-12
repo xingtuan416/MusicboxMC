@@ -59,8 +59,25 @@ export type LayoutWarning =
    */
   | { code: 'COMMAND_STRUCTURE_SIZE'; commandBlocks: number; limit: number }
   | { code: 'POLYPHONY_EXCEEDED'; tick: number; n: number; limit: number }
-  | { code: 'OUT_OF_RANGE'; midi: number; action: string }
-  | { code: 'TIMING_ADJUSTED'; tick: number; actual: number }
+  /**
+   * The whole circuit fires one redstone tick after song time zero, because the group
+   * at redstone tick 0 still needs a repeater to drive it. Relative timing is unchanged.
+   *
+   * Reported **once for the song**. Reporting it per track made a by-design, song-wide
+   * shift read as one timing problem per track, with no note to point at.
+   */
+  | { code: 'STARTUP_LEAD_IN'; ticks: number }
+  /** `trackIndex` and `tick` are what let the interface say which note is meant. */
+  | { code: 'OUT_OF_RANGE'; midi: number; action: string; trackIndex: number; tick: number }
+  /** `x` and `z` are the cell the note block was placed at, so the view can point at it. */
+  | {
+      code: 'TIMING_ADJUSTED';
+      tick: number;
+      actual: number;
+      trackIndex: number;
+      x: number;
+      z: number;
+    }
   /** A dense group did not fit and was re-emitted on a new track. */
   | { code: 'TRACK_SPLIT'; tick: number; notes: number }
   /** Song-wide startup compensation in game ticks; music-relative timing is unchanged. */

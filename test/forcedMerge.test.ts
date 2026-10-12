@@ -114,7 +114,9 @@ describe('forced instrument merge', () => {
     const note = result.tracks[0]!.taps[0]!.notes[0]!;
     expect(note.block).toBe('minecraft:gold_block');
     expect(note.note).toBe(6); // MIDI 72, flute region starting at 66.
-    expect(result.warnings).toContainEqual({ code: 'OUT_OF_RANGE', midi: 10, action: 'drop' });
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({ code: 'OUT_OF_RANGE', midi: 10, action: 'drop' }),
+    );
   });
 
   it('rejects unsafe fanout instead of discarding or independently splitting notes', () => {

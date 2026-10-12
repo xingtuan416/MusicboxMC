@@ -102,6 +102,7 @@ export function buildTrack(opts: BuildTrackOptions): {
     transpose: opts.transpose ?? 0,
     maxChordNotes,
     collectOverflow: opts.collectOverflow === true,
+    trackIndex: opts.trackIndex,
   });
 
   // 3) Lay the main line along +X: [pre-group repeaters][branch column][repeaters][notes]
@@ -162,13 +163,8 @@ export function buildTrack(opts: BuildTrackOptions): {
   // unchanged and everything simply fires 0.1s later. layout() computes this once
   // for the song and passes it in; when absent it is inferred from this track.
   const base = opts.base ?? (prepared.length > 0 && prepared[0]!.rt === 0 ? 1 : 0);
-  if (base === 1) {
-    warnings.push({
-      code: 'TIMING_ADJUSTED',
-      tick: prepared[0]!.tick,
-      actual: GAME_TICKS_PER_REDSTONE_TICK,
-    });
-  }
+  // The lead-in itself is reported once for the song by layout(), not per track: it
+  // shifts every track equally, so a per-track report reads as N separate problems.
 
   for (const g of prepared) {
     const gap = g.rt + base - prevRt; // >= 1: equal rts are merged and base keeps the first >= 1
@@ -286,7 +282,14 @@ export function buildTrack(opts: BuildTrackOptions): {
     // The quantisation offset already includes the 2*base lead-in, so only a deviation
     // beyond the lead-in plus one game tick of grid error is worth reporting.
     if (Math.abs(actual - g.tick - 2 * base) > MAX_TRIGGER_SHIFT) {
-      warnings.push({ code: 'TIMING_ADJUSTED', tick: g.tick, actual });
+      warnings.push({
+        code: 'TIMING_ADJUSTED',
+        tick: g.tick,
+        actual,
+        trackIndex: opts.trackIndex,
+        x: xCol,
+        z: opts.zBase,
+      });
     }
 
     x = xCol + tail;

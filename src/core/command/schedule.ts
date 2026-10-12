@@ -78,16 +78,19 @@ export function collectEvents(
 
     for (const note of track.notes) {
       const mapped = mapPitch(note.midi, options.regions ?? DEFAULT_REGIONS, options.outOfRange, transpose);
+      // Resolved before the drop check so a warning can name the tick it is about.
+      const tick = secondsToTick(note.timeSec, options.baseTps);
       if (mapped.dropped || (mapped.degraded && options.outOfRange !== 'octave')) {
         warnings.push({
           code: 'OUT_OF_RANGE',
           midi: note.midi,
           action: mapped.dropped ? 'drop' : options.outOfRange,
+          trackIndex: track.index,
+          tick,
         });
       }
       if (mapped.dropped) continue;
 
-      const tick = secondsToTick(note.timeSec, options.baseTps);
       if (!Number.isSafeInteger(tick) || tick < 0 || tick > SCORE_MAX) {
         throw coreError('COMMAND_TIME_OUT_OF_RANGE');
       }

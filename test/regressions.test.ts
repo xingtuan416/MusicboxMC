@@ -28,11 +28,9 @@ describe('regression: layout options and merged track space', () => {
       0,
     );
     expect(noteBlocks).toBe(1);
-    expect(result.warnings).toContainEqual({
-      code: 'OUT_OF_RANGE',
-      midi: 10,
-      action: 'drop',
-    });
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({ code: 'OUT_OF_RANGE', midi: 10, action: 'drop' }),
+    );
   });
 
   it('limits a single track to its chord capacity via dMax', () => {
