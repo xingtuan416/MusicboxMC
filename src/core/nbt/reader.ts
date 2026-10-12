@@ -1,4 +1,5 @@
 import { NbtCompound, NbtList, NbtTag, TagType, nbt } from './tag';
+import { coreError } from '../errors';
 
 /** Big-endian NBT reader, used for in-house read-back verification. */
 class NbtReader {
@@ -8,7 +9,11 @@ class NbtReader {
 
   private need(n: number): void {
     if (this.pos + n > this.buf.length) {
-      throw new Error(`NBT 越界读取: pos=${this.pos} need=${n} len=${this.buf.length}`);
+      throw coreError('NBT_READ_OUT_OF_BOUNDS', {
+        position: this.pos,
+        need: n,
+        length: this.buf.length,
+      });
     }
   }
 
@@ -124,9 +129,9 @@ class NbtReader {
         return { type: TagType.Compound, value: map } satisfies NbtCompound;
       }
       case TagType.End:
-        throw new Error('无法读取 End 标签的负载');
+        throw coreError('NBT_UNREADABLE_END_TAG');
       default:
-        throw new Error(`未知标签类型 ${type}`);
+        throw coreError('NBT_UNKNOWN_TAG_TYPE', { type });
     }
   }
 

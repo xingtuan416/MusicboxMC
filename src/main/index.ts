@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { existsSync } from 'node:fs';
 import { analyzeFile, generate, generateToFile, type GenerateOptions } from './service';
+import { describeCoreError } from './messages';
 
 /**
  * Static asset resolution. The build output layout is dist/src/main/index.js,
@@ -106,7 +107,7 @@ function registerIpc(): void {
     try {
       return analyzeFile(assertFile(path));
     } catch (e) {
-      throw new Error(`解析失败：${(e as Error).message}`, { cause: e });
+      throw new Error(`解析失败：${describeCoreError(e)}`, { cause: e });
     }
   });
 
@@ -118,7 +119,7 @@ function registerIpc(): void {
       }
       return generate(file, options ?? {}).result;
     } catch (e) {
-      throw new Error(`生成失败：${(e as Error).message}`, { cause: e });
+      throw new Error(`生成失败：${describeCoreError(e)}`, { cause: e });
     }
   });
 

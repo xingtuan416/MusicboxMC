@@ -1,6 +1,7 @@
 import { nbt, TagType, type NbtCompound } from '../nbt/tag';
 import type { RegionData } from '../litematic/build';
 import type { Vec3 } from '../layout/types';
+import { coreError } from '../errors';
 
 /**
  * Geometry and block assembly for the command player.
@@ -36,7 +37,7 @@ export function commandChainPosition(index: number): Vec3 {
 export function chainDirection(from: Vec3, to: Vec3): string {
   const delta = [to.x - from.x, to.y - from.y, to.z - from.z];
   if (delta.reduce((sum, value) => sum + Math.abs(value), 0) !== 1) {
-    throw new Error('命令方块链不连续');
+    throw coreError('COMMAND_CHAIN_DISCONTINUOUS');
   }
   const [dx, dy, dz] = delta as [number, number, number];
   return dx ? (dx > 0 ? 'east' : 'west') : dy ? (dy > 0 ? 'up' : 'down') : dz > 0 ? 'south' : 'north';

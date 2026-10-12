@@ -14,6 +14,7 @@ import { generate, generateToFile } from '../src/main/service';
 import type { SongModel } from '../src/core/midi/types';
 import { mapPitch } from '../src/core/palette/pitchMap';
 import { buildSong, denseSong } from './helpers/song';
+import { expectCoreError } from './helpers/errors';
 
 function stackedSong(ticks: number[]): SongModel {
   return buildSong({
@@ -268,16 +269,30 @@ describe('command playback', () => {
       .tileEntities!.map((entity) => entity.value.get('Command'))
       .find((tag) => tag?.type === TagType.String && tag.value.includes('playsound'));
     expect(command?.value).toContain('minecraft:block.note_block.harp');
-    expect(() => buildCommandPlayback(source, { excludeTracks: [0, 1] })).toThrow('没有可生成');
+    expectCoreError(() => buildCommandPlayback(source, { excludeTracks: [0, 1] }), 'COMMAND_NO_NOTES');
   });
 
   it('validates timing, per-world chain budgets and sound pressure', () => {
-    expect(() => buildCommandPlayback(stackedSong([0]), { baseTps: Infinity })).toThrow('TPS');
-    expect(() => buildCommandPlayback(stackedSong([0]), { commandChainBudget: 3 })).toThrow('预算');
+    expectCoreError(
+      () => buildCommandPlayback(stackedSong([0]), { baseTps: Infinity }),
+      'COMMAND_INVALID_TPS',
+    );
+    // A budget outside the accepted range is rejected up front...
+    expectCoreError(
+      () => buildCommandPlayback(stackedSong([0]), { commandChainBudget: 0 }),
+      'COMMAND_INVALID_BUDGET',
+    );
+    // ...while a valid but too-small budget fails later, once the chain length is
+    // known. These used to be one assertion matching the word "budget", which
+    // appeared in both messages and therefore never distinguished them.
+    expectCoreError(
+      () => buildCommandPlayback(stackedSong([0]), { commandChainBudget: 3 }),
+      'COMMAND_CHAIN_TOO_LONG',
+    );
     const minimum = buildCommandPlayback(stackedSong([0])).info.chainLength + 1;
     expect(() => buildCommandPlayback(stackedSong([0]), { commandChainBudget: minimum })).not.toThrow();
-    expect(() => buildCommandPlayback(stackedSong([NaN]))).toThrow('计分板');
-    expect(() => buildCommandPlayback(stackedSong([2147483647]))).toThrow('计分板');
+    expectCoreError(() => buildCommandPlayback(stackedSong([NaN])), 'COMMAND_TIME_OUT_OF_RANGE');
+    expectCoreError(() => buildCommandPlayback(stackedSong([2147483647])), 'COMMAND_TIME_OUT_OF_RANGE');
     expect(buildCommandPlayback(stackedSong(Array(32).fill(0))).warnings).toContainEqual({
       code: 'COMMAND_SOUND_PRESSURE',
       peakNotes: 32,
@@ -314,12 +329,12 @@ describe('command playback', () => {
       blocks: [],
       tileEntities: [entity],
     };
-    expect(() => buildLitematic([region], meta)).toThrow('缺少对应');
+    expectCoreError(() => buildLitematic([region], meta), 'LITEMATIC_ENTITY_WITHOUT_BLOCK');
     region.blocks.push({ x: 0, y: 0, z: 0, state: { name: 'minecraft:command_block' } });
     region.tileEntities!.push(entity);
-    expect(() => buildLitematic([region], meta)).toThrow('重复');
+    expectCoreError(() => buildLitematic([region], meta), 'LITEMATIC_DUPLICATE_ENTITY');
     region.tileEntities = [nbt.compound({ x: nbt.int(1), y: nbt.int(0), z: nbt.int(0) })];
-    expect(() => buildLitematic([region], meta)).toThrow('越界');
+    expectCoreError(() => buildLitematic([region], meta), 'LITEMATIC_ENTITY_OUT_OF_BOUNDS');
   });
 
   it('integrates with service, reports mode correctly and does not overwrite files on failures', () => {

@@ -10,6 +10,7 @@ import {
 import { writeNbt } from '../src/core/nbt/writer';
 import { readNbt } from '../src/core/nbt/reader';
 import { TagType, nbt } from '../src/core/nbt/tag';
+import { expectCoreError } from './helpers/errors';
 
 describe('NBT writer/reader round-trip', () => {
   it('round-trips every tag type', () => {
@@ -116,14 +117,16 @@ describe('litematic assembly and read-back', () => {
   });
 
   it('rejects block coordinates outside the region size', () => {
-    expect(() =>
-      buildLitematic([{ ...region, blocks: [{ x: 99, y: 0, z: 0, state: { name: 'minecraft:stone' } }] }], {
-        name: 'x',
-        author: 'x',
-        description: '',
-        dataVersion: 3700,
-        version: 6,
-      }),
-    ).toThrow(/越界/);
+    expectCoreError(
+      () =>
+        buildLitematic([{ ...region, blocks: [{ x: 99, y: 0, z: 0, state: { name: 'minecraft:stone' } }] }], {
+          name: 'x',
+          author: 'x',
+          description: '',
+          dataVersion: 3700,
+          version: 6,
+        }),
+      'LITEMATIC_BLOCK_OUT_OF_BOUNDS',
+    );
   });
 });

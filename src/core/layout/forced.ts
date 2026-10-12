@@ -30,6 +30,7 @@ import type {
   Vec3,
 } from './types';
 import { validateForcedTrack } from './forcedValidation';
+import { coreError } from '../errors';
 
 /** A globally merged instrument, retaining the first included source track's identity. */
 export interface ForcedInput {
@@ -71,10 +72,10 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
     !Number.isInteger(config.floorY) ||
     (config.trackPitch !== 'auto' && (!Number.isFinite(config.trackPitch) || config.trackPitch <= 0))
   ) {
-    throw new Error('强制合并要求有效的 TPS、电路层坐标和主线间距');
+    throw coreError('FORCED_INVALID_CONFIG');
   }
   if (config.floorY !== config.circuitY - 1) {
-    throw new Error('强制合并要求支撑层位于电路层正下方');
+    throw coreError('FORCED_SUPPORT_LAYER');
   }
   const warnings: LayoutWarning[] = [];
   const perSide = forcedNotesPerSide(config.dMax);
@@ -84,8 +85,7 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
   const prepared = inputs.map((input) => {
     const byRt = new Map<number, Group>();
     for (const note of input.notes) {
-      if (!Number.isSafeInteger(note.tick) || note.tick < 0)
-        throw new Error('强制合并音符时间必须是非负整数游戏刻');
+      if (!Number.isSafeInteger(note.tick) || note.tick < 0) throw coreError('FORCED_INVALID_NOTE_TIME');
       const mapped = mapPitch(
         note.midi,
         regions,
@@ -119,10 +119,12 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
   // cannot borrow extra repeaters: doing so would change dense consecutive beats.
   const mainRun = branchCells + 2;
   if (mainRun > MAX_PAD_RUN) {
-    throw new Error(
-      `强制合并峰值 ${peakNotes} 音需要 ${branchDelay} 红石刻同步补偿，` +
-        `主线需 ${mainRun} 格连续红石粉，超过安全预算 ${MAX_PAD_RUN}；未生成投影`,
-    );
+    throw coreError('FORCED_BRANCH_TOO_DEEP', {
+      peakNotes,
+      branchDelay,
+      mainRun,
+      maxPadRun: MAX_PAD_RUN,
+    });
   }
   const base = minRt === 0 ? 1 : 0;
   const startupDelayTicks = (base + branchDelay) * GAME_TICKS_PER_REDSTONE_TICK;
@@ -148,11 +150,13 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
     const occupied = new Map<string, BlockPlacement>();
     const taps: Tap[] = [];
     const support = resolve({ slot: 'wireSupport', trackIndex: input.index });
-    if (support === 'minecraft:air') throw new Error('强制合并的红石粉和中继器支撑方块不能为空气');
+    if (support === 'minecraft:air') throw coreError('FORCED_SUPPORT_IS_AIR');
     const key = (pos: Vec3): string => `${pos.x},${pos.y},${pos.z}`;
     const put = (x: number, y: number, z: number, state: BlockState): void => {
       const placement = place({ x, y, z }, state);
-      if (occupied.has(key(placement.pos))) throw new Error(`强制合并电路坐标冲突：${key(placement.pos)}`);
+      if (occupied.has(key(placement.pos))) {
+        throw coreError('FORCED_COORDINATE_CONFLICT', { position: key(placement.pos) });
+      }
       occupied.set(key(placement.pos), placement);
       placements.push(placement);
     };

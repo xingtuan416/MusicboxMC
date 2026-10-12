@@ -9,6 +9,7 @@ import type { SongModel } from '../src/core/midi/types';
 import { generate, generateToFile } from '../src/main/service';
 import { parseLitematic } from '../src/core/litematic/build';
 import { buildSong, denseSong } from './helpers/song';
+import { expectCoreError } from './helpers/errors';
 
 function multiTrackSong(
   specs: Array<{ instrument?: string; percussion?: boolean; ticks: number[] }>,
@@ -117,24 +118,29 @@ describe('forced instrument merge', () => {
   });
 
   it('rejects unsafe fanout instead of discarding or independently splitting notes', () => {
-    expect(() =>
-      layout(multiTrackSong([{ ticks: Array(617).fill(0) }]), { forceMergeSameInstrument: true }),
-    ).toThrow('未生成投影');
-    expect(() =>
-      layout(multiTrackSong([{ ticks: [0] }]), {
-        forceMergeSameInstrument: true,
-        blocks: { tracks: { 0: { wireSupport: 'minecraft:air' } } },
-      }),
-    ).toThrow('不能为空气');
+    expectCoreError(
+      () => layout(multiTrackSong([{ ticks: Array(617).fill(0) }]), { forceMergeSameInstrument: true }),
+      'FORCED_BRANCH_TOO_DEEP',
+    );
+    expectCoreError(
+      () =>
+        layout(multiTrackSong([{ ticks: [0] }]), {
+          forceMergeSameInstrument: true,
+          blocks: { tracks: { 0: { wireSupport: 'minecraft:air' } } },
+        }),
+      'FORCED_SUPPORT_IS_AIR',
+    );
     const dropped = multiTrackSong([{ ticks: [0] }]);
     dropped.tracks[0]!.notes[0]!.midi = 10;
     expect(layout(dropped, { forceMergeSameInstrument: true, outOfRange: 'drop' }).tracks).toHaveLength(0);
-    expect(() =>
-      layout(multiTrackSong([{ ticks: [0] }]), {
-        forceMergeSameInstrument: true,
-        config: { baseTps: Infinity },
-      }),
-    ).toThrow('有效的 TPS');
+    expectCoreError(
+      () =>
+        layout(multiTrackSong([{ ticks: [0] }]), {
+          forceMergeSameInstrument: true,
+          config: { baseTps: Infinity },
+        }),
+      'FORCED_INVALID_CONFIG',
+    );
   });
 
   it.each([1, 2, 3, 7, 14])(

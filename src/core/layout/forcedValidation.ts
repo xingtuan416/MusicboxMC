@@ -1,5 +1,6 @@
 import type { BlockPlacement, TrackSkeleton } from './types';
 import { GAME_TICKS_PER_REDSTONE_TICK, WIRE_STRENGTH } from './track';
+import { coreError } from '../errors';
 
 /** Diagnostics from an actual block graph, independent of planned note paths. */
 export interface ForcedValidation {
@@ -34,31 +35,31 @@ export function validateForcedTrack(
     const k = key(block.pos.x, block.pos.z);
     if (block.pos.y === circuitY - 1 && block.block !== 'minecraft:air') supports.add(k);
     if (block.pos.y !== circuitY) continue;
-    if (byPos.has(k)) throw new Error(`强制合并校验：方块重叠 ${k}`);
+    if (byPos.has(k)) throw coreError('FORCED_VALIDATION_BLOCK_OVERLAP', { position: k });
     byPos.set(k, block);
   }
   const expected = new Map<string, number>();
   const taps = track.taps;
-  if (taps.length !== expectedTicks.length) throw new Error('强制合并校验：音群时刻数不一致');
+  if (taps.length !== expectedTicks.length) throw coreError('FORCED_VALIDATION_TAP_MISMATCH');
   taps.forEach((tap, i) => {
     for (const note of tap.notes) expected.set(key(note.notePos.x, note.notePos.z), expectedTicks[i]!);
   });
   for (const [k, block] of byPos) {
-    if (!supports.has(k)) throw new Error(`强制合并校验：缺少支撑方块 ${k}`);
+    if (!supports.has(k)) throw coreError('FORCED_VALIDATION_MISSING_SUPPORT', { position: k });
     if (block.block === 'minecraft:note_block' && !expected.has(k)) {
-      throw new Error(`强制合并校验：未登记音符盒 ${k}`);
+      throw coreError('FORCED_VALIDATION_UNREGISTERED_NOTE', { position: k });
     }
     if (block.block === 'minecraft:repeater') {
       const facing = DIRECTIONS.find((dir) => dir.name === block.props?.facing);
       const delay = Number(block.props?.delay);
       if (!facing || !Number.isInteger(delay) || delay < 1 || delay > 4) {
-        throw new Error(`强制合并校验：无效中继器状态 ${k}`);
+        throw coreError('FORCED_VALIDATION_BAD_REPEATER', { position: k });
       }
       // A repeater output pointing into another repeater's side locks it.
       for (const side of DIRECTIONS.filter((dir) => (facing.dx !== 0 ? dir.dz !== 0 : dir.dx !== 0))) {
         const neighbor = byPos.get(key(block.pos.x + side.dx, block.pos.z + side.dz));
         if (neighbor?.block === 'minecraft:repeater' && neighbor.props?.facing === side.name) {
-          throw new Error(`强制合并校验：中继器可能被侧向锁定 ${k}`);
+          throw coreError('FORCED_VALIDATION_REPEATER_LOCKED', { position: k });
         }
       }
     }
@@ -80,7 +81,7 @@ export function validateForcedTrack(
     queue.push({ block, tick, strength });
   };
   const source = byPos.get(key(0, track.zBase));
-  if (source?.block !== 'minecraft:redstone_wire') throw new Error('强制合并校验：缺少单主线接电入口');
+  if (source?.block !== 'minecraft:redstone_wire') throw coreError('FORCED_VALIDATION_NO_ENTRY');
   emit(source, 0, WIRE_STRENGTH);
   for (let head = 0; head < queue.length; head++) {
     const signal = queue[head]!;
@@ -112,12 +113,18 @@ export function validateForcedTrack(
   let lastTriggerTick = 0;
   for (const [k, block] of byPos) {
     const signal = arrivals.get(k);
-    if (!signal) throw new Error(`强制合并校验：信号无法到达 ${block.block} (${k})`);
+    if (!signal) {
+      throw coreError('FORCED_VALIDATION_UNREACHABLE', { block: block.block, position: k });
+    }
     if (block.block === 'minecraft:redstone_wire')
       minWireStrength = Math.min(minWireStrength, signal.strength);
     if (block.block === 'minecraft:note_block') {
       if (signal.tick !== expected.get(k)) {
-        throw new Error(`强制合并校验：音符盒 (${k}) 实际 ${signal.tick} 游戏刻，期望 ${expected.get(k)}`);
+        throw coreError('FORCED_VALIDATION_WRONG_TICK', {
+          position: k,
+          actual: signal.tick,
+          expected: expected.get(k)!,
+        });
       }
       lastTriggerTick = Math.max(lastTriggerTick, signal.tick);
     }

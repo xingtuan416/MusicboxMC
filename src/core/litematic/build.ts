@@ -4,6 +4,7 @@ import { NbtCompound, NbtTag, TagType, nbt, nbtIntVec3 } from '../nbt/tag';
 import { readNbt } from '../nbt/reader';
 import { writeNbt } from '../nbt/writer';
 import { BlockState, stateKey } from '../palette/noteBlock';
+import { coreError } from '../errors';
 
 export interface RegionData {
   /** Region origin (whole-map coordinate system) */
@@ -51,12 +52,12 @@ function buildRegion(region: RegionData): PackedRegion {
   for (const entity of region.tileEntities ?? []) {
     const pos = ['x', 'y', 'z'].map((axis) => getInt(entity, axis));
     if (pos.some((value, i) => value < 0 || value >= [sx, sy, sz][i]!)) {
-      throw new Error('方块实体坐标越界');
+      throw coreError('LITEMATIC_ENTITY_OUT_OF_BOUNDS');
     }
     if (!blockPositions.has(pos.join(','))) {
-      throw new Error('方块实体缺少对应方块');
+      throw coreError('LITEMATIC_ENTITY_WITHOUT_BLOCK');
     }
-    if (entityPositions.has(pos.join(','))) throw new Error('方块实体坐标重复');
+    if (entityPositions.has(pos.join(','))) throw coreError('LITEMATIC_DUPLICATE_ENTITY');
     entityPositions.add(pos.join(','));
   }
 
@@ -69,7 +70,14 @@ function buildRegion(region: RegionData): PackedRegion {
 
   for (const b of region.blocks) {
     if (b.x < 0 || b.y < 0 || b.z < 0 || b.x >= sx || b.y >= sy || b.z >= sz) {
-      throw new Error(`方块坐标越界: (${b.x},${b.y},${b.z}) 尺寸 (${sx},${sy},${sz})`);
+      throw coreError('LITEMATIC_BLOCK_OUT_OF_BOUNDS', {
+        x: b.x,
+        y: b.y,
+        z: b.z,
+        sizeX: sx,
+        sizeY: sy,
+        sizeZ: sz,
+      });
     }
     const key = stateKey(b.state);
     let id = paletteIndex.get(key);
@@ -204,13 +212,13 @@ export interface ParsedLitematic {
 
 function getInt(c: NbtCompound, key: string): number {
   const t = c.value.get(key);
-  if (!t || t.type !== TagType.Int) throw new Error(`缺少 Int 标签 ${key}`);
+  if (!t || t.type !== TagType.Int) throw coreError('LITEMATIC_MISSING_INT', { key });
   return t.value;
 }
 
 function getVec3(c: NbtCompound, key: string): { x: number; y: number; z: number } {
   const t = c.value.get(key);
-  if (!t || t.type !== TagType.Compound) throw new Error(`缺少 Compound 标签 ${key}`);
+  if (!t || t.type !== TagType.Compound) throw coreError('LITEMATIC_MISSING_COMPOUND', { key });
   return {
     x: getInt(t, 'x'),
     y: getInt(t, 'y'),
@@ -221,13 +229,13 @@ function getVec3(c: NbtCompound, key: string): { x: number; y: number; z: number
 /** Decompress and parse a .litematic (in-house read-back for verification and simulation). */
 export function parseLitematic(buf: Buffer): ParsedLitematic {
   const { tag } = readNbt(gunzipSync(buf));
-  if (tag.type !== TagType.Compound) throw new Error('根标签不是 Compound');
+  if (tag.type !== TagType.Compound) throw coreError('LITEMATIC_ROOT_NOT_COMPOUND');
 
   const version = getInt(tag, 'Version');
   const dataVersion = getInt(tag, 'MinecraftDataVersion');
 
   const metaTag = tag.value.get('Metadata');
-  if (!metaTag || metaTag.type !== TagType.Compound) throw new Error('缺少 Metadata');
+  if (!metaTag || metaTag.type !== TagType.Compound) throw coreError('LITEMATIC_MISSING_METADATA');
   const metadata = {
     name: (metaTag.value.get('Name') as { value: string }).value,
     author: (metaTag.value.get('Author') as { value: string }).value,
@@ -236,7 +244,7 @@ export function parseLitematic(buf: Buffer): ParsedLitematic {
   };
 
   const regionsTag = tag.value.get('Regions');
-  if (!regionsTag || regionsTag.type !== TagType.Compound) throw new Error('缺少 Regions');
+  if (!regionsTag || regionsTag.type !== TagType.Compound) throw coreError('LITEMATIC_MISSING_REGIONS');
 
   const regions: ParsedRegion[] = [];
   for (const [name, regionTag] of regionsTag.value) {
@@ -245,9 +253,9 @@ export function parseLitematic(buf: Buffer): ParsedLitematic {
     const size = getVec3(regionTag, 'Size');
 
     const paletteTag = regionTag.value.get('BlockStatePalette');
-    if (!paletteTag || paletteTag.type !== TagType.List) throw new Error('缺少 BlockStatePalette');
+    if (!paletteTag || paletteTag.type !== TagType.List) throw coreError('LITEMATIC_MISSING_PALETTE');
     const palette: BlockState[] = paletteTag.value.map((entry) => {
-      if (entry.type !== TagType.Compound) throw new Error('调色板条目不是 Compound');
+      if (entry.type !== TagType.Compound) throw coreError('LITEMATIC_BAD_PALETTE_ENTRY');
       const nameTag = entry.value.get('Name');
       const propsTag = entry.value.get('Properties');
       const state: BlockState = { name: nameTag ? (nameTag as { value: string }).value : 'minecraft:air' };
@@ -260,7 +268,7 @@ export function parseLitematic(buf: Buffer): ParsedLitematic {
     });
 
     const statesTag = regionTag.value.get('BlockStates');
-    if (!statesTag || statesTag.type !== TagType.LongArray) throw new Error('缺少 BlockStates');
+    if (!statesTag || statesTag.type !== TagType.LongArray) throw coreError('LITEMATIC_MISSING_BLOCK_STATES');
 
     const volume = Math.abs(size.x) * Math.abs(size.y) * Math.abs(size.z);
     const bits = requiredBits(palette.length);

@@ -13,6 +13,7 @@ import {
 import { buildPlayer, commandChainPosition, relativePosition, type Control } from './player';
 
 export { commandChainPosition, COMMAND_CHAIN_EDGE } from './player';
+import { coreError } from '../errors';
 
 /**
  * Command-block playback: an alternative backend that emits no redstone at all.
@@ -100,9 +101,9 @@ export function buildCommandPlayback(
 ): CommandPlaybackResult {
   const baseTps = opts.baseTps ?? 20;
   const budget = opts.commandChainBudget ?? DEFAULT_COMMAND_CHAIN_BUDGET;
-  if (!Number.isFinite(baseTps) || baseTps <= 0) throw new Error('命令播放要求有效的 TPS');
+  if (!Number.isFinite(baseTps) || baseTps <= 0) throw coreError('COMMAND_INVALID_TPS');
   if (!Number.isSafeInteger(budget) || budget < 1 || budget > DEFAULT_COMMAND_CHAIN_BUDGET) {
-    throw new Error(`命令链预算必须是 1–${DEFAULT_COMMAND_CHAIN_BUDGET} 的整数`);
+    throw coreError('COMMAND_INVALID_BUDGET', { max: DEFAULT_COMMAND_CHAIN_BUDGET });
   }
 
   const { schedule, warnings } = buildSchedule(song, {
@@ -129,7 +130,7 @@ export function buildCommandPlayback(
   const bootstrap = buildBootstrap(objective, storage, frames);
   const chainLength = Math.max(commands.length - 1, bootstrap.length - 1, 6);
   if (chainLength >= budget) {
-    throw new Error(`命令播放需 ${chainLength} 个链步骤，必须小于预算 ${budget}；未生成投影`);
+    throw coreError('COMMAND_CHAIN_TOO_LONG', { chainLength, budget });
   }
 
   const controls: Control[] = [

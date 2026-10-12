@@ -10,6 +10,7 @@ import { buildLitematic, MC_1_20_4_DATA_VERSION, LITEMATIC_VERSION_1_20_4 } from
 import { speedTable } from '../core/tempo/speed';
 import { buildCommandPlayback } from '../core/command';
 import { analyze } from './analyze';
+import { describeCoreError } from './messages';
 import { buildPreview, toRegionData, EMPTY_PREVIEW } from './preview';
 import type { AnalyzeResult, GenerateOptions, GenerateResult } from './types';
 
@@ -92,7 +93,7 @@ function generateCommands(
       durationSec: song.durationSec,
       presets,
       baseTps,
-      error: `命令播放生成失败：${(error as Error).message}`,
+      error: `命令播放生成失败：${describeCoreError(error)}`,
     });
     result.playbackMode = 'command';
     return { result, buffer: null };
@@ -189,7 +190,7 @@ export function generate(
       result: failure({
         base,
         durationSec: song.durationSec,
-        error: `电路布局失败：${(e as Error).message}`,
+        error: `电路布局失败：${describeCoreError(e)}`,
         presets,
         baseTps,
       }),
@@ -223,7 +224,7 @@ export function generate(
     const f = failure({
       base,
       durationSec: song.durationSec,
-      error: `litematic 写入失败：${(e as Error).message}`,
+      error: `litematic 写入失败：${describeCoreError(e)}`,
       presets,
       baseTps,
     });

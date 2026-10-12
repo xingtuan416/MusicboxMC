@@ -2,6 +2,7 @@ import type { SongModel } from '../midi/types';
 import { mapPitch, DEFAULT_REGIONS, type OutOfRangePolicy } from '../palette/pitchMap';
 import type { LayoutWarning } from '../layout/types';
 import { secondsToTick } from '../tempo/tick';
+import { coreError } from '../errors';
 
 /**
  * Turning a song into a schedule.
@@ -71,7 +72,7 @@ export function collectEvents(
   for (const track of song.tracks) {
     if (excluded.has(track.index)) continue;
     const transpose = options.transpose?.[track.index] ?? 0;
-    if (!Number.isFinite(transpose)) throw new Error('命令播放移调必须是有限数值');
+    if (!Number.isFinite(transpose)) throw coreError('COMMAND_INVALID_TRANSPOSE');
 
     for (const note of track.notes) {
       const mapped = mapPitch(note.midi, DEFAULT_REGIONS, options.outOfRange, transpose);
@@ -86,7 +87,7 @@ export function collectEvents(
 
       const tick = secondsToTick(note.timeSec, options.baseTps);
       if (!Number.isSafeInteger(tick) || tick < 0 || tick > SCORE_MAX) {
-        throw new Error('命令播放时间超出计分板安全范围');
+        throw coreError('COMMAND_TIME_OUT_OF_RANGE');
       }
       events.push({
         tick,
@@ -98,7 +99,7 @@ export function collectEvents(
 
   events.sort((a, b) => a.tick - b.tick);
   if (events.length === 0) {
-    throw new Error('没有可生成的音符（可能全部被排除或音域策略丢弃）');
+    throw coreError('COMMAND_NO_NOTES');
   }
   return { events, warnings };
 }

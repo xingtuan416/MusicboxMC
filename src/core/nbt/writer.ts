@@ -1,4 +1,5 @@
 import { NbtTag, TagType } from './tag';
+import { coreError } from '../errors';
 
 /** Big-endian NBT serializer (the NBT spec requires all primitives to be big-endian). */
 class NbtWriter {
@@ -70,7 +71,7 @@ class NbtWriter {
   str(s: string): void {
     const bytes = Buffer.from(s, 'utf8');
     if (bytes.length > 0xffff) {
-      throw new Error(`NBT 字符串过长：${bytes.length} bytes`);
+      throw coreError('NBT_STRING_TOO_LONG', { bytes: bytes.length });
     }
     this.u16(bytes.length);
     this.ensure(bytes.length);
