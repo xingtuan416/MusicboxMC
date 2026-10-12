@@ -33,6 +33,17 @@ describe('MIDI text decoding', () => {
     expect(decodeMidiText('')).toBe('');
   });
 
+  it('refuses a GBK decode when the bytes are not GBK-shaped', () => {
+    // 0xFF is not a GBK lead byte, so it must not reach the decoder at all: Node 22
+    // rejects it and Node 20 maps it to a character, and the same file has to produce
+    // the same name on both.
+    expect(decodeMidiText(asLatin1([0xff, 0x41]))).toBe(asLatin1([0xff, 0x41]));
+    // A lead byte with no trail byte, and a lead byte whose trail is the excluded 0x7F,
+    // are equally malformed.
+    expect(decodeMidiText(asLatin1([0xd6]))).toBe(asLatin1([0xd6]));
+    expect(decodeMidiText(asLatin1([0xd6, 0x7f]))).toBe(asLatin1([0xd6, 0x7f]));
+  });
+
   it('leaves bytes that decode as neither encoding alone', () => {
     // A lone 0xFF is invalid UTF-8. Node 22's GBK decoder rejects it too, but Node 20's
     // silently drops it, so a decode that recovers no character at all is refused as
