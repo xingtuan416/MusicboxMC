@@ -10,13 +10,14 @@ import {
 } from './track';
 import type { LayoutConfig, LayoutResult, LayoutWarning, Vec3 } from './types';
 import type { SongModel } from '../midi/types';
-import { DEFAULT_REGIONS, type RegionTable } from '../palette/pitchMap';
+import { DEFAULT_REGIONS, type PitchRegion, type RegionTable } from '../palette/pitchMap';
 import {
   createBlockResolver,
   DEFAULT_BLOCK_TABLE,
   type BlockDefaults,
   type BlockOverrides,
   type BlockResolver,
+  type BlockTable,
 } from '../palette/blockTable';
 import { secondsToTick } from '../tempo/tick';
 import type { TrackModel } from '../midi/types';
@@ -73,16 +74,12 @@ function mergeByInstrument<T extends { index: number; notes: TrackNote[]; key: s
 
 /** Base blocks already differ per pitch region, so feed them to the resolver as region-level defaults. */
 function regionDefaults(regions: RegionTable): BlockDefaults {
-  return {
-    global: DEFAULT_BLOCK_TABLE,
-    regions: {
-      A: { noteBase: regions.A.baseBlock },
-      B: { noteBase: regions.B.baseBlock },
-      C: { noteBase: regions.C.baseBlock },
-      D: { noteBase: regions.D.baseBlock },
-      E: { noteBase: regions.E.baseBlock },
-    },
-  };
+  // Only the slots this palette defines: the single-instrument palette has just one.
+  const byRegion: Partial<Record<PitchRegion, Partial<BlockTable>>> = {};
+  for (const [region, def] of Object.entries(regions)) {
+    if (def) byRegion[region as PitchRegion] = { noteBase: def.baseBlock };
+  }
+  return { global: DEFAULT_BLOCK_TABLE, regions: byRegion };
 }
 
 /**

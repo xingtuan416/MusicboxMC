@@ -46,6 +46,8 @@ const CORE_ERROR_TEXT: Record<CoreErrorCode, (details: CoreErrorDetails) => stri
     `强制合并校验：音符盒 (${value(d, 'position')}) 实际 ${value(d, 'actual')} 游戏刻，` +
     `期望 ${value(d, 'expected')}`,
 
+  PALETTE_EMPTY: () => '音色板为空：没有任何可用的音区',
+
   NBT_STRING_TOO_LONG: (d) => `NBT 字符串过长：${value(d, 'bytes')} bytes`,
   NBT_READ_OUT_OF_BOUNDS: (d) =>
     `NBT 越界读取: pos=${value(d, 'position')} need=${value(d, 'need')} len=${value(d, 'length')}`,

@@ -1,3 +1,5 @@
+import { coreError } from '../errors';
+
 export type PitchRegion = 'A' | 'B' | 'C' | 'D' | 'E';
 export type OutOfRangePolicy = 'warn' | 'clamp' | 'octave' | 'drop';
 
@@ -10,12 +12,18 @@ export interface RegionDef {
   instrument: NoteBlockInstrument;
 }
 
-export type RegionTable = Record<PitchRegion, RegionDef>;
+/**
+ * The sample slots a generation may use.
+ *
+ * Partial on purpose: the single-instrument palette exposes exactly one slot, so
+ * every lookup below has to cope with a slot being absent.
+ */
+export type RegionTable = Readonly<Partial<Record<PitchRegion, RegionDef>>>;
 
 /**
  * Instrument events of the Minecraft Java note block.
  *
- * These events each have a different pitch range; this project uses the five
+ * These events each have a different pitch range; this project can use the five
  * slots bass / guitar / harp / flute / bell to assemble F#1–F#7.
  */
 export type NoteBlockInstrument = 'bass' | 'guitar' | 'harp' | 'flute' | 'bell';
@@ -46,10 +54,10 @@ export const REGION_SEMITONES = 24;
  * - D: clay → flute, starting at F#4 (MIDI 66)
  * - E: gold block → bell, starting at F#5 (MIDI 78)
  *
- * This arrangement corresponds exactly to harp1..harp5 in the resource pack. The
- * previous dirt / grass_block / bedrock would wrongly drop low and high notes onto
- * harp or basedrum, using neither guitar/flute and never yielding a continuous
- * piano timbre.
+ * This arrangement corresponds exactly to harp1..harp5 in the companion resource
+ * pack. The previous dirt / grass_block / bedrock would wrongly drop low and high
+ * notes onto harp or basedrum, using neither guitar/flute and never yielding a
+ * continuous piano timbre.
  */
 export const DEFAULT_REGIONS: RegionTable = {
   A: { baseBlock: 'minecraft:oak_planks', baseMidi: 30, instrument: 'bass' },
@@ -59,13 +67,51 @@ export const DEFAULT_REGIONS: RegionTable = {
   E: { baseBlock: 'minecraft:gold_block', baseMidi: 78, instrument: 'bell' },
 };
 
+/**
+ * How much of the note-block range a generation may use.
+ *
+ * One note block covers two octaves on its own. `full` spreads notes across all five
+ * note-block instruments to reach F#1–F#7. All five are vanilla instruments, so this
+ * plays correctly with no resource pack at all — but they sound different from one
+ * another, and the companion resource pack exists to replace those five events with
+ * piano samples so the whole range sounds like a single piano.
+ *
+ * `piano` uses the harp slot alone. It never needs a resource pack, at the cost of
+ * everything outside F#3–F#5, which then falls to the out-of-range policy.
+ */
+export type PitchPalette = 'full' | 'piano';
+
+/** The harp slot on its own: F#3–F#5, one instrument, no resource pack. */
+export const PIANO_REGIONS: RegionTable = {
+  C: { baseBlock: 'minecraft:dirt', baseMidi: 54, instrument: 'harp' },
+};
+
+export function regionsFor(palette: PitchPalette): RegionTable {
+  return palette === 'piano' ? PIANO_REGIONS : DEFAULT_REGIONS;
+}
+
 /** Stable low-to-high tie order; the actual choice uses distance to the sample center. */
 const REGION_PRIORITY: PitchRegion[] = ['A', 'B', 'C', 'D', 'E'];
 
+/** Every slot the table actually defines, in low-to-high order. */
+function slots(regions: RegionTable): Array<{ region: PitchRegion; def: RegionDef }> {
+  const present = REGION_PRIORITY.flatMap((region) => {
+    const def = regions[region];
+    return def ? [{ region, def }] : [];
+  });
+  if (present.length === 0) throw coreError('PALETTE_EMPTY');
+  return present;
+}
+
 /** Covered MIDI pitch range (endpoints inclusive). */
 export function coveredRange(regions: RegionTable): [number, number] {
-  const lows = (Object.keys(regions) as PitchRegion[]).map((k) => regions[k].baseMidi);
+  const lows = slots(regions).map((slot) => slot.def.baseMidi);
   return [Math.min(...lows), Math.max(...lows) + REGION_SEMITONES];
+}
+
+/** The lowest slot in the table; used only where a note does not fit anywhere. */
+function lowestSlot(regions: RegionTable): { region: PitchRegion; def: RegionDef } {
+  return slots(regions).reduce((low, slot) => (slot.def.baseMidi < low.def.baseMidi ? slot : low));
 }
 
 /**
@@ -86,14 +132,13 @@ export function mapPitch(
 
   const selected = selectRegion(p, regions);
   if (selected) {
-    const def = regions[selected.region];
     return {
       dropped: false,
       midi,
       note: selected.note,
       region: selected.region,
-      block: def.baseBlock,
-      instrument: def.instrument,
+      block: selected.def.baseBlock,
+      instrument: selected.def.instrument,
       degraded: false,
     };
   }
@@ -110,38 +155,30 @@ function applyOutOfRange(
   const [low, high] = coveredRange(regions);
   const pick = (pp: number): MappedPitch => {
     const selected = selectRegion(pp, regions);
-    if (selected) {
-      const def = regions[selected.region];
-      return {
-        dropped: false,
-        midi,
-        note: selected.note,
-        region: selected.region,
-        block: def.baseBlock,
-        instrument: def.instrument,
-        degraded: true,
-      };
-    }
-    // Theoretically unreachable
+    const slot = selected ?? lowestSlot(regions);
     return {
-      dropped: true,
+      dropped: false,
       midi,
-      note: 0,
-      region: 'C',
-      block: regions.C.baseBlock,
-      instrument: regions.C.instrument,
+      note: selected ? selected.note : 0,
+      region: slot.region,
+      block: slot.def.baseBlock,
+      instrument: slot.def.instrument,
       degraded: true,
     };
   };
 
   if (policy === 'drop') {
+    // A dropped note is never placed, so its block and instrument exist only to keep
+    // the shape total. Prefer the harp slot, which every palette defines.
+    const harp = regions.C;
+    const slot = harp ? { region: 'C' as PitchRegion, def: harp } : lowestSlot(regions);
     return {
       dropped: true,
       midi,
       note: 0,
-      region: 'C',
-      block: regions.C.baseBlock,
-      instrument: regions.C.instrument,
+      region: slot.region,
+      block: slot.def.baseBlock,
+      instrument: slot.def.instrument,
       degraded: true,
     };
   }
@@ -156,20 +193,24 @@ function applyOutOfRange(
   return pick(shifted);
 }
 
-function selectRegion(midi: number, regions: RegionTable): { region: PitchRegion; note: number } | null {
-  let best: { region: PitchRegion; note: number; distance: number } | null = null;
+function selectRegion(
+  midi: number,
+  regions: RegionTable,
+): { region: PitchRegion; def: RegionDef; note: number } | null {
+  let best: { region: PitchRegion; def: RegionDef; note: number; distance: number } | null = null;
   for (const region of REGION_PRIORITY) {
     const def = regions[region];
+    if (!def) continue;
     const note = midi - def.baseMidi;
     if (note < 0 || note > REGION_SEMITONES) continue;
     const distance = Math.abs(note - 12);
     if (
       best === null ||
       distance < best.distance ||
-      (distance === best.distance && def.baseMidi > regions[best.region].baseMidi)
+      (distance === best.distance && def.baseMidi > best.def.baseMidi)
     ) {
-      best = { region, note, distance };
+      best = { region, def, note, distance };
     }
   }
-  return best ? { region: best.region, note: best.note } : null;
+  return best ? { region: best.region, def: best.def, note: best.note } : null;
 }
