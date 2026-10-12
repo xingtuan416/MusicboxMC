@@ -110,6 +110,11 @@ thrown, so the GUI can display them without a try/catch around every call.
 5. **Warnings are declared, emitted and translated in three places** — the union
    in `core/layout/types.ts`, the emission sites, and `WARN_TEXT` in the
    renderer. `test/warningCoverage.test.ts` fails if they drift apart.
+6. **The core reports codes, not sentences.** A failure throws a `CoreError`
+   (`core/errors.ts`) carrying a stable code and the values behind it;
+   `main/messages.ts` owns the wording, and its exhaustive `Record` type means a
+   new code without text will not compile. The engine has no opinion about what
+   language the user reads.
 
 ## Related documents
 
