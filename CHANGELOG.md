@@ -16,6 +16,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   which renders as a bare dot instead of the cross the game draws.
 - The lockfile was not portable. It recorded only the Windows rollup binary, so
   `npm ci` failed on Linux, which meant every CI run failed.
+- The interface called F#1-F#7 the resource pack's range and implied the pack was
+  required. It is not: that range comes from five vanilla note-block instruments, and
+  the pack only replaces their sound events so the whole span sounds like one piano.
 
 ### Changed
 
@@ -43,6 +46,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   backend, and the litematic output format.
 - `test/wireConnections.test.ts`, which encodes the dust connection rules from
   Minecraft rather than from this project's output.
+- A **full range** switch, on by default. On, the generator spreads notes over all
+  five vanilla note-block instruments to reach F#1-F#7; off, it uses the harp slot
+  alone for F#3-F#5, which needs no resource pack at all. It applies to both the
+  redstone and the command playback backends.
 
 ## [0.1.0] - 2026-10-11
 

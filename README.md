@@ -114,6 +114,10 @@ instruments — bass, guitar, harp, flute and bell — cover **F#1 to F#7** (MID
 resource pack at all.** The five octave bands simply have different timbres, which
 is audible on a melody that crosses them.
 
+The **full range** switch, on by default, is what controls this. Turn it off and the
+generator uses the harp slot alone: **F#3 to F#5**, with no resource pack ever needed,
+and everything outside that span falls to the out-of-range setting.
+
 A companion resource pack replaces those five sound events with piano samples, so the
 whole range sounds like a single piano. **It is optional**: nothing in the generator
 requires it, and the schematic is identical either way.
