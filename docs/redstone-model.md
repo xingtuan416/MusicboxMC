@@ -110,6 +110,45 @@ forward_ with dust — never compress, never re-time, never cross-connect.
 - If the deficit cannot be closed, the residual is reported as `SPATIAL_DRIFT`.
   The timing is never changed to make the geometry work.
 
+## Pitch, and the note-block palette
+
+One note block covers two octaves: its `note` property runs 0 to 24, two semitone
+steps per value, above the pitch its base block sounds at. A single instrument
+therefore cannot hold a piano piece.
+
+Between them, the five note-block instruments reach **F#1 to F#7** (MIDI 30 to 102),
+because each starts at its own F# anchor:
+
+| Slot | Base block | Instrument | Starts at |
+| --- | --- | --- | --- |
+| A | oak planks | bass | F#1 (MIDI 30) |
+| B | white wool | guitar | F#2 (MIDI 42) |
+| C | dirt | harp | F#3 (MIDI 54) |
+| D | clay | flute | F#4 (MIDI 66) |
+| E | gold block | bell | F#5 (MIDI 78) |
+
+The slots overlap, so most pitches are reachable from two of them. `mapPitch` picks
+the one whose note value is closest to 12, because 12 is the pitch each sample was
+recorded at and every step away from it is a pitch shift. On a tie the higher slot
+wins, so a boundary connects upward and a scale does not hop between instruments
+mid-run.
+
+**All five are vanilla instruments.** A generated schematic plays correctly with no
+resource pack at all; the five octave bands simply sound different from one another.
+The companion resource pack replaces those five sound events with piano samples so
+the whole span sounds like one piano. It changes no block and no timing — the same
+schematic comes out either way.
+
+The **full range** switch in the interface decides which slots the generator may use:
+
+- **On (the default)** — all five slots, covering F#1–F#7.
+- **Off** — the harp slot alone, covering F#3–F#5. No resource pack is ever needed,
+  at the cost of everything outside those two octaves.
+
+Pitches outside the selected span go through the out-of-range policy — `warn`,
+`octave`, `clamp` or `drop` — and are reported as `OUT_OF_RANGE` warnings. Neither
+mode drops a note silently.
+
 ## What this model does not cover
 
 The layout is a **static description**, not a simulator. The following are not
