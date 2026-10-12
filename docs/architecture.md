@@ -21,6 +21,12 @@ src/
 └── renderer/     the GUI: plain DOM + Canvas, no framework
 ```
 
+The renderer is plain ES modules with no build step: `main.js` is the entry point
+and imports the rest. Electron serves it over a custom `app://` scheme rather than
+`file://`, because Chromium refuses to load module scripts from a `file://` page —
+the origin is opaque. Registering the scheme as standard and secure fixes that, and
+keeps the renderer off the file system besides.
+
 Dependency direction is strictly one way: `core` knows nothing about `main`,
 `preload` or `renderer`. That is what makes the whole engine testable in plain
 Node — see the suite under `test/`, which imports `src/core/**` directly and
