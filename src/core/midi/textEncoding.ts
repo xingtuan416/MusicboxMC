@@ -16,6 +16,22 @@
 const LATIN1_MAX = 0xff;
 const ENCODINGS = ['utf-8', 'gbk'];
 
+/**
+ * Whether a decode actually recovered the high bytes.
+ *
+ * `fatal: true` is not enough on its own: Node 20's GBK decoder silently drops a stray
+ * high byte and returns the rest, so a name could come back truncated with no error.
+ * A recovery is only accepted when it produced something, produced no replacement
+ * character, and turned at least one high byte into a real character.
+ */
+function looksRecovered(decoded: string): boolean {
+  if (decoded.length === 0 || decoded.includes('\uFFFD')) return false;
+  for (const character of decoded) {
+    if ((character.codePointAt(0) ?? 0) > 0x7f) return true;
+  }
+  return false;
+}
+
 /** Recover a MIDI text event that was written in a legacy encoding. */
 export function decodeMidiText(value: string): string {
   if (!value) return value;
@@ -33,7 +49,8 @@ export function decodeMidiText(value: string): string {
   const bytes = Uint8Array.from([...value].map((character) => (character.codePointAt(0) ?? 0) & 0xff));
   for (const encoding of ENCODINGS) {
     try {
-      return new TextDecoder(encoding, { fatal: true }).decode(bytes);
+      const decoded = new TextDecoder(encoding, { fatal: true }).decode(bytes);
+      if (looksRecovered(decoded)) return decoded;
     } catch {
       // Not this encoding, or this runtime has no decoder for it; try the next.
     }

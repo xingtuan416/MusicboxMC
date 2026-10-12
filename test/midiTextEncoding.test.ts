@@ -34,8 +34,9 @@ describe('MIDI text decoding', () => {
   });
 
   it('leaves bytes that decode as neither encoding alone', () => {
-    // A lone 0xFF is invalid UTF-8 and an incomplete GBK sequence, so the original is
-    // kept rather than replaced with replacement characters.
+    // A lone 0xFF is invalid UTF-8. Node 22's GBK decoder rejects it too, but Node 20's
+    // silently drops it, so a decode that recovers no character at all is refused as
+    // well - otherwise the name would come back quietly truncated.
     expect(decodeMidiText(asLatin1([0xff]))).toBe(asLatin1([0xff]));
     expect(decodeMidiText(asLatin1([0x41, 0xff, 0x41]))).toBe(asLatin1([0x41, 0xff, 0x41]));
   });
