@@ -10,6 +10,10 @@
 </p>
 
 <p align="center">
+  <a href="README.md">简体中文</a>　·　<strong>English</strong>
+</p>
+
+<p align="center">
   <a href="https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.1.0"><img alt="Download v0.1.0" src="https://img.shields.io/badge/download-v0.1.0-2ea44f"></a>
   <a href="https://github.com/xingtuan416/MusicboxMC/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/xingtuan416/MusicboxMC/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue"></a>
@@ -51,13 +55,21 @@ what it generates.
 2. **Adjust.** Most songs need nothing changed. The settings that matter are `dMax`
    — how wide one chord column may be — and what to do with notes outside the
    covered range.
-3. **Generate.** The preview draws the circuit before you commit to it: one row per
-   Z row, one column per X cell, time running to the right.
+3. **Generate.** The **redstone wiring** view shows the circuit before you commit to it:
+   one row per Z row, one column per X cell, time running to the right. It is a
+   **viewport**, not the whole drawing at once — scroll or drag to pan, `+` / `-` to
+   zoom, and _fit_ to see as much as fits. Any song length can be zoomed in until
+   individual cells are legible.
 
    ![The redstone wiring view](docs/images/preview.png)
 
 4. **Paste.** Put the `.litematic` in `.minecraft/schematics/`, load it with
    Litematica in game, and power the circuit at its start.
+
+If anything needs attention afterwards, the **Needs attention** tab lists it. Every
+warning that has a location carries a **Locate** button: one click opens the wiring
+view centred on that cell, zoomed in far enough to read, with the cell ringed — no
+hunting for it by hand.
 
 ## What it does
 
@@ -188,7 +200,3 @@ code lives, and the part worth reading if you want to change how a circuit is bu
 ## License
 
 [GNU General Public License v3.0 or later](LICENSE).
-
----
-
-<sub>中文说明见 [README.zh-CN.md](README.zh-CN.md)。</sub>

@@ -10,6 +10,10 @@
 </p>
 
 <p align="center">
+  <strong>简体中文</strong>　·　<a href="README.en.md">English</a>
+</p>
+
+<p align="center">
   <a href="https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.1.0"><img alt="下载 v0.1.0" src="https://img.shields.io/badge/download-v0.1.0-2ea44f"></a>
   <a href="https://github.com/xingtuan416/MusicboxMC/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/xingtuan416/MusicboxMC/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="许可证：GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue"></a>
@@ -42,12 +46,17 @@ Windows x64。两个文件任选其一，均来自
 1. **导入。** 打开程序，选择 `.mid` / `.midi` 文件。曲名、BPM、拍号、音轨与音符数会立即显示。
 2. **调整。** 大多数曲子不需要改任何设置。真正影响结果的只有 `dMax`
    （单条分线列可以有多宽）和"超出音域的音符怎么处理"。
-3. **生成。** 满意之前可以先看红石布线：**一行 = 一个实际 Z 行，一列 = 一格 X**，时间向右推进。
+3. **生成。** 满意之前先看**红石布线**：一行 = 一个实际 Z 行，一列 = 一格 X，时间向右推进。
+   它是一块**视口**而不是整张图——滚轮或拖拽平移，`＋`／`－` 缩放，`适配窗口` 一次看全。
+   再长的曲子也能一路放大到逐格看清。
 
    ![红石布线](docs/images/preview.png)
 
 4. **粘贴。** 把 `.litematic` 放进 `.minecraft/schematics/`，在游戏里用 Litematica
    加载并放置，然后在电路起点接电。
+
+生成之后如果有什么需要留意的，切到**需要注意**页。每条能定位的警告都带一个
+**定位**按钮，点一下就会跳到红石布线里对应的那一格并把它圈出来，不用自己去找。
 
 ## 核心特性
 
@@ -166,7 +175,3 @@ npm run dist:dir   # 只出免安装目录，用于快速验证
 ## 许可证
 
 [GNU General Public License v3.0 或更高版本](LICENSE)。
-
----
-
-<sub>English documentation: [README.md](README.md).</sub>
