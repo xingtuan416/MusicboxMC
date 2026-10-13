@@ -235,6 +235,7 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   if (base === 1) warnings.push({ code: 'STARTUP_LEAD_IN', ticks: GAME_TICKS_PER_REDSTONE_TICK });
   const tracks = [];
   const placed: LayoutResult['placed'] = [];
+  const rangeShiftTotal = { notes: 0, maxSemitones: 0 };
   let maxTick = 0;
   let trackSlot = 0;
 
@@ -251,6 +252,7 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
         warnings: w,
         overflow,
         placed: pl,
+        rangeShift: laneShift,
       } = buildTrack({
         trackIndex: index,
         zBase,
@@ -269,6 +271,8 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
       });
 
       warnings.push(...w);
+      rangeShiftTotal.notes += laneShift.notes;
+      rangeShiftTotal.maxSemitones = Math.max(rangeShiftTotal.maxSemitones, laneShift.maxSemitones);
       tracks.push(track);
       for (const p of pl) placed.push({ trackIndex: index, zBase, ...p });
       trackSlot++;
@@ -312,5 +316,5 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   const size: Vec3 = { x: maxX - minX + 1, y: maxY - minY + 1, z: maxZ - minZ + 1 };
   const min: Vec3 = { x: minX, y: minY, z: minZ };
 
-  return { tracks, size, min, totalTicks: maxTick, warnings, placed };
+  return { tracks, size, min, totalTicks: maxTick, warnings, placed, rangeShift: rangeShiftTotal };
 }

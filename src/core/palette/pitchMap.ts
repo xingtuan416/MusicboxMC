@@ -41,6 +41,12 @@ export interface MappedPitch {
   instrument: NoteBlockInstrument;
   /** Whether it was degraded for exceeding the pitch range */
   degraded: boolean;
+  /**
+   * Semitones the out-of-range policy moved this note by, relative to the pitch it was
+   * asked for. Zero when it sounds as written, and zero for a dropped note, which does
+   * not sound at all.
+   */
+  shiftSemitones: number;
 }
 
 /** Semitone span of one pitch region: note 0..24 is 25 steps across 24 semitones. */
@@ -140,6 +146,7 @@ export function mapPitch(
       block: selected.def.baseBlock,
       instrument: selected.def.instrument,
       degraded: false,
+      shiftSemitones: 0,
     };
   }
 
@@ -156,6 +163,7 @@ function applyOutOfRange(
   const pick = (pp: number): MappedPitch => {
     const selected = selectRegion(pp, regions);
     const slot = selected ?? lowestSlot(regions);
+    const sounded = slot.def.baseMidi + (selected ? selected.note : 0);
     return {
       dropped: false,
       midi,
@@ -164,6 +172,7 @@ function applyOutOfRange(
       block: slot.def.baseBlock,
       instrument: slot.def.instrument,
       degraded: true,
+      shiftSemitones: sounded - p,
     };
   };
 
@@ -180,6 +189,7 @@ function applyOutOfRange(
       block: slot.def.baseBlock,
       instrument: slot.def.instrument,
       degraded: true,
+      shiftSemitones: 0,
     };
   }
   if (policy === 'clamp') {

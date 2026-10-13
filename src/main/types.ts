@@ -139,6 +139,13 @@ export interface GenerateResult extends AnalyzeResult {
   warnings: LayoutWarning[];
   /** Where each placed group landed, so the interface can point at one. */
   placed: LayoutResult['placed'];
+  /**
+   * How many notes the out-of-range policy moved, and the largest move in semitones.
+   *
+   * Separate from `outOfRangeNotes`, which counts warnings: the `octave` policy is
+   * deliberately silent, so a song whose notes were all shifted reported zero.
+   */
+  rangeShift: { notes: number; maxSemitones: number };
   regions: RegionSummary[];
   preview: PreviewData;
 }

@@ -54,6 +54,11 @@ function renderOverview(res) {
         ['量化误差上限（红石）', `±${s.layoutErrorMs}ms`],
         ['量化误差上限（命令播放）', `±${s.commandErrorMs}ms`],
         ['音轨 / 音符', `${s.trackCount} / ${s.noteCount}`],
+        // Only shown when something was moved. The octave policy is silent per note, so
+        // the warning count alone reported 0 for a song whose notes had all been shifted.
+        ...(res.rangeShift?.notes > 0
+          ? [['音域移调', `${res.rangeShift.notes} 个音符，最多 ${res.rangeShift.maxSemitones} 个半音`]]
+          : []),
       ]),
     ),
   );

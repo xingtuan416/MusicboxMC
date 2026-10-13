@@ -92,6 +92,8 @@ export function buildTrack(opts: BuildTrackOptions): {
   overflow: OverflowGroup[];
   /** Intended and actual trigger tick for each placed group, in game ticks (actual = 2*rt). */
   placed: Array<{ tick: number; actual: number; x: number }>;
+  /** How many notes the range policy moved on this track, and by how much at most. */
+  rangeShift: { notes: number; maxSemitones: number };
 } {
   const maxChordNotes = chordCapacity(opts.config.dMax);
 
@@ -100,6 +102,7 @@ export function buildTrack(opts: BuildTrackOptions): {
     groups: prepared,
     overflow,
     warnings,
+    rangeShift,
   } = prepareGroups({
     notes: opts.notes,
     regions: opts.regions,
@@ -333,5 +336,6 @@ export function buildTrack(opts: BuildTrackOptions): {
     warnings,
     overflow,
     placed,
+    rangeShift,
   };
 }

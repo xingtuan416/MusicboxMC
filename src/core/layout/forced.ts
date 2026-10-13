@@ -83,6 +83,8 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
   let minRt = Infinity;
   let peakNotes = 0;
   const prepared = inputs.map((input) => {
+    // Counted here rather than inferred from the warnings: the `octave` policy is
+    // silent per note, so a shifted song used to report zero shifted notes.
     const byRt = new Map<number, Group>();
     for (const note of input.notes) {
       if (!Number.isSafeInteger(note.tick) || note.tick < 0) throw coreError('FORCED_INVALID_NOTE_TIME');
@@ -102,6 +104,10 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
         });
       }
       if (mapped.dropped) continue;
+      if (mapped.degraded) {
+        rangeShift.notes += 1;
+        rangeShift.maxSemitones = Math.max(rangeShift.maxSemitones, Math.abs(mapped.shiftSemitones));
+      }
       const rt = gameTickToRedstone(note.tick);
       const group = byRt.get(rt) ?? { rt, tick: note.tick, notes: [] };
       group.tick = Math.min(group.tick, note.tick);
@@ -141,6 +147,7 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
 
   const tracks: TrackSkeleton[] = [];
   const placed: LayoutResult['placed'] = [];
+  const rangeShift = { notes: 0, maxSemitones: 0 };
   const maxRows = 2 * Math.ceil(peakNotes / 2);
   const pitch = config.trackPitch === 'auto' ? 2 * maxRows + 2 : Math.max(config.trackPitch, 2 * maxRows + 2);
   let totalTicks = 0;
@@ -284,5 +291,6 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
     warnings,
     placed,
     startupDelayTicks,
+    rangeShift,
   };
 }

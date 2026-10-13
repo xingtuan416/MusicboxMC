@@ -61,6 +61,8 @@ export function prepareGroups(options: PrepareGroupsOptions): {
   groups: PreparedGroup[];
   overflow: OverflowGroup[];
   warnings: LayoutWarning[];
+  /** How many notes the range policy moved, and by how much at most. */
+  rangeShift: { notes: number; maxSemitones: number };
 } {
   const {
     notes,
@@ -74,6 +76,11 @@ export function prepareGroups(options: PrepareGroupsOptions): {
   } = options;
   const warnings: LayoutWarning[] = [];
   const overflow: OverflowGroup[] = [];
+  // Counted from the mapping itself rather than inferred from the warnings: the `octave`
+  // policy deliberately stays silent per note, so a song where every note was shifted
+  // used to report zero shifted notes.
+  let shiftedNotes = 0;
+  let maxShiftSemitones = 0;
 
   // 1) Map pitches, then group by redstone tick
   const groupMap = new Map<number, PreparedGroup>();
@@ -90,6 +97,12 @@ export function prepareGroups(options: PrepareGroupsOptions): {
         });
       }
       continue;
+    }
+    // The statistic covers every degraded note, including the silent `octave` policy,
+    // but is counted once per source note: the later lanes re-map the same notes.
+    if (reportRangeWarnings && mapped.degraded) {
+      shiftedNotes += 1;
+      maxShiftSemitones = Math.max(maxShiftSemitones, Math.abs(mapped.shiftSemitones));
     }
     // Automatic octave shifting is an explicit user choice and stays silent; every
     // other degraded outcome is reported.
@@ -143,5 +156,10 @@ export function prepareGroups(options: PrepareGroupsOptions): {
     }
   }
 
-  return { groups: prepared, overflow, warnings };
+  return {
+    groups: prepared,
+    overflow,
+    warnings,
+    rangeShift: { notes: shiftedNotes, maxSemitones: maxShiftSemitones },
+  };
 }

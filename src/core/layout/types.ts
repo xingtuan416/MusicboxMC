@@ -122,6 +122,14 @@ export interface LayoutResult {
     actual: number;
     x: number;
   }>;
+  /**
+   * How many notes the out-of-range policy moved, and the largest move in semitones.
+   *
+   * Counted from the mapping rather than from the warning list, because the `octave`
+   * policy is deliberately silent per note: a song whose notes were all shifted used to
+   * report zero.
+   */
+  rangeShift: { notes: number; maxSemitones: number };
 }
 
 export interface LayoutConfig {
