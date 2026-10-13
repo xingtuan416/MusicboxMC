@@ -16,3 +16,5 @@ net26.2源码/
 # Test songs: third-party music, used locally to exercise the generator
 *.mid
 *.midi
+# ...except the tiny fixtures the test suite needs in order to be reproducible
+!test/fixtures/*.mid

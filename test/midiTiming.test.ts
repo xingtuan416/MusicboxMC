@@ -10,10 +10,11 @@ import { song } from './helpers/song';
 /**
  * MIDI files that are legal but were not handled.
  *
- * Both of these came out of an external review with binary fixtures; the fixtures are
- * kept next to the tests so the cases stay reproducible.
+ * Both came out of an external review with binary fixtures. They live in the repository
+ * rather than beside the review notes, because a test that reads a gitignored path runs
+ * for its author and nobody else - which is exactly what happened the first time.
  */
-const fixture = (name: string): Buffer => readFileSync(resolve('out/review-20261013', name));
+const fixture = (name: string): Buffer => readFileSync(resolve('test/fixtures', name));
 
 describe('MIDI timebase and tempo handling', () => {
   it('refuses an SMPTE timebase instead of producing NaN times', () => {
