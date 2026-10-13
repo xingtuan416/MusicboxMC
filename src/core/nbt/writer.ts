@@ -1,5 +1,6 @@
 import { NbtTag, TagType } from './tag';
 import { coreError } from '../errors';
+import { encodeModifiedUtf8, MAX_MODIFIED_UTF8_BYTES } from './modifiedUtf8';
 
 /** Big-endian NBT serializer (the NBT spec requires all primitives to be big-endian). */
 class NbtWriter {
@@ -67,10 +68,10 @@ class NbtWriter {
     this.pos += 8;
   }
 
-  /** UTF-8 string with an unsigned 16-bit length */
+  /** Modified UTF-8 string with an unsigned 16-bit byte length, as Java writes it. */
   str(s: string): void {
-    const bytes = Buffer.from(s, 'utf8');
-    if (bytes.length > 0xffff) {
+    const bytes = encodeModifiedUtf8(s);
+    if (bytes.length > MAX_MODIFIED_UTF8_BYTES) {
       throw coreError('NBT_STRING_TOO_LONG', { bytes: bytes.length });
     }
     this.u16(bytes.length);

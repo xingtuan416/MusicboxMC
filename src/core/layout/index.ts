@@ -11,6 +11,7 @@ import {
 } from './track';
 import type { LayoutConfig, LayoutResult, LayoutWarning, Vec3 } from './types';
 import type { SongModel } from '../midi/types';
+import { coreError } from '../errors';
 import { DEFAULT_REGIONS, type PitchRegion, type RegionTable } from '../palette/pitchMap';
 import {
   createBlockResolver,
@@ -118,6 +119,10 @@ function buildXPlan(samples: Array<{ atRt: number; x: number; trackId: number }>
       sameTime.push(sorted[i]!);
       i += 1;
     }
+    // `NaN === NaN` is false, so a non-finite time would consume nothing and spin here
+    // forever. The tick is validated before the plan is built; this makes the loop
+    // provably terminating anyway, so a future path cannot hang the process.
+    if (sameTime.length === 0) break;
     const trackIds = new Set(sameTime.map((s) => s.trackId));
     if (trackIds.size >= 2) synchronizedAtRts.add(atRt);
   }
@@ -156,6 +161,11 @@ export function layoutResolver(
 /** Top-level entry point: SongModel -> redstone layout. */
 export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult {
   const config: LayoutConfig = { ...DEFAULT_LAYOUT_CONFIG, ...opts.config };
+  // A non-positive or non-finite TPS makes every derived tick NaN. Report it as the
+  // configuration problem it is, rather than as an invalid tick further downstream.
+  if (!Number.isFinite(config.baseTps) || config.baseTps <= 0) {
+    throw coreError('LAYOUT_INVALID_CONFIG', { field: 'baseTps' });
+  }
   const regions = opts.regions ?? DEFAULT_REGIONS;
   const exclude = new Set(opts.excludeTracks ?? []);
   const resolve = layoutResolver(regions, opts.blocks ?? {});
@@ -165,10 +175,15 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   const inputs: Array<{ index: number; notes: TrackNote[]; key: string }> = [];
   for (const t of song.tracks) {
     if (exclude.has(t.index) || t.notes.length === 0) continue;
-    const notes: TrackNote[] = t.notes.map((n) => ({
-      tick: secondsToTick(n.timeSec, config.baseTps),
-      midi: n.midi,
-    }));
+    const notes: TrackNote[] = t.notes.map((n) => {
+      const tick = secondsToTick(n.timeSec, config.baseTps);
+      // The plan's grouping loop advances by comparing `atRt`, and `NaN === NaN` is
+      // false, so a non-finite tick would spin forever instead of failing. Refuse it.
+      if (!Number.isSafeInteger(tick) || tick < 0) {
+        throw coreError('LAYOUT_INVALID_TICK', { track: t.index, tick: n.timeSec });
+      }
+      return { tick, midi: n.midi };
+    });
     inputs.push({ index: t.index, notes, key: instrumentKey(t) });
   }
 

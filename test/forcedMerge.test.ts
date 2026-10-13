@@ -141,7 +141,8 @@ describe('forced instrument merge', () => {
           forceMergeSameInstrument: true,
           config: { baseTps: Infinity },
         }),
-      'FORCED_INVALID_CONFIG',
+      // Rejected upstream of the forced layout, which is where the TPS is first used.
+      'LAYOUT_INVALID_CONFIG',
     );
   });
 

@@ -46,7 +46,18 @@ const CORE_ERROR_TEXT: Record<CoreErrorCode, (details: CoreErrorDetails) => stri
     `强制合并校验：音符盒 (${value(d, 'position')}) 实际 ${value(d, 'actual')} 游戏刻，` +
     `期望 ${value(d, 'expected')}`,
 
+  MIDI_UNSUPPORTED_TIMEBASE: () =>
+    '这个 MIDI 用的是 SMPTE 时间制（按帧计时），暂不支持。请先用其它工具转成按拍计时（PPQ）的 MIDI 再导入。',
+  MIDI_INVALID_TIMING: (d) =>
+    `第 ${value(d, 'track')} 条音轨里有事件的时间无效（NaN 或负数），文件可能已损坏。`,
+  LAYOUT_INVALID_CONFIG: (d) => `排布配置无效：${value(d, 'field')} 必须是正数。`,
+  LAYOUT_INVALID_TICK: (d) =>
+    `第 ${value(d, 'track')} 条音轨有音符落在无效的游戏刻（${value(d, 'tick')}），无法排布。`,
+
   PALETTE_EMPTY: () => '音色板为空：没有任何可用的音区',
+
+  NBT_INVALID_UTF8: (d) =>
+    `NBT 字符串不是合法的 Modified UTF-8（位置 ${value(d, 'position')}），文件可能已损坏。`,
 
   NBT_STRING_TOO_LONG: (d) => `NBT 字符串过长：${value(d, 'bytes')} bytes`,
   NBT_READ_OUT_OF_BOUNDS: (d) =>

@@ -1,5 +1,6 @@
 import { NbtCompound, NbtList, NbtTag, TagType, nbt } from './tag';
 import { coreError } from '../errors';
+import { decodeModifiedUtf8 } from './modifiedUtf8';
 
 /** Big-endian NBT reader, used for in-house read-back verification. */
 class NbtReader {
@@ -72,7 +73,7 @@ class NbtReader {
   str(): string {
     const len = this.u16();
     this.need(len);
-    const s = this.buf.toString('utf8', this.pos, this.pos + len);
+    const s = decodeModifiedUtf8(this.buf.subarray(this.pos, this.pos + len));
     this.pos += len;
     return s;
   }
