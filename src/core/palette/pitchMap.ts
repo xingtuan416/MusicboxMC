@@ -185,12 +185,38 @@ function applyOutOfRange(
   if (policy === 'clamp') {
     return pick(p < low ? low : high);
   }
-  // Both 'warn' and 'octave' shift back into the usable pitch range by whole octaves;
-  // they differ only in whether the caller notifies the user
-  const octaves = Math.ceil((low - p) / 12);
-  let shifted = p + 12 * octaves;
-  if (shifted > high) shifted -= 12;
-  return pick(shifted);
+  // Both 'warn' and 'octave' shift back into the usable range by whole octaves; they
+  // differ only in whether the caller notifies the user.
+  return pick(shiftIntoRange(p, regions, low, high));
+}
+
+/**
+ * Move a pitch into the covered range by the **fewest whole octaves** that suffice.
+ *
+ * The previous formula anchored on the low end and folded anything above the range all
+ * the way down to the bottom, so MIDI 103 - one semitone above the top - came back as
+ * MIDI 31, 72 semitones lower and four instrument slots away, when dropping a single
+ * octave to 91 was available. Low notes happened to land on the nearest octave, which is
+ * why the asymmetry went unnoticed. A note above the range now moves down only as far as
+ * it must, and one below moves up only as far as it must.
+ *
+ * A palette may have holes between its slots, so if the nearest octave is still not
+ * covered the search steps outward until it reaches one.
+ */
+function shiftIntoRange(p: number, regions: RegionTable, low: number, high: number): number {
+  if (p >= low && p <= high) return p;
+
+  const nearest = p < low ? p + 12 * Math.ceil((low - p) / 12) : p - 12 * Math.ceil((p - high) / 12);
+  if (selectRegion(nearest, regions)) return nearest;
+
+  const MAX_OCTAVE_SEARCH = 10;
+  for (let step = 1; step <= MAX_OCTAVE_SEARCH; step++) {
+    const up = nearest + 12 * step;
+    if (selectRegion(up, regions)) return up;
+    const down = nearest - 12 * step;
+    if (selectRegion(down, regions)) return down;
+  }
+  return nearest;
 }
 
 function selectRegion(
