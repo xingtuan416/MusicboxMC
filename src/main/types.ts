@@ -92,7 +92,10 @@ export interface SongSummary {
   timeSignature: [number, number] | null;
   trackCount: number;
   noteCount: number;
-  quantizeErrorMs: number;
+  /** ±½ game tick: the command backend rounds once. */
+  commandErrorMs: number;
+  /** ±1.5 game ticks: the redstone backend rounds onto the game-tick grid, then again. */
+  layoutErrorMs: number;
 }
 
 export interface AnalyzeResult {

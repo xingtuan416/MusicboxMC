@@ -3,7 +3,7 @@ import { basename } from 'node:path';
 import { parseMidi } from '../core/midi/parse';
 import type { SongModel } from '../core/midi/types';
 import { formatDuration } from '../core/tempo/speed';
-import { MAX_QUANTIZE_ERROR_MS, secondsToTick } from '../core/tempo/tick';
+import { MAX_LAYOUT_ERROR_MS, MAX_QUANTIZE_ERROR_MS, secondsToTick } from '../core/tempo/tick';
 import type { AnalyzeResult, TrackSummary } from './types';
 
 /**
@@ -42,7 +42,8 @@ export function analyze(song: SongModel, path: string): AnalyzeResult {
       timeSignature: song.timeSignature,
       trackCount: song.tracks.length,
       noteCount: song.tracks.reduce((s, t) => s + t.notes.length, 0),
-      quantizeErrorMs: MAX_QUANTIZE_ERROR_MS,
+      commandErrorMs: MAX_QUANTIZE_ERROR_MS,
+      layoutErrorMs: MAX_LAYOUT_ERROR_MS,
     },
     tracks: summarizeTracks(song),
     tempoSegments: song.tempos,

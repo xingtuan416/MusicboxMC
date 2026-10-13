@@ -12,9 +12,12 @@ Minecraft's behaviour it deliberately does not model.
 | repeater delay  | 1–4 redstone ticks, set per repeater |
 
 MIDI note times are converted to game ticks with `secondsToTick`, then rounded
-onto the redstone-tick grid by `gameTickToRedstone`. That rounding is the only
-quantisation the layout performs, so a note fires at most one game tick away
-from its nominal time.
+onto the redstone-tick grid by `gameTickToRedstone`. **Both roundings contribute
+error**, so a note can fire up to 1.5 game ticks (75 ms) from its nominal time
+rather than one: the first rounding is ±½ tick and the second is ±1 tick, since a
+redstone tick is two game ticks wide. It is also asymmetric — 1.026 s lands on
+1.1 s, an error of +74 ms. The command playback backend rounds once and stays
+within ±25 ms. The interface reports both bounds separately for that reason.
 
 **Redstone dust contributes no delay.** Only repeaters do. This is the single
 most important property of the model: it means a line can be padded with dust to
@@ -112,8 +115,8 @@ forward_ with dust — never compress, never re-time, never cross-connect.
 
 ## Pitch, and the note-block palette
 
-One note block covers two octaves: its `note` property runs 0 to 24, two semitone
-steps per value, above the pitch its base block sounds at. A single instrument
+One note block covers two octaves: its `note` property runs 0 to 24, **one semitone
+per value**, above the pitch its base block sounds at. A single instrument
 therefore cannot hold a piano piece.
 
 Between them, the five note-block instruments reach **F#1 to F#7** (MIDI 30 to 102),

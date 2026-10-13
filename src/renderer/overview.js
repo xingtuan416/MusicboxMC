@@ -49,7 +49,10 @@ function renderOverview(res) {
         ['基准 BPM', s.baseBpm],
         ['拍号', s.timeSignature ? s.timeSignature.join('/') : '(无)'],
         ['时长', s.durationText],
-        ['量化误差上限', `±${s.quantizeErrorMs}ms`],
+        // Reported per backend: the redstone layout rounds onto the game-tick grid and
+        // then onto the redstone-tick grid, so its bound is three times the command one.
+        ['量化误差上限（红石）', `±${s.layoutErrorMs}ms`],
+        ['量化误差上限（命令播放）', `±${s.commandErrorMs}ms`],
         ['音轨 / 音符', `${s.trackCount} / ${s.noteCount}`],
       ]),
     ),
