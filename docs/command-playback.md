@@ -108,10 +108,15 @@ rather than truncating the music.
 
 ## Known limitations
 
-- **The chain is walked every tick, including while idle.** Every command block
-  in it is written with `conditional: false`, so the `if score #playing ...`
-  guard makes each command a no-op rather than skipping the traversal. A large
-  player therefore costs server time even when stopped.
+- **Every activation walks the whole chain.** Each command block is written with
+  `conditional: false`, so the `if score #playing ...` guard makes a command a
+  no-op rather than skipping the traversal. A large player therefore costs server
+  time for as long as it is running.
+- Stopping ends that traversal rather than merely silencing it. The power block is
+  what fires the clock, and the chain blocks are written with `auto: 1` so they run
+  when the block ahead of them runs rather than repeating on their own; cutting the
+  power therefore leaves nothing driving them, and only the ticks already scheduled
+  still execute.
 - Playback sends a sound to every player, so command execution, network and
   client-side sound load all increase with player count.
 - The client sound pool, sample tail overlap and server TPS still bound what is

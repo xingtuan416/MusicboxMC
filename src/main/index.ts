@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { copyFileSync, existsSync } from 'node:fs';
 import { analyzeFile, generate, generateToFile, type GenerateOptions } from './service';
 import { describeCoreError } from './messages';
+import { resolveRendererPath } from './rendererPath';
 
 /**
  * Static asset resolution. The build output layout is dist/src/main/index.js,
@@ -40,9 +41,8 @@ protocol.registerSchemesAsPrivileged([
 /** Serve the renderer directory over `app://`, refusing anything outside it. */
 function serveRenderer(): void {
   protocol.handle('app', (request) => {
-    const { pathname } = new URL(request.url);
-    const target = join(RENDERER_DIR, decodeURIComponent(pathname));
-    if (!target.startsWith(RENDERER_DIR)) {
+    const target = resolveRendererPath(RENDERER_DIR, new URL(request.url).pathname);
+    if (target === null) {
       return new Response('forbidden', { status: 403 });
     }
     return net.fetch(pathToFileURL(target).toString());

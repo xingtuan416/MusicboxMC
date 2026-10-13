@@ -13,7 +13,13 @@ export interface PlacedNote {
   note: number;
   /** Base block id, which is what selects the instrument. */
   block: string;
-  /** Cells from the tap point to this note block, excluding the start and including the end. */
+  /**
+   * Dust cells laid specifically to reach this note, from the tap point onward.
+   *
+   * Not a complete propagation path: the inline note of a group has none at all, and a
+   * branch's list covers its dust and repeater but stops short of the note block itself.
+   * Do not treat it as the route the signal takes.
+   */
   path: Vec3[];
 }
 
@@ -26,7 +32,13 @@ export interface PlacedNote {
 export interface Tap {
   /** X of the branch column. */
   x: number;
-  /** Redstone tick at which the main line reaches this tap point. */
+  /**
+   * The group's quantised **music** time, in redstone ticks.
+   *
+   * Not the tick the main line reaches this column: the song-wide lead-in is not included
+   * and the final repeater has not fired yet. Use `LayoutResult.placed` for the tick a
+   * group actually sounds at.
+   */
   t: number;
   notes: PlacedNote[];
 }

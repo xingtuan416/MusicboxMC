@@ -120,9 +120,13 @@ export interface XPlan {
  * X samples of each group when a track is laid out naturally (no padding), used by
  * index.ts to build the upper envelope.
  *
- * Mirrors buildTrack's routing exactly: ceil(rest/4) cells of pre-group repeaters,
- * one branch-column cell, one final-repeater cell and one note cell; plus a single
- * starting dust cell for the first group when rest > 0.
+ * Mirrors buildTrack's routing exactly: ceil(rest/4) cells of pre-group repeaters, one
+ * final-repeater cell and one note cell, plus a single starting dust cell for the first
+ * group when rest > 0.
+ *
+ * A branch column adds one more cell, and **only chords of four or more notes have one**;
+ * up to three notes are lit by one hop from the inline note block, so they need no dust
+ * to reach the outer rows. `groupTailCells` is what encodes that difference.
  */
 export function naturalSamples(
   notes: TrackNote[],

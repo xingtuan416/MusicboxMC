@@ -27,7 +27,14 @@ export function redstoneWire(power = 0): BlockState {
 
 export type RepeaterFacing = 'north' | 'south' | 'east' | 'west';
 
-/** Redstone repeater: delay 1-4, facing is the output direction. */
+/**
+ * Redstone repeater: delay 1-4.
+ *
+ * `facing` points at the **input**, not the output: vanilla's `DiodeBlock` reads its
+ * input from `pos.relative(facing)`, so a repeater facing west is powered from the west
+ * and drives the block to its east. Getting this backwards produces a circuit that looks
+ * right and never fires.
+ */
 export function repeater(facing: RepeaterFacing, delay: number): BlockState {
   return {
     name: 'minecraft:repeater',
