@@ -46,6 +46,15 @@ export interface PrepareGroupsOptions {
   maxChordNotes: number;
   /** When false, the surplus is dropped rather than reported for re-emission. */
   collectOverflow: boolean;
+  /**
+   * Whether to report notes outside the pitch range.
+   *
+   * False for the lanes a chord overflow is re-emitted onto: those notes were already
+   * mapped and reported on the first pass, so reporting again counted one source note
+   * several times - a 60-note chord produced 93 `OUT_OF_RANGE` notices, more than the
+   * song had notes.
+   */
+  reportRangeWarnings?: boolean;
 }
 
 export function prepareGroups(options: PrepareGroupsOptions): {
@@ -53,7 +62,16 @@ export function prepareGroups(options: PrepareGroupsOptions): {
   overflow: OverflowGroup[];
   warnings: LayoutWarning[];
 } {
-  const { notes, regions, outOfRange, transpose, maxChordNotes, collectOverflow, trackIndex } = options;
+  const {
+    notes,
+    regions,
+    outOfRange,
+    transpose,
+    maxChordNotes,
+    collectOverflow,
+    trackIndex,
+    reportRangeWarnings = true,
+  } = options;
   const warnings: LayoutWarning[] = [];
   const overflow: OverflowGroup[] = [];
 
@@ -62,18 +80,20 @@ export function prepareGroups(options: PrepareGroupsOptions): {
   for (const note of notes) {
     const mapped = mapPitch(note.midi, regions, outOfRange, transpose);
     if (mapped.dropped) {
-      warnings.push({
-        code: 'OUT_OF_RANGE',
-        midi: note.midi,
-        action: 'drop',
-        trackIndex,
-        tick: note.tick,
-      });
+      if (reportRangeWarnings) {
+        warnings.push({
+          code: 'OUT_OF_RANGE',
+          midi: note.midi,
+          action: 'drop',
+          trackIndex,
+          tick: note.tick,
+        });
+      }
       continue;
     }
     // Automatic octave shifting is an explicit user choice and stays silent; every
     // other degraded outcome is reported.
-    if (mapped.degraded && outOfRange !== 'octave') {
+    if (reportRangeWarnings && mapped.degraded && outOfRange !== 'octave') {
       warnings.push({
         code: 'OUT_OF_RANGE',
         midi: note.midi,

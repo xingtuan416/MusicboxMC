@@ -53,6 +53,8 @@ export interface BuildTrackOptions {
    * the caller can re-emit them on a new track.
    */
   collectOverflow?: boolean;
+  /** False on the lanes an overflow chord is re-emitted onto; see `prepareGroups`. */
+  reportRangeWarnings?: boolean;
   /**
    * Song-wide lead-in in redstone ticks (0 or 1), computed once by layout().
    *
@@ -105,6 +107,7 @@ export function buildTrack(opts: BuildTrackOptions): {
     maxChordNotes,
     collectOverflow: opts.collectOverflow === true,
     trackIndex: opts.trackIndex,
+    reportRangeWarnings: opts.reportRangeWarnings !== false,
   });
 
   // 3) Lay the main line along +X: [pre-group repeaters][branch column][repeaters][notes]

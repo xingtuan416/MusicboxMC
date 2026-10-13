@@ -261,6 +261,9 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
         transpose: opts.transpose?.[index] ?? 0,
         outOfRange: opts.outOfRange,
         collectOverflow: true,
+        // Only the first lane reports: the rest carry notes that were mapped and
+        // reported already, and re-reporting them counted one source note several times.
+        reportRangeWarnings: lane === 0,
         base,
         plan,
       });
