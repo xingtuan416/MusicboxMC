@@ -1,6 +1,7 @@
 import type { RegionTable } from '../palette/pitchMap';
 import type { BlockResolver } from '../palette/blockTable';
-import { noteBlock, plainBlock, redstoneWire, repeater } from '../palette/noteBlock';
+import { noteBlock, plainBlock, redstoneWire, repeater, type BlockState } from '../palette/noteBlock';
+import { coreError } from '../errors';
 import { place } from './placement';
 import { applyWireConnections } from './wiring';
 import { prepareGroups, type NoteToPlace } from './groups';
@@ -115,17 +116,27 @@ export function buildTrack(opts: BuildTrackOptions): {
   const taps: Tap[] = [];
   const placed: Array<{ tick: number; actual: number; x: number }> = [];
 
+  /**
+   * The block written under dust and repeaters.
+   *
+   * Neither can exist on air, and the forced layout has always refused that; the
+   * ordinary layout used to write it anyway and report success. Whether a *non-air*
+   * block can actually carry them is a separate question - a torch passes this check and
+   * cannot hold dust - which is tracked as a known limitation rather than guessed at
+   * here.
+   */
+  const supportBlock = (): BlockState => {
+    const block = opts.resolve({ slot: 'wireSupport', trackIndex: opts.trackIndex });
+    if (block === 'minecraft:air') throw coreError('LAYOUT_SUPPORT_IS_AIR');
+    return plainBlock(block);
+  };
+
   const putWire = (x: number, z: number): void => {
     // A schematic is pasted **unpowered**: dust is always written with power=0 and
     // the game propagates it once the player applies power at the start. Writing 15
     // would paste a pre-lit line, which is not what placing these blocks produces.
     placements.push(place({ x, y: opts.config.circuitY, z }, redstoneWire(0)));
-    placements.push(
-      place(
-        { x, y: opts.config.floorY, z },
-        plainBlock(opts.resolve({ slot: 'wireSupport', trackIndex: opts.trackIndex })),
-      ),
-    );
+    placements.push(place({ x, y: opts.config.floorY, z }, supportBlock()));
   };
 
   const putRelay = (x: number, z: number, delay: number): void => {
@@ -133,12 +144,7 @@ export function buildTrack(opts: BuildTrackOptions): {
     // semantics: facing points from the output side back towards the input side, the
     // opposite of the arrow - output east means facing=west.
     placements.push(place({ x, y: opts.config.circuitY, z }, repeater('west', delay)));
-    placements.push(
-      place(
-        { x, y: opts.config.floorY, z },
-        plainBlock(opts.resolve({ slot: 'wireSupport', trackIndex: opts.trackIndex })),
-      ),
-    );
+    placements.push(place({ x, y: opts.config.floorY, z }, supportBlock()));
   };
 
   const putNote = (x: number, z: number, n: NoteToPlace, path: Vec3[]): PlacedNote => {

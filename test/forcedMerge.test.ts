@@ -132,6 +132,15 @@ describe('forced instrument merge', () => {
         }),
       'FORCED_SUPPORT_IS_AIR',
     );
+    // The ordinary layout has to refuse it too: it used to write dust and repeaters
+    // sitting on nothing and report success.
+    expectCoreError(
+      () =>
+        layout(multiTrackSong([{ ticks: [0] }]), {
+          blocks: { tracks: { 0: { wireSupport: 'minecraft:air' } } },
+        }),
+      'LAYOUT_SUPPORT_IS_AIR',
+    );
     const dropped = multiTrackSong([{ ticks: [0] }]);
     dropped.tracks[0]!.notes[0]!.midi = 10;
     expect(layout(dropped, { forceMergeSameInstrument: true, outOfRange: 'drop' }).tracks).toHaveLength(0);

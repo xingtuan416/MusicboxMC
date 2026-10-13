@@ -50,6 +50,7 @@ const CORE_ERROR_TEXT: Record<CoreErrorCode, (details: CoreErrorDetails) => stri
     '这个 MIDI 用的是 SMPTE 时间制（按帧计时），暂不支持。请先用其它工具转成按拍计时（PPQ）的 MIDI 再导入。',
   MIDI_INVALID_TIMING: (d) =>
     `第 ${value(d, 'track')} 条音轨里有事件的时间无效（NaN 或负数），文件可能已损坏。`,
+  LAYOUT_SUPPORT_IS_AIR: () => '红石线与中继器的支撑方块不能是空气：它们下方必须有方块才能存在。',
   LAYOUT_INVALID_CONFIG: (d) => `排布配置无效：${value(d, 'field')} 必须是正数。`,
   LAYOUT_INVALID_TICK: (d) =>
     `第 ${value(d, 'track')} 条音轨有音符落在无效的游戏刻（${value(d, 'tick')}），无法排布。`,

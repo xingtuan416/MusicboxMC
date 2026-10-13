@@ -41,6 +41,7 @@ export type CoreErrorCode =
   | 'MIDI_INVALID_TIMING'
   | 'LAYOUT_INVALID_CONFIG'
   | 'LAYOUT_INVALID_TICK'
+  | 'LAYOUT_SUPPORT_IS_AIR'
   // Palette
   | 'PALETTE_EMPTY'
   // NBT codec
