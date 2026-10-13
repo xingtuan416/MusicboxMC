@@ -19,8 +19,10 @@ import {
   MAX_PAD_RUN,
   MAX_REPEATER_DELAY,
   MAX_TRIGGER_SHIFT,
+  WIRE_STRENGTH,
   chordCapacity,
   chordRowLayout,
+  chordRows,
   groupTailCells,
   type OverflowGroup,
   type TrackNote,
@@ -188,15 +190,28 @@ export function buildTrack(opts: BuildTrackOptions): {
     const tolerance = opts.plan?.isSynchronized(atRt) === true ? 0 : ALIGN_TOLERANCE_CELLS;
     const padNeeded = Math.max(0, deficit - tolerance);
     const slots = restCells + 1; // slot 0 precedes the pre-group repeaters; one slot follows each of them
-    const pad = Math.min(padNeeded, slots * MAX_PAD_RUN);
+    // The run in the last slot is followed by the branch column, and the two share one
+    // strength budget: the column is powered at `WIRE_STRENGTH + 1 - pad`, and row r of
+    // the branch needs at least 1 of that left, so that run may not exceed
+    // `WIRE_STRENGTH - r`. Spreading the padding evenly over every slot ignored this, and
+    // silently left the outer rows of a wide chord with no power at all.
+    // The final repeater sits one cell after that run, and the branch column one cell
+    // after the repeater, so the column is powered at `WIRE_STRENGTH - pad` for a run of
+    // `pad`; hence the run may not exceed `WIRE_STRENGTH - 1 - r`.
+    const branchReach = groupTailCells(g.notes.length) === 3 ? chordRows(g.notes.length) : 0;
+    const lastSlotCap = Math.max(0, Math.min(MAX_PAD_RUN, WIRE_STRENGTH - 1 - branchReach));
+    const pad = Math.min(padNeeded, lastSlotCap + (slots - 1) * MAX_PAD_RUN);
     if (padNeeded > pad) {
       warnings.push({ code: 'SPATIAL_DRIFT', tick: g.tick, drift: deficit - pad });
     }
     const padSlots = new Array<number>(slots).fill(0);
-    if (pad > 0) {
-      const each = Math.floor(pad / slots);
-      for (let i = 0; i < slots; i++) padSlots[i] = each;
-      for (let i = 0; i < pad % slots; i++) padSlots[i] = padSlots[i]! + 1;
+    // Fill the last slot up to its own limit, then put the rest ahead of the pre-group
+    // repeaters, where no lateral branch follows and the full run is available.
+    padSlots[slots - 1] = Math.min(pad, lastSlotCap);
+    let toPlace = pad - padSlots[slots - 1]!;
+    for (let i = 0; i < slots - 1 && toPlace > 0; i++) {
+      padSlots[i] = Math.min(MAX_PAD_RUN, toPlace);
+      toPlace -= padSlots[i]!;
     }
 
     // When the first group has repeaters ahead of it, lay one starting dust cell as
