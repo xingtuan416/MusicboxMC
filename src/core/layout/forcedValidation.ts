@@ -22,6 +22,13 @@ const DIRECTIONS = [
  * delay, and solid feed blocks only conduct a direct repeater output. This is a
  * rising-edge graph check, not a full Minecraft update-order or pulse simulator.
  * Throws on unreachable/early notes, coordinate collisions, locking, or missing supports.
+ *
+ * **What passing does not mean.** It is not a general "this geometry is safe" check, and
+ * must not be read as one. It does not verify that every registered note actually exists,
+ * that the block above a note block is air, that a support block can really carry dust or
+ * a repeater, that nothing collides on another Y layer, that separate tracks are
+ * connected to each other, or anything about rising edges after the first. Passing means
+ * the topology is self-consistent with respect to the checks listed above, nothing more.
  */
 export function validateForcedTrack(
   track: TrackSkeleton,

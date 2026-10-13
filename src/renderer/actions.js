@@ -108,6 +108,13 @@ async function doGenerate() {
     } catch (e) {
       log(`选择保存位置失败：${e.message || e}`);
     }
+    if (!out) {
+      // Cancelled at the save dialog, so there is nothing to export. Generating anyway
+      // produced an in-memory preview and then reported a schematic that was never
+      // written. Use 读取曲目 to preview without saving.
+      log('已取消保存，未生成投影。');
+      return;
+    }
   }
 
   hideBanner();

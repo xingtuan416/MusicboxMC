@@ -99,6 +99,11 @@ rather than truncating the music.
 - Paste **with block entity NBT**. Pasting only the block appearance loses the
   `TileEntities` and the player will not work. Check the commands and the
   Always Active flag after pasting.
+- **Paste without rotating or mirroring.** The power block is addressed by a relative
+  `~` offset from a command block, and Litematica rotates block positions and `facing`
+  without rewriting the `Command` strings. After a rotation the chain is still
+  continuous but the redstone block lands somewhere else, so the player never starts.
+  Place it in the orientation it was generated in.
 - The whole structure must be in loaded chunks. Command playback does not remove
   the chunk-loading requirement.
 - `maxCommandChainLength` must be at least the generated chain length. If the
