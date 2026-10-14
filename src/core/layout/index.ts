@@ -10,6 +10,7 @@ import {
   type XPlan,
 } from './track';
 import type { LayoutConfig, LayoutResult, LayoutWarning, Vec3 } from './types';
+import { boundsOf, sizeOf } from './placement';
 import type { SongModel } from '../midi/types';
 import { coreError } from '../errors';
 import { DEFAULT_REGIONS, type PitchRegion, type RegionTable } from '../palette/pitchMap';
@@ -289,32 +290,11 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
 
   // Bounding box over everything. Region origins are derived from it, so getting this
   // wrong makes the exported coordinates fall outside the region.
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let minZ = Number.POSITIVE_INFINITY;
-  let maxX = 0;
-  let maxY = config.circuitY;
-  let maxZ = 0;
-  let hasBlock = false;
-  for (const tr of tracks) {
-    for (const p of tr.placements) {
-      hasBlock = true;
-      minX = Math.min(minX, p.pos.x);
-      maxX = Math.max(maxX, p.pos.x);
-      minY = Math.min(minY, p.pos.y);
-      maxY = Math.max(maxY, p.pos.y);
-      minZ = Math.min(minZ, p.pos.z);
-      maxZ = Math.max(maxZ, p.pos.z);
-    }
-  }
-  if (!hasBlock) {
-    minX = 0;
-    minY = 0;
-    minZ = 0;
-  }
-
-  const size: Vec3 = { x: maxX - minX + 1, y: maxY - minY + 1, z: maxZ - minZ + 1 };
-  const min: Vec3 = { x: minX, y: minY, z: minZ };
+  const bounds = boundsOf(tracks.flatMap((track) => track.placements));
+  // An empty layout keeps the size it reported before: this is a de-duplication, not a
+  // change of behaviour.
+  const min: Vec3 = bounds ? bounds.min : { x: 0, y: 0, z: 0 };
+  const size: Vec3 = bounds ? sizeOf(bounds.min, bounds.max) : { x: 1, y: config.circuitY + 1, z: 1 };
 
   return { tracks, size, min, totalTicks: maxTick, warnings, placed, rangeShift: rangeShiftTotal };
 }

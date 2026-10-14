@@ -1,4 +1,5 @@
 import type { BlockPlacement, LayoutResult } from './types';
+import { boundsOf, sizeOf } from './placement';
 
 export interface RegionSlice {
   /** Index of the originating track; regions split off the same track share it. */
@@ -27,28 +28,17 @@ export function sliceRegions(result: LayoutResult): RegionSlice[] {
     const all = tr.placements;
     if (all.length === 0) continue;
 
-    let minX = Number.POSITIVE_INFINITY;
-    let minY = Number.POSITIVE_INFINITY;
-    let minZ = Number.POSITIVE_INFINITY;
-    let maxX = Number.NEGATIVE_INFINITY;
-    let maxY = Number.NEGATIVE_INFINITY;
-    let maxZ = Number.NEGATIVE_INFINITY;
-    for (const p of all) {
-      minX = Math.min(minX, p.pos.x);
-      maxX = Math.max(maxX, p.pos.x);
-      minY = Math.min(minY, p.pos.y);
-      maxY = Math.max(maxY, p.pos.y);
-      minZ = Math.min(minZ, p.pos.z);
-      maxZ = Math.max(maxZ, p.pos.z);
-    }
+    const bounds = boundsOf(all);
+    if (!bounds) continue;
+    const { min, max } = bounds;
 
     slices.push({
       trackIndex: tr.trackIndex,
-      position: { x: minX, y: minY, z: minZ },
-      size: { x: maxX - minX + 1, y: maxY - minY + 1, z: maxZ - minZ + 1 },
+      position: min,
+      size: sizeOf(min, max),
       blocks: all.map((p) => ({
         ...p,
-        pos: { x: p.pos.x - minX, y: p.pos.y - minY, z: p.pos.z - minZ },
+        pos: { x: p.pos.x - min.x, y: p.pos.y - min.y, z: p.pos.z - min.z },
       })),
     });
   }

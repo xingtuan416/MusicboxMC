@@ -9,7 +9,7 @@
        1. 核心色彩与液态玻璃变量 (Claude Warm Minimal × Apple Liquid Glass)
        ========================================================================== */
       :root {
-        /* 让 height:auto 可动画，折叠分组才能真的"撑到它的高度"。 */
+        /* Makes height:auto animatable, so a group opens to its real height. */
         interpolate-size: allow-keywords;
         --bg-base: #f5f4ef;
         --bg-surface: #eceae3;
@@ -142,7 +142,7 @@
         -webkit-backdrop-filter: blur(28px) saturate(140%);
       }
 
-      /* 顶部无边框拖拽标题栏 */
+      /* Frameless title bar; this is the window drag region. */
       .window-titlebar {
         height: 52px;
         width: 100%;
@@ -206,7 +206,7 @@
         pointer-events: none;
       }
 
-      /* 中央极简 7 步进度条 */
+      /* Minimal seven-step progress indicator. */
       .titlebar-center {
         display: flex;
         align-items: center;
@@ -239,7 +239,7 @@
         opacity: 1;
       }
 
-      /* 右上角窗口控制区：设置 + 最小化 + 全屏 + 关闭 */
+      /* Window controls: settings, minimise, maximise, close. */
       .titlebar-controls {
         display: flex;
         align-items: center;
@@ -348,7 +348,7 @@
         gap: 28px;
       }
 
-      /* 显眼大字体排版规范 */
+      /* Display type scale. */
       .step-head {
         display: flex;
         flex-direction: column;
@@ -763,7 +763,7 @@
         gap: 10px;
       }
 
-      /* 生成无法上报真实进度（主进程一次性完成），用不确定态而不是假百分比。 */
+      /* Generation cannot report progress, so the bar is indeterminate rather than a made-up percentage. */
       .progress-bar-track.indeterminate .progress-bar-fill {
         width: 35%;
         animation: mb-sweep 1.15s cubic-bezier(0.4, 0, 0.2, 1) infinite;
@@ -905,7 +905,7 @@
         display: none;
         align-items: center;
         justify-content: center;
-        /* 窗口很矮时对话框要能滚，而不是把顶部和按钮顶出屏幕。 */
+        /* A short window scrolls the dialog instead of pushing its buttons off screen. */
         padding: 24px;
         overflow-y: auto;
       }
@@ -917,7 +917,7 @@
       .settings-dialog {
         width: 460px;
         max-width: 92vw;
-        /* 与 .step-inner 同理：居中交给 auto 外边距，超高时改为滚动。 */
+        /* Same as .step-inner: centred by auto margins, scrolling when too tall. */
         margin: auto;
         padding: 28px 32px;
         border-radius: 24px;
@@ -985,7 +985,7 @@
         border-color: var(--ink-primary);
       }
 
-      /* 顶部状态反馈条 */
+      /* Toast. */
       .status-toast {
         position: fixed;
         top: 64px;
@@ -1032,7 +1032,7 @@
         gap: 10px;
       }
 
-      /* 分组标题；需要处理的那组用强调色，其余保持灰。 */
+      /* Group heading; the actionable group is accented, the rest stay grey. */
       .issue-group {
         margin: 8px 0 -2px;
         font-size: 12px;
@@ -1044,7 +1044,7 @@
         color: var(--accent);
       }
 
-      /* 不影响生成的提示一律压灰：它们不该和需要处理的抢注意力。 */
+      /* Notices that do not affect the build stay grey: they must not compete for attention. */
       .issue[data-severity='info'] {
         border-left-color: rgba(20, 20, 19, 0.14);
         background: rgba(255, 255, 255, 0.45);
@@ -1199,7 +1199,7 @@
         */
         height: min(58vh, 520px);
         min-height: 240px;
-        /* 画布本身就是视口，自己不滚动；平移在 JS 里做。 */
+        /* The canvas is the viewport, so it never scrolls itself; panning happens in JS. */
         overflow: hidden;
         cursor: grab;
         padding: 13px;
@@ -1361,19 +1361,19 @@
     </style>
   </head>
   <body>
-    <!-- 底层环境光斑 -->
+    <!-- Background wash. -->
     <div class="ambient-layer" aria-hidden="true">
       <div class="orb orb-1"></div>
       <div class="orb orb-2"></div>
       <div class="orb orb-3"></div>
     </div>
 
-    <!-- 轻量反馈提示 -->
+    <!-- Toast. -->
     <div id="statusToast" class="status-toast"></div>
 
-    <!-- Electron 无边框全屏应用主壳 -->
+    <!-- Frameless application shell. -->
     <div class="electron-window">
-      <!-- 顶部系统标题栏 (含右上角设置、最小化、全屏、关闭) -->
+      <!-- Title bar, with the window controls at its right. -->
       <header class="window-titlebar">
         <div class="titlebar-left">
           <div class="brand-mark">
@@ -1397,7 +1397,7 @@
           </button>
         </div>
 
-        <!-- 极简步进指示器 -->
+        <!-- Step indicator. -->
         <nav class="titlebar-center" aria-label="步骤进度">
           <button type="button" class="step-node current" data-target="1" title="1. 开始"></button>
           <button type="button" class="step-node" data-target="2" title="2. 导入"></button>
@@ -1409,7 +1409,7 @@
           <button type="button" class="step-node" data-target="8" title="8. 完成"></button>
         </nav>
 
-        <!-- 右上角窗口控制：设置 / 最小化 / 全屏 / 关闭 -->
+        <!-- Window controls. -->
         <div class="titlebar-controls">
           <button type="button" id="btnOpenSettings" class="win-btn" title="设置" aria-label="打开设置">
             <svg
@@ -1476,7 +1476,7 @@
         </div>
       </header>
 
-      <!-- 全屏单步视口 -->
+      <!-- One step per screen. -->
       <main class="workspace-viewport">
         <!-- ====================================================================
            Step 1: 开始页 (仅保留副标题 + 显眼主标题 + 开始制作按钮)
@@ -1521,7 +1521,7 @@
 
             <input id="realFileInput" type="file" accept=".mid,.midi" style="display: none" />
 
-            <!-- 空状态 -->
+            <!-- Nothing chosen yet. -->
             <div id="importEmpty" class="drop-area" style="display: none">
               <svg
                 width="32"
@@ -1541,13 +1541,13 @@
               <div class="drop-hint">支持标准 Format 0 / Format 1 MIDI 乐谱</div>
             </div>
 
-            <!-- 解析中状态 -->
+            <!-- Parsing. -->
             <div id="importLoading" class="state-box" style="display: none">
               <div style="font-size: 18px; font-weight: 700">正在解析音轨与时间轴签名...</div>
               <div style="font-size: 14px; color: var(--ink-secondary)">校验 MThd 头部块与拍速映射</div>
             </div>
 
-            <!-- 失败状态 -->
+            <!-- Failure. -->
             <div id="importError" class="state-box error-box" style="display: none">
               <div id="importErrHeading" style="font-size: 18px; font-weight: 700; color: var(--danger)">
                 文件读不了
@@ -1565,7 +1565,7 @@
               </div>
             </div>
 
-            <!-- 已导入状态 -->
+            <!-- Loaded. -->
             <div id="importLoaded" class="state-box">
               <div style="display: flex; justify-content: space-between; align-items: center">
                 <div>
@@ -2137,7 +2137,7 @@
               </p>
             </div>
 
-            <!-- 失败/中断视图 -->
+            <!-- Failure or interruption. -->
             <div id="genErrorBox" class="state-box error-box" style="display: none">
               <div id="genErrHeading" style="font-size: 18px; font-weight: 700; color: var(--danger)">
                 生成已中止
@@ -2164,7 +2164,7 @@
               <p id="doneFileSub" class="step-sub tnum">Sweden_Redstone_Musicbox.litematic</p>
             </div>
 
-            <!-- 3 宫格核心成果数据 -->
+            <!-- Result statistics. -->
             <div class="grid-3">
               <div class="stat-card">
                 <span class="stat-k">总方块数</span>
@@ -2182,7 +2182,7 @@
 
             <div id="doneWarningBox" class="preset-notice" style="display: none"></div>
 
-            <!-- 游戏内使用三步微指南 -->
+            <!-- Three steps to use it in game. -->
             <div class="grid-3">
               <div class="stat-card">
                 <span class="stat-k tnum">01 · 放入文件夹</span>
@@ -2282,7 +2282,7 @@
       </div>
     </div>
 
-    <!-- 行为全部在 app.js 里，且只通过 window.musicbox 与主进程通信。 -->
+    <!-- Behaviour lives in app.js and reaches the main process only through window.musicbox. -->
     <script type="module" src="app.js"></script>
   </body>
 </html>

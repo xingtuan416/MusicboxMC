@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "description": "MIDI → Minecraft 红石音乐 .litematic 投影生成器",
-  "license": "GPL-3.0-or-later",
+  "license": "GPL-3.0-only",
   "author": "xingtuan416",
   "repository": {
     "type": "git",
