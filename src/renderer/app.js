@@ -774,6 +774,35 @@ function renderIssues(result) {
 }
 
 /**
+ * A chip per track, so the user can reach a row instead of hunting for it by dragging.
+ *
+ * The Z position comes from the regions the generator reported rather than from the track
+ * index, because the spacing between tracks depends on how wide the song's chords are.
+ */
+function renderTrackChips(result) {
+  const box = $('previewTrackChips');
+  box.replaceChildren();
+
+  const firstRowOfTrack = new Map();
+  for (const region of result.regions ?? []) {
+    if (!firstRowOfTrack.has(region.trackIndex)) {
+      firstRowOfTrack.set(region.trackIndex, region.position.z);
+    }
+  }
+
+  for (const [index, z] of firstRowOfTrack) {
+    const track = (result.tracks ?? []).find((entry) => entry.index === index);
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'pill-tag';
+    chip.textContent = track?.name ? `${index + 1} ${track.name}` : `音轨 ${index + 1}`;
+    chip.title = `跳到 z${z} 行`;
+    chip.addEventListener('click', () => focusPreviewCell(0, z));
+    box.append(chip);
+  }
+}
+
+/**
  * Run a generation for its warnings alone.
  *
  * The output path is deliberately left out: the main process then builds the whole result
@@ -813,6 +842,7 @@ async function runCheck() {
         ? '没有发现问题，可以直接生成。'
         : `共 ${number(issues)} 处需要看一眼。点「在红石布线里定位」可以跳到对应位置；想改配置就点「上一步」。`;
     renderIssues(result);
+    renderTrackChips(result);
     // The canvas measures its container, so this runs after the step is on screen.
     renderPreview(result);
     if (issues === 0) notify('没有发现问题，可以生成');

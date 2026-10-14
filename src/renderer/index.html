@@ -1105,6 +1105,19 @@
         flex-wrap: wrap;
       }
 
+      .preview-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .preview-chips:empty {
+        display: none;
+      }
+      .preview-chips .pill-tag {
+        height: 26px;
+        font-size: 12px;
+      }
+
       .preview-block {
         display: flex;
         flex-direction: column;
@@ -2054,6 +2067,8 @@
                   </label>
                 </div>
               </div>
+
+              <div id="previewTrackChips" class="preview-chips"></div>
 
               <div class="canvaswrap" id="canvasWrap">
                 <div class="canvas-stage"><canvas id="canvas"></canvas></div>
