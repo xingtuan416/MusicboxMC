@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu, dialog, ipcMain, net, protocol, shell } from 'electron';
 import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { copyFileSync, existsSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync } from 'node:fs';
 import { analyzeFile, generate, generateToFile, type GenerateOptions } from './service';
 import { describeCoreError } from './messages';
 import { resolveRendererPath } from './rendererPath';
@@ -160,6 +160,32 @@ function registerIpc(): void {
   });
 
   /**
+   * The application's own version.
+   *
+   * `app.getVersion()` falls back to Electron's version when the app is not packaged, which
+   * is how the About section ended up reporting 33.4.11. The manifest is readable at
+   * `app.getAppPath()` in both cases, so the version is taken from there.
+   */
+  function appVersion(): string {
+    // Two candidates: the app path Electron works out, and the project root relative to this
+    // compiled file. Running `electron dist/src/main/index.js` does not always give the first
+    // one the right answer, because the manifest's `main` points at a different entry.
+    const candidates = [
+      join(app.getAppPath(), 'package.json'),
+      join(__dirname, '..', '..', '..', 'package.json'),
+    ];
+    for (const candidate of candidates) {
+      try {
+        const manifest = JSON.parse(readFileSync(candidate, 'utf8'));
+        if (typeof manifest.version === 'string' && manifest.version) return manifest.version;
+      } catch {
+        // Try the next candidate.
+      }
+    }
+    return app.getVersion();
+  }
+
+  /**
    * What the About section shows.
    *
    * The version comes from the app itself, so a packaged build cannot disagree with it.
@@ -168,8 +194,8 @@ function registerIpc(): void {
    */
   ipcMain.handle('app:info', () => ({
     name: 'MusicboxMC',
-    version: app.getVersion(),
-    license: 'GPL-3.0-or-later',
+    version: appVersion(),
+    license: 'GPL-3.0',
     repository: 'https://github.com/xingtuan416/MusicboxMC',
     author: 'xingtuan416',
   }));
