@@ -5,10 +5,14 @@
  * dialog and no network. It is offered in two places: a button in the export step, which is
  * always there, and a one-time nudge the first time a full-range schematic is exported.
  *
- * The wording carries the point of the feature. The pack is **not required**: the five
- * instruments the full range uses are all vanilla, so the schematic plays without it and
- * only the timbre differs between octave bands. The interface used to imply otherwise, and
- * that is what this exists to correct.
+ * The wording has to hold two facts at once, and the earlier version only held the first.
+ *
+ * The pack is not technically required: the five base notes the full range uses are all
+ * vanilla, so a schematic plays without it. But a melody that crosses an octave boundary
+ * changes instrument - bass, then guitar, then harp, then flute, then bell - so what comes
+ * out is not one instrument playing a piece. For a full-range export that makes the pack
+ * necessary in practice, and saying only "you can play without it" was misleading in the
+ * other direction. Both sentences belong there.
  */
 
 /** Remembers that the nudge has been shown, so it is shown once. */
@@ -55,14 +59,17 @@ function showPackNudge() {
 
   const heading = document.createElement('h3');
   heading.style.cssText = 'font-size:20px;font-weight:800;margin:0;';
-  heading.textContent = '全音域：可以装一个配套资源包';
+  heading.textContent = '全音域：建议现在就装上配套资源包';
 
   const body = document.createElement('p');
   body.style.cssText = 'font-size:13.5px;color:var(--ink-secondary);margin:0;line-height:1.7;';
   body.textContent =
-    '这次生成覆盖了 F#1–F#7，用到 bass、guitar、harp、flute、bell 五个原版音色。' +
-    '不装资源包也能完整演奏——五个都是原版乐器——只是五个八度段听起来不是同一种琴。' +
-    '配套资源包把它们换成钢琴采样，约 50 KB，就在应用里，之后也能在导出这一步取。';
+    '这次生成覆盖了 F#1–F#7。原版音符盒在这个音域里只有五种基底音色：' +
+    'bass、guitar、harp、flute、bell。' +
+    '不装资源包，投影照样能完整演奏，但一条旋律只要跨过八度边界，音色就会换成另一件乐器，' +
+    '听起来不像同一架琴在弹。' +
+    '配套资源包把这五段统一成钢琴采样，约 50 KB，就在应用里，' +
+    '之后也可以在导出这一步随时取。';
 
   const actions = document.createElement('div');
   actions.style.cssText = 'display:flex;gap:12px;justify-content:flex-end;';

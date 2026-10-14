@@ -299,8 +299,18 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
+        /*
+          纵向居中靠 .step-inner 的 margin:auto，不靠 justify-content:center。
+          两者在内容比屏幕矮时看不出区别，但内容一超高，flex 居中会把顶部推到
+          可视区之外，而滚动条救不回来——第 4 步展开全部选项后按钮点不到就是这么来的。
+        */
         padding: 40px 64px 80px;
+        /*
+          比屏幕高的步骤必须能滚，否则它自己的操作按钮会落在窗口外面。
+          这同样影响音轨很多的第 3 步。
+        */
+        overflow-y: auto;
+        overflow-x: hidden;
         opacity: 0;
         pointer-events: none;
         transform: translateY(14px) scale(0.99);
@@ -324,6 +334,8 @@
         display: flex;
         flex-direction: column;
         gap: 28px;
+        /* 有空间时竖直居中，空间不够时退化成 0 并正常滚动。 */
+        margin: auto;
       }
 
       /* 显眼大字体排版规范 */
@@ -883,6 +895,9 @@
         display: none;
         align-items: center;
         justify-content: center;
+        /* 窗口很矮时对话框要能滚，而不是把顶部和按钮顶出屏幕。 */
+        padding: 24px;
+        overflow-y: auto;
       }
 
       .modal-backdrop.open {
@@ -892,6 +907,8 @@
       .settings-dialog {
         width: 460px;
         max-width: 92vw;
+        /* 与 .step-inner 同理：居中交给 auto 外边距，超高时改为滚动。 */
+        margin: auto;
         padding: 28px 32px;
         border-radius: 24px;
         background: rgba(245, 244, 239, 0.94);
@@ -1291,7 +1308,7 @@
               <p class="step-sub">所有参数已默认收起并采用推荐预设，无需修改即可直接进入下一步。</p>
             </div>
 
-            <div class="preset-notice">已启用智能推荐预设 — 点击下方分组可按需微调电路参数</div>
+            <div class="preset-notice">下面三组都已经是默认值，直接下一步即可；需要时再展开微调。</div>
 
             <div class="fold-list">
               <div class="fold-card" id="fold-pitch">
@@ -1555,9 +1572,9 @@
               "
             >
               <div>
-                <div style="font-size: 14.5px; font-weight: 700">配套资源包（可选）</div>
+                <div style="font-size: 14.5px; font-weight: 700">配套资源包（全音域建议安装）</div>
                 <div style="font-size: 12.5px; color: var(--ink-secondary); margin-top: 4px">
-                  全音域会用到五种原版乐器。不安装也能完整演奏，只是五个八度段的音色不同；安装后整个音域是同一架钢琴。
+                  全音域由五种原版基底音色拼成：bass、guitar、harp、flute、bell。旋律跨过八度边界时音色会跟着换，听起来不像同一架琴。装上它把这五段统一成钢琴采样。
                 </div>
               </div>
               <button type="button" id="btnSavePack" class="pill-tag" style="flex: none">
