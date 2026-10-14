@@ -11,6 +11,8 @@
  * step than as a general renderer.
  */
 
+import { maybePromptForPack, savePack } from './resourcepack.js';
+
 const api = window.musicbox;
 
 /** Elements are looked up once; the markup is static, so a missing one is a bug. */
@@ -381,6 +383,10 @@ async function runGeneration() {
     setupPreviewButton();
     goStep(7);
     playSuccess();
+
+    // Only for an export that actually wrote a file, and only the first time: the nudge
+    // exists to explain an optional pack, not to become a step people click through.
+    if (result.outputPath) maybePromptForPack(state.palette === 'full');
   } catch (error) {
     showGenerateError(error?.message || String(error));
   }
@@ -511,6 +517,18 @@ $('commandBudgetInput').addEventListener('change', (event) => {
   const value = Number(event.target.value);
   state.commandBudget = Number.isFinite(value) && value > 0 ? Math.round(value) : 65536;
   event.target.value = String(state.commandBudget);
+});
+
+$('btnSavePack').addEventListener('click', async () => {
+  try {
+    const target = await savePack();
+    if (!target) return; // Cancelled.
+    notify('资源包已保存，把它放进 .minecraft/resourcepacks/ 再在游戏里启用');
+    // Reveal it: finding the file afterwards is the awkward part of this feature.
+    await api.reveal(target);
+  } catch (error) {
+    notify(`保存资源包失败：${error?.message || error}`);
+  }
 });
 
 $('btnChooseOutput').addEventListener('click', () => void chooseOutputFile());

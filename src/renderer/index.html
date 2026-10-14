@@ -1538,6 +1538,33 @@
               </div>
             </div>
 
+            <!--
+              可选资源包。措辞是有意的：全音域用的是五种原版乐器，不装这个包也能完整演奏，
+              它只让五个八度段听起来像同一架钢琴。说成"必需"正是这个功能要纠正的事。
+            -->
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 16px;
+                padding: 16px 18px;
+                border: 1px solid rgba(20, 20, 19, 0.1);
+                border-radius: 14px;
+                background: rgba(255, 255, 255, 0.6);
+              "
+            >
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700">配套资源包（可选）</div>
+                <div style="font-size: 12.5px; color: var(--ink-secondary); margin-top: 4px">
+                  全音域会用到五种原版乐器。不安装也能完整演奏，只是五个八度段的音色不同；安装后整个音域是同一架钢琴。
+                </div>
+              </div>
+              <button type="button" id="btnSavePack" class="pill-tag" style="flex: none">
+                保存（约 50 KB）
+              </button>
+            </div>
+
             <div class="action-bar">
               <button type="button" class="btn-glass" data-goto="4">上一步</button>
               <button type="button" id="btnStartGen" class="btn-obsidian">开始生成投影</button>
