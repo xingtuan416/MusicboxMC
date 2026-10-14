@@ -16,12 +16,19 @@ import {
   visibleCells,
 } from './previewGeometry.js';
 
+/**
+ * Cell size in CSS pixels, the same for every song.
+ *
+ * Above DETAIL_MIN_CELL and BADGE_MIN_CELL so note names and the block badge are drawn;
+ * big enough that one block is readable without leaning in.
+ */
+const READABLE_CELL = 28;
+
 /** Background of the gutter and ruler. */
 const HEAD_BG = '#e9e7e2';
 /** The result the view was last fitted to, so a new one re-fits instead of scrolling. */
 let fittedFor = null;
 /** Whether that fit was measured against a panel that actually had a size. */
-let fittedMeasured = false;
 /** Multiplicative zoom step: the range is far wider than the old fit-only zoom. */
 const ZOOM_STEP = 1.3;
 /** Smallest panel the fit calculation will consider, and the margin it leaves. */
@@ -92,6 +99,12 @@ function renderPreview(res) {
   const hint = $('previewHint');
   const wrap = $('canvasWrap');
   const preview = res && res.preview;
+
+  // Everything that redraws - panning, the locate button, the layer toggles - reads this
+  // to know what it is drawing. It used to be assigned only by the previous renderer's
+  // orchestrator, which this interface does not load, so it stayed undefined and every one
+  // of those actions returned without doing anything: dragging and the wheel were dead.
+  state.generated = res;
   $('previewDescription').textContent =
     res?.playbackMode === 'command'
       ? '命令播放器 · 立体结构俯视图'
@@ -113,19 +126,10 @@ function renderPreview(res) {
 
   if (fittedFor !== res) {
     fittedFor = res;
-    fittedMeasured = false;
     state.previewView = { x0: 0, z0: 0 };
     state.previewFocus = null;
   }
-  if (!fittedMeasured) {
-    // Show as much of a new result as stays legible rather than the first sliver. The
-    // pane is often hidden at this point, so this is retried until it can be measured.
-    const fit = fitScaleFor(res);
-    if (fit !== null) {
-      fittedMeasured = true;
-      state.previewScale = fit;
-    }
-  }
+  state.previewScale = scaleForCell(READABLE_CELL);
 
   const { x, z } = preview.size;
   const dpr = window.devicePixelRatio || 1;
@@ -553,7 +557,8 @@ function renderPreview(res) {
 }
 
 function updatePreviewZoomLabel() {
-  $('previewZoom').textContent = `${Math.round(scaleForCell(cellForScale(state.previewScale)) * 100)}%`;
+  const label = document.getElementById('previewZoom');
+  if (label) label.textContent = `${Math.round(scaleForCell(cellForScale(state.previewScale)) * 100)}%`;
 }
 
 /**
@@ -633,7 +638,6 @@ function fitPreview() {
   state.previewScale = fit;
   state.previewView = { x0: 0, z0: 0 };
   state.previewFocus = null;
-  fittedMeasured = true;
   renderPreview(state.generated);
 }
 

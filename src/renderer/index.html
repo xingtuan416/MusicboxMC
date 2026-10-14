@@ -328,14 +328,22 @@
         filter: blur(0);
       }
 
+      /*
+        竖直居中靠 auto 外边距，不靠 .screen-step 的 justify-content:center：
+        后者在内容比屏幕高时会把顶部推出可视区且滚不回来。
+        第 1 步用的不是 .step-inner，所以两个都要写。
+      */
+      .step-inner,
+      .hero-minimal {
+        margin: auto;
+      }
+
       .step-inner {
         width: 100%;
         max-width: 820px;
         display: flex;
         flex-direction: column;
         gap: 28px;
-        /* 有空间时竖直居中，空间不够时退化成 0 并正常滚动。 */
-        margin: auto;
       }
 
       /* 显眼大字体排版规范 */
@@ -1013,6 +1021,205 @@
           grid-template-columns: 1fr;
         }
       }
+      /* ========================================================================
+         第 7 步：问题清单与红石布线预览
+         ======================================================================== */
+      .issue-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .issue {
+        display: flex;
+        gap: 14px;
+        padding: 15px 17px;
+        border: 1px solid var(--glass-line);
+        border-left: 3px solid var(--ink-muted);
+        border-radius: 14px;
+        background: var(--glass-bg);
+      }
+
+      .issue[data-severity='error'] {
+        border-left-color: var(--danger);
+      }
+      .issue[data-severity='warn'] {
+        border-left-color: var(--accent);
+      }
+      .issue[data-severity='ok'] {
+        border-left-color: var(--success);
+        background: var(--success-bg);
+      }
+
+      .issue-body {
+        flex: 1;
+        min-width: 0;
+      }
+      .issue-title {
+        font-size: 14.5px;
+        font-weight: 700;
+      }
+      .issue[data-severity='error'] .issue-title {
+        color: var(--danger);
+      }
+      .issue[data-severity='warn'] .issue-title {
+        color: var(--accent);
+      }
+      .issue[data-severity='ok'] .issue-title {
+        color: var(--success);
+      }
+      .issue-detail {
+        margin-top: 5px;
+        font-size: 13px;
+        line-height: 1.65;
+        color: var(--ink-secondary);
+      }
+      .issue-actions {
+        margin-top: 11px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .preview-block {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .preview-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+
+      .preview-title {
+        font-size: 15px;
+        font-weight: 700;
+      }
+      .preview-subtitle {
+        margin: 4px 0 0;
+        font-size: 12px;
+        color: var(--ink-secondary);
+      }
+      .preview-tools {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .preview-check {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12.5px;
+        color: var(--ink-secondary);
+        cursor: pointer;
+      }
+
+      .zoom-control {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        padding: 3px;
+        border: 1px solid var(--glass-line);
+        border-radius: 10px;
+        background: var(--glass-bg);
+      }
+      .zoom-label {
+        min-width: 46px;
+        text-align: center;
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: 11px;
+        color: var(--ink-secondary);
+      }
+      .icon-button {
+        display: grid;
+        width: 26px;
+        height: 26px;
+        place-items: center;
+        border: 0;
+        border-radius: 7px;
+        background: transparent;
+        color: var(--ink-primary);
+        font-size: 17px;
+        line-height: 1;
+        cursor: pointer;
+      }
+      .icon-button:hover {
+        background: rgba(20, 20, 19, 0.06);
+      }
+
+      .canvaswrap {
+        min-height: 265px;
+        max-height: calc(100vh - 380px);
+        /* 画布本身就是视口，自己不滚动；平移在 JS 里做。 */
+        overflow: hidden;
+        cursor: grab;
+        padding: 13px;
+        border: 1px solid var(--glass-line);
+        border-radius: 16px;
+        background: #eef0f1;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+      }
+      .canvaswrap:active {
+        cursor: grabbing;
+      }
+      .canvas-stage {
+        display: flex;
+        align-items: flex-start;
+        justify-content: flex-start;
+      }
+      #canvas {
+        display: block;
+        border-radius: 5px;
+      }
+
+      .preview-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .preview-footer .hint {
+        flex: 1;
+        min-width: 200px;
+        margin: 0;
+        font-size: 12px;
+        color: var(--ink-secondary);
+      }
+      .legend {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px 13px;
+        font-size: 11px;
+        color: var(--ink-secondary);
+      }
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .legend i {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+      }
+      .legend-note {
+        font-size: 11px;
+        color: var(--ink-muted);
+      }
+      .preview-stats {
+        display: flex;
+        gap: 14px;
+        font-size: 12px;
+        color: var(--ink-secondary);
+      }
     </style>
   </head>
   <body>
@@ -1059,8 +1266,9 @@
           <button type="button" class="step-node" data-target="3" title="3. 选轨"></button>
           <button type="button" class="step-node" data-target="4" title="4. 配置"></button>
           <button type="button" class="step-node" data-target="5" title="5. 位置"></button>
-          <button type="button" class="step-node" data-target="6" title="6. 进度"></button>
-          <button type="button" class="step-node" data-target="7" title="7. 完成"></button>
+          <button type="button" class="step-node" data-target="6" title="6. 检查"></button>
+          <button type="button" class="step-node" data-target="7" title="7. 进度"></button>
+          <button type="button" class="step-node" data-target="8" title="8. 完成"></button>
         </nav>
 
         <!-- 右上角窗口控制：设置 / 最小化 / 全屏 / 关闭 -->
@@ -1166,7 +1374,7 @@
         <section id="step-2" class="screen-step">
           <div class="step-inner">
             <div class="step-head">
-              <span class="step-index tnum">STEP 02 / 07</span>
+              <span class="step-index tnum">STEP 02 / 08</span>
               <h2 class="step-h1">导入 MIDI</h2>
               <p class="step-sub">
                 MIDI 记录的是「何时、用什么乐器、按下哪个音符」的数字乐谱，天然契合红石电路时序。
@@ -1272,7 +1480,7 @@
         <section id="step-3" class="screen-step">
           <div class="step-inner">
             <div class="step-head">
-              <span class="step-index tnum">STEP 03 / 07</span>
+              <span class="step-index tnum">STEP 03 / 08</span>
               <h2 class="step-h1">选择音轨</h2>
               <p class="step-sub">默认全选，可按需剔除不需要编译为音符盒的伴奏或打击乐轨道。</p>
             </div>
@@ -1303,7 +1511,7 @@
         <section id="step-4" class="screen-step">
           <div class="step-inner">
             <div class="step-head">
-              <span class="step-index tnum">STEP 04 / 07</span>
+              <span class="step-index tnum">STEP 04 / 08</span>
               <h2 class="step-h1">深度配置</h2>
               <p class="step-sub">所有参数已默认收起并采用推荐预设，无需修改即可直接进入下一步。</p>
             </div>
@@ -1518,7 +1726,7 @@
         <section id="step-5" class="screen-step">
           <div class="step-inner">
             <div class="step-head">
-              <span class="step-index tnum">STEP 05 / 07</span>
+              <span class="step-index tnum">STEP 05 / 08</span>
               <h2 class="step-h1">选择导出位置</h2>
               <p class="step-sub">生成的 .litematic 会保存到你选择的位置。文件名默认取自曲名，可以改。</p>
             </div>
@@ -1592,10 +1800,73 @@
         <!-- ====================================================================
            Step 6: 进度
            ==================================================================== -->
+        <!-- ====================================================================
+           Step 6: 检查结果（先空跑一遍，把问题找出来）
+           ==================================================================== -->
         <section id="step-6" class="screen-step">
           <div class="step-inner">
             <div class="step-head">
-              <span class="step-index tnum">STEP 06 / 07</span>
+              <span class="step-index tnum">STEP 06 / 08</span>
+              <h2 class="step-h1">检查结果</h2>
+              <p id="checkSummary" class="step-sub">生成时发现的问题会列在这里。</p>
+            </div>
+
+            <!--
+            问题列表。每一项都能跳到红石布线里对应的位置，所以这一页和下面的预览是同一件事的
+            两种看法：一个是清单，一个是位置。
+          -->
+            <div id="issueList" class="issue-list"></div>
+
+            <div class="preview-block">
+              <div class="preview-head">
+                <div>
+                  <div class="preview-title">红石布线</div>
+                  <p id="previewDescription" class="preview-subtitle">
+                    向右是时间，向下是不同音轨的空间排布。
+                  </p>
+                </div>
+                <div class="preview-tools">
+                  <label class="preview-check">
+                    <input id="showGrid" type="checkbox" checked />
+                    网格
+                  </label>
+                  <label class="preview-check">
+                    <input id="showNotes" type="checkbox" checked />
+                    音符名
+                  </label>
+                </div>
+              </div>
+
+              <div class="canvaswrap" id="canvasWrap">
+                <div class="canvas-stage"><canvas id="canvas"></canvas></div>
+              </div>
+
+              <div class="preview-footer">
+                <p class="hint" id="previewHint">尚未生成电路。</p>
+                <div class="legend" id="legend" aria-label="方块图例"></div>
+                <div class="preview-stats tnum">
+                  <span id="previewSize">—</span>
+                  <span id="previewRegions">—</span>
+                  <span id="previewTracks">—</span>
+                  <span id="previewBlocks">—</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="action-bar">
+              <button type="button" class="btn-glass" id="btnBackToExport">上一步</button>
+              <button type="button" class="btn-obsidian" id="btnGoGenerate">下一步：生成投影</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+           Step 7: 生成
+           ==================================================================== -->
+        <section id="step-7" class="screen-step">
+          <div class="step-inner">
+            <div class="step-head">
+              <span class="step-index tnum">STEP 07 / 08</span>
               <h2 id="genTitle" class="step-h1">正在生成投影</h2>
               <p id="genStageText" class="step-sub">正在排布红石电路并写入文件…</p>
             </div>
@@ -1631,12 +1902,12 @@
         </section>
 
         <!-- ====================================================================
-           Step 7: 完成
+           Step 8: 完成
            ==================================================================== -->
-        <section id="step-7" class="screen-step">
+        <section id="step-8" class="screen-step">
           <div class="step-inner">
             <div class="step-head">
-              <span class="step-index tnum">STEP 07 / 07 · COMPLETED</span>
+              <span class="step-index tnum">STEP 08 / 08 · COMPLETED</span>
               <h2 class="step-h1">红石音乐投影已就绪</h2>
               <p id="doneFileSub" class="step-sub tnum">Sweden_Redstone_Musicbox.litematic</p>
             </div>

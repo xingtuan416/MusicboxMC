@@ -12,6 +12,14 @@
  */
 
 import { maybePromptForPack, savePack } from './resourcepack.js';
+import { focusPreviewCell, panPreview, renderPreview } from './preview.js';
+import {
+  locateWarning,
+  WARNING_DISPLAY_LIMIT,
+  warnSeverity,
+  warningText,
+  warningTitle,
+} from './warningText.js';
 
 const api = window.musicbox;
 
@@ -34,6 +42,8 @@ const state = {
   /** TrackSummary[] plus the user's selection. */
   tracks: [],
   outputPath: null,
+  /** The rehearsal result, used by the check step. Never the exported one. */
+  checkResult: null,
   result: null,
   palette: 'full',
   dMax: 14,
@@ -151,7 +161,12 @@ function goStep(target) {
 
   playNote(330 + next * 40, 'sine', 0.08);
 
-  if (next === 6) void runGeneration();
+  // The pack nudge belongs on the last step, not on the check step: arriving at the check
+  // step with a modal over it hides the very thing the user was sent there to read. It is
+  // shown once, and only for an export that actually wrote a full-range file.
+  if (next === 8 && state.result?.outputPath) {
+    maybePromptForPack(state.palette === 'full');
+  }
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -184,12 +199,17 @@ async function loadMidi(path) {
   try {
     const result = await api.analyze(path);
     state.song = result.song;
-    state.tracks = result.tracks.map((track) => ({ ...track, checked: true }));
+    // A MIDI file routinely carries tracks that hold no notes - a conductor track, or one
+    // whose channel was never used. They compile to nothing, so listing them offers the
+    // user a choice that does nothing.
+    state.tracks = result.tracks
+      .filter((track) => track.noteCount > 0)
+      .map((track) => ({ ...track, checked: true }));
 
     $('midiFileTitle').textContent = result.file;
     $('valDuration').textContent = result.song.durationText;
     $('valBpm').textContent = `${result.song.baseBpm} BPM`;
-    $('valTracks').textContent = String(result.song.trackCount);
+    $('valTracks').textContent = String(state.tracks.length);
     $('valNotes').textContent = number(result.song.noteCount);
 
     $('fileNameInput').value = suggestedName(path, result.song.name);
@@ -393,12 +413,8 @@ async function runGeneration() {
     state.result = result;
     showResult(result);
     setupPreviewButton();
-    goStep(7);
+    goStep(8);
     playSuccess();
-
-    // Only for an export that actually wrote a file, and only the first time: the nudge
-    // exists to explain an optional pack, not to become a step people click through.
-    if (result.outputPath) maybePromptForPack(state.palette === 'full');
   } catch (error) {
     showGenerateError(error?.message || String(error));
   }
@@ -545,7 +561,17 @@ $('btnSavePack').addEventListener('click', async () => {
 
 $('btnChooseOutput').addEventListener('click', () => void chooseOutputFile());
 $('fileNameInput').addEventListener('input', syncOutputText);
-$('btnStartGen').addEventListener('click', () => goStep(6));
+$('btnStartGen').addEventListener('click', () => {
+  goStep(6);
+  void runCheck();
+});
+
+// The check step's button is the only thing that writes a file.
+$('btnGoGenerate').addEventListener('click', () => {
+  goStep(7);
+  void runGeneration();
+});
+$('btnBackToExport').addEventListener('click', () => goStep(5));
 $('btnRetryGen').addEventListener('click', () => void runGeneration());
 
 $('btnOpenFolder').addEventListener('click', () => {
@@ -558,6 +584,7 @@ $('btnNextSong').addEventListener('click', () => {
   state.song = null;
   state.tracks = [];
   state.outputPath = null;
+  state.checkResult = null;
   state.result = null;
   $('fileNameInput').value = '';
   setImportView('empty');
@@ -605,9 +632,164 @@ $('baseTpsInput').addEventListener('change', (event) => {
  */
 function setupPreviewButton() {
   const button = $('btnPreview');
-  button.disabled = true;
-  button.title = '红石布线预览还在接入中，暂时不可用';
+  button.disabled = false;
+  button.title = '回到检查结果，查看红石布线';
+  button.onclick = () => goStep(6);
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * The check step: what went wrong, and where
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** One issue: a heading, the explanation the text module builds, and a way to go and look. */
+function issueElement(result, warning) {
+  const item = document.createElement('div');
+  item.className = 'issue';
+  item.dataset.severity = warnSeverity(warning.code);
+
+  const body = document.createElement('div');
+  body.className = 'issue-body';
+
+  const title = document.createElement('div');
+  title.className = 'issue-title';
+  title.textContent = warningTitle(warning.code);
+
+  const detail = document.createElement('div');
+  detail.className = 'issue-detail';
+  detail.textContent = warningText(result, warning);
+  body.append(title, detail);
+
+  const cell = locateWarning(result, warning);
+  if (cell) {
+    const actions = document.createElement('div');
+    actions.className = 'issue-actions';
+    const jump = document.createElement('button');
+    jump.type = 'button';
+    jump.className = 'pill-tag';
+    jump.textContent = `在红石布线里定位 X${cell.x} · Z${cell.z}`;
+    jump.addEventListener('click', () => {
+      focusPreviewCell(cell.x, cell.z);
+      $('canvasWrap').scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+    actions.append(jump);
+    body.append(actions);
+  }
+
+  item.append(body);
+  return item;
+}
+
+function renderIssues(result) {
+  const list = $('issueList');
+  list.replaceChildren();
+
+  const warnings = result.warnings ?? [];
+  const shown = warnings.slice(0, WARNING_DISPLAY_LIMIT);
+
+  $('checkSummary').textContent =
+    warnings.length === 0
+      ? '没有需要处理的错误。'
+      : `共 ${number(warnings.length)} 处需要看一眼。点「在红石布线里定位」可以跳到对应位置。`;
+
+  for (const warning of shown) list.append(issueElement(result, warning));
+
+  if (warnings.length > shown.length) {
+    const more = document.createElement('p');
+    more.className = 'issue-detail';
+    more.textContent = `还有 ${number(warnings.length - shown.length)} 条同类提示没有列出。`;
+    list.append(more);
+  }
+}
+
+/**
+ * Run a generation for its warnings alone.
+ *
+ * The output path is deliberately left out: the main process then builds the whole result
+ * and writes no file, which is what makes this a rehearsal rather than an export.
+ */
+async function runCheck() {
+  if (!state.midiPath) return;
+  $('checkSummary').textContent = '正在先跑一遍，看看有什么问题…';
+  $('issueList').replaceChildren();
+
+  try {
+    const result = await api.generate(state.midiPath, generateOptions());
+    state.checkResult = result;
+    if (!result.success) {
+      $('checkSummary').textContent = '这一遍没能跑完。';
+      const item = document.createElement('div');
+      item.className = 'issue';
+      item.dataset.severity = 'error';
+      const body = document.createElement('div');
+      body.className = 'issue-body';
+      const title = document.createElement('div');
+      title.className = 'issue-title';
+      title.textContent = '生成失败';
+      const detail = document.createElement('div');
+      detail.className = 'issue-detail';
+      detail.textContent = result.error || '生成器没有给出原因。';
+      body.append(title, detail);
+      item.append(body);
+      $('issueList').append(item);
+      playFailure();
+      return;
+    }
+
+    const issues = result.warnings?.length ?? 0;
+    $('checkSummary').textContent =
+      issues === 0
+        ? '没有发现问题，可以直接生成。'
+        : `共 ${number(issues)} 处需要看一眼。点「在红石布线里定位」可以跳到对应位置；想改配置就点「上一步」。`;
+    renderIssues(result);
+    // The canvas measures its container, so this runs after the step is on screen.
+    renderPreview(result);
+    if (issues === 0) notify('没有发现问题，可以生成');
+  } catch (error) {
+    $('checkSummary').textContent = '这一遍没能跑完。';
+    notify(`检查失败：${error?.message || error}`);
+    playFailure();
+  }
+}
+
+// Panning and the layer toggles. The drawing module exposes the operations but binds
+// nothing itself, so the controls live here.
+for (const id of ['showGrid', 'showNotes']) {
+  $(id).addEventListener('change', () => {
+    if (state.result) renderPreview(state.result);
+  });
+}
+
+(() => {
+  const wrap = $('canvasWrap');
+  let dragging = null;
+  wrap.addEventListener('pointerdown', (event) => {
+    dragging = { x: event.clientX, z: event.clientY };
+    wrap.setPointerCapture(event.pointerId);
+  });
+  wrap.addEventListener('pointermove', (event) => {
+    if (!dragging) return;
+    // Moving the mouse right should move the drawing right, hence the negative delta.
+    panPreview(dragging.x - event.clientX, dragging.z - event.clientY);
+    dragging = { x: event.clientX, z: event.clientY };
+  });
+  const stop = () => {
+    dragging = null;
+  };
+  wrap.addEventListener('pointerup', stop);
+  wrap.addEventListener('pointercancel', stop);
+
+  // The wheel scrolls the drawing sideways, which is the useful axis now that there is no
+  // zoom to spend it on and songs are long rather than tall. A horizontal wheel, or a
+  // trackpad's two-finger swipe, arrives as deltaX and is used as it comes.
+  wrap.addEventListener(
+    'wheel',
+    (event) => {
+      event.preventDefault();
+      panPreview(event.deltaX !== 0 ? event.deltaX : event.deltaY, 0);
+    },
+    { passive: false },
+  );
+})();
 
 /** Logs from the main process (uncaught exceptions) still deserve to be visible. */
 api.onLog((line) => notify(line));
