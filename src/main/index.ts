@@ -65,6 +65,9 @@ function createWindow(): void {
     icon: ICON_FILE,
     backgroundColor: '#f5f5f2',
     autoHideMenuBar: true,
+    // The renderer draws its own title bar, including the window buttons, so the native
+    // frame would be a second one above it. The drag region is declared in its CSS.
+    frame: false,
     webPreferences: {
       preload: PRELOAD_FILE,
       contextIsolation: true,
@@ -143,6 +146,19 @@ function registerIpc(): void {
       return generate(file, options ?? {}).result;
     } catch (e) {
       throw new Error(`生成失败：${describeCoreError(e)}`, { cause: e });
+    }
+  });
+
+  // The window is frameless, so the renderer's own buttons drive these.
+  ipcMain.handle('window:control', (_e, action: unknown) => {
+    if (!win) return;
+    if (action === 'minimize') {
+      win.minimize();
+    } else if (action === 'maximize') {
+      if (win.isMaximized()) win.unmaximize();
+      else win.maximize();
+    } else if (action === 'close') {
+      win.close();
     }
   });
 

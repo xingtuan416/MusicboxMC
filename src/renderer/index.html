@@ -1,349 +1,1705 @@
 <!doctype html>
 <html lang="zh-CN">
   <head>
-    <meta charset="utf-8" />
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:;"
-    />
-    <meta name="color-scheme" content="light" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MusicboxMC</title>
-    <link rel="stylesheet" href="style.css" />
+    <style>
+      /* ==========================================================================
+       1. 核心色彩与液态玻璃变量 (Claude Warm Minimal × Apple Liquid Glass)
+       ========================================================================== */
+      :root {
+        --bg-base: #f5f4ef;
+        --bg-surface: #eceae3;
+
+        --orb-warm: rgba(238, 222, 198, 0.6);
+        --orb-clay: rgba(217, 119, 87, 0.11);
+        --orb-sage: rgba(155, 175, 160, 0.16);
+
+        --ink-primary: #141413;
+        --ink-secondary: #63625c;
+        --ink-muted: #9a9890;
+
+        --obsidian: #18181b;
+        --obsidian-hover: #27272a;
+        --accent: #d97757;
+        --accent-soft: rgba(217, 119, 87, 0.12);
+
+        --success: #2e6f40;
+        --success-bg: rgba(46, 111, 64, 0.08);
+        --danger: #c93b2b;
+        --danger-bg: rgba(201, 59, 43, 0.08);
+
+        --glass-bg: rgba(255, 255, 255, 0.56);
+        --glass-bg-hover: rgba(255, 255, 255, 0.78);
+        --glass-border: rgba(255, 255, 255, 0.78);
+        --glass-line: rgba(20, 20, 19, 0.07);
+        --glass-shadow: 0 10px 30px -10px rgba(20, 20, 19, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+
+        --font-sans:
+          -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI',
+          'PingFang SC', 'Microsoft YaHei UI', sans-serif;
+        --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        font-family: var(--font-sans);
+        color: var(--ink-primary);
+        background: linear-gradient(160deg, var(--bg-base) 0%, var(--bg-surface) 100%);
+        -webkit-font-smoothing: antialiased;
+        user-select: none;
+      }
+
+      .tnum {
+        font-variant-numeric: tabular-nums;
+        font-feature-settings: 'tnum' 1;
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      /* ==========================================================================
+       2. 底层呼吸光斑 (Subtle Ambient Light)
+       ========================================================================== */
+      .ambient-layer {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 0;
+        overflow: hidden;
+      }
+
+      .orb {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(95px);
+      }
+
+      .orb-1 {
+        width: 620px;
+        height: 620px;
+        background: var(--orb-warm);
+        top: -18%;
+        left: -8%;
+        animation: drift 24s ease-in-out infinite alternate;
+      }
+
+      .orb-2 {
+        width: 520px;
+        height: 520px;
+        background: var(--orb-clay);
+        bottom: -20%;
+        right: -5%;
+        animation: drift 28s ease-in-out infinite alternate-reverse;
+      }
+
+      .orb-3 {
+        width: 460px;
+        height: 460px;
+        background: var(--orb-sage);
+        top: 25%;
+        right: 22%;
+        animation: drift 20s ease-in-out infinite alternate;
+      }
+
+      @keyframes drift {
+        0% {
+          transform: translate(0, 0) scale(1);
+        }
+        100% {
+          transform: translate(40px, 28px) scale(1.06);
+        }
+      }
+
+      /* ==========================================================================
+       3. Electron 全屏桌面窗口骨架 (Frameless Window Layout)
+       ========================================================================== */
+      .electron-window {
+        position: relative;
+        z-index: 1;
+        width: 100vw;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        background: rgba(255, 255, 255, 0.22);
+        backdrop-filter: blur(28px) saturate(140%);
+        -webkit-backdrop-filter: blur(28px) saturate(140%);
+      }
+
+      /* 顶部无边框拖拽标题栏 */
+      .window-titlebar {
+        height: 52px;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px 0 24px;
+        border-bottom: 1px solid var(--glass-line);
+        -webkit-app-region: drag;
+        flex-shrink: 0;
+      }
+
+      .titlebar-left {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        -webkit-app-region: no-drag;
+      }
+
+      .brand-mark {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        color: var(--ink-primary);
+      }
+
+      .brand-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+
+      .nav-back-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 28px;
+        padding: 0 10px;
+        border-radius: 8px;
+        border: 1px solid var(--glass-border);
+        background: var(--glass-bg);
+        color: var(--ink-secondary);
+        font-family: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s var(--ease-out);
+      }
+
+      .nav-back-pill:hover {
+        background: var(--glass-bg-hover);
+        color: var(--ink-primary);
+      }
+
+      .nav-back-pill.is-hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      /* 中央极简 7 步进度条 */
+      .titlebar-center {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        -webkit-app-region: no-drag;
+      }
+
+      .step-node {
+        width: 22px;
+        height: 5px;
+        border-radius: 999px;
+        border: none;
+        background: rgba(20, 20, 19, 0.14);
+        cursor: pointer;
+        transition: all 0.3s var(--ease-out);
+      }
+
+      .step-node:hover {
+        background: rgba(20, 20, 19, 0.32);
+      }
+
+      .step-node.done {
+        background: var(--accent);
+        opacity: 0.55;
+      }
+
+      .step-node.current {
+        width: 38px;
+        background: var(--ink-primary);
+        opacity: 1;
+      }
+
+      /* 右上角窗口控制区：设置 + 最小化 + 全屏 + 关闭 */
+      .titlebar-controls {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        -webkit-app-region: no-drag;
+      }
+
+      .win-btn {
+        width: 36px;
+        height: 32px;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--ink-secondary);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.18s var(--ease-out);
+      }
+
+      .win-btn:hover {
+        background: rgba(20, 20, 19, 0.06);
+        color: var(--ink-primary);
+      }
+
+      .win-btn:active {
+        transform: scale(0.94);
+      }
+
+      .win-btn.win-close:hover {
+        background: var(--danger);
+        color: #ffffff;
+      }
+
+      .win-divider {
+        width: 1px;
+        height: 14px;
+        background: rgba(20, 20, 19, 0.12);
+        margin: 0 4px;
+      }
+
+      /* ==========================================================================
+       4. 全屏单步工作区 (One Screen, One Step Stage)
+       ========================================================================== */
+      .workspace-viewport {
+        position: relative;
+        flex: 1;
+        width: 100%;
+        height: calc(100vh - 52px);
+        overflow: hidden;
+      }
+
+      .screen-step {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 40px 64px 80px;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(14px) scale(0.99);
+        filter: blur(4px);
+        transition:
+          opacity 0.36s var(--ease-out),
+          transform 0.36s var(--ease-out),
+          filter 0.36s var(--ease-out);
+      }
+
+      .screen-step.active {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+      }
+
+      .step-inner {
+        width: 100%;
+        max-width: 820px;
+        display: flex;
+        flex-direction: column;
+        gap: 28px;
+      }
+
+      /* 显眼大字体排版规范 */
+      .step-head {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .step-index {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+
+      .step-h1 {
+        font-size: 38px;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        line-height: 1.15;
+        color: var(--ink-primary);
+      }
+
+      .step-sub {
+        font-size: 16px;
+        font-weight: 500;
+        color: var(--ink-secondary);
+        line-height: 1.5;
+      }
+
+      /* ==========================================================================
+       5. 通用按钮与液态玻璃控件
+       ========================================================================== */
+      .btn-obsidian {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        height: 52px;
+        padding: 0 32px;
+        border-radius: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: var(--obsidian);
+        color: #ffffff;
+        font-family: inherit;
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        box-shadow:
+          0 14px 28px -8px rgba(20, 20, 19, 0.25),
+          inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        cursor: pointer;
+        transition: all 0.22s var(--ease-out);
+      }
+
+      .btn-obsidian:hover:not(:disabled) {
+        background: var(--obsidian-hover);
+        transform: translateY(-1px);
+      }
+
+      .btn-obsidian:active:not(:disabled) {
+        transform: scale(0.985);
+      }
+
+      .btn-obsidian:disabled {
+        background: rgba(20, 20, 19, 0.14);
+        color: var(--ink-muted);
+        box-shadow: none;
+        cursor: not-allowed;
+      }
+
+      .btn-glass {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        height: 52px;
+        padding: 0 24px;
+        border-radius: 14px;
+        border: 1px solid var(--glass-border);
+        background: var(--glass-bg);
+        box-shadow: var(--glass-shadow);
+        color: var(--ink-primary);
+        font-family: inherit;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.22s var(--ease-out);
+      }
+
+      .btn-glass:hover:not(:disabled) {
+        background: var(--glass-bg-hover);
+        transform: translateY(-1px);
+      }
+
+      .btn-glass:active:not(:disabled) {
+        transform: scale(0.985);
+      }
+
+      .action-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding-top: 8px;
+      }
+
+      /* ==========================================================================
+       Step 1: 极简首屏 (主标题 + 一句短副标题 + 主按钮)
+       ========================================================================== */
+      .hero-minimal {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        gap: 20px;
+      }
+
+      .hero-subtitle {
+        font-size: 18px;
+        font-weight: 500;
+        letter-spacing: 0.08em;
+        color: var(--ink-secondary);
+      }
+
+      .hero-title {
+        font-size: clamp(56px, 8vw, 88px);
+        font-weight: 800;
+        letter-spacing: -0.045em;
+        line-height: 1;
+        color: var(--ink-primary);
+      }
+
+      .hero-cta-wrap {
+        margin-top: 20px;
+      }
+
+      /* ==========================================================================
+       Step 2: 导入 MIDI (四种状态)
+       ========================================================================== */
+      .note-banner {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 18px;
+        border-radius: 14px;
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+        box-shadow: var(--glass-shadow);
+        font-size: 14px;
+        color: var(--ink-secondary);
+        line-height: 1.5;
+      }
+
+      .note-banner strong {
+        color: var(--ink-primary);
+      }
+
+      .sample-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .sample-label {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ink-muted);
+      }
+
+      .pill-tag {
+        height: 34px;
+        padding: 0 14px;
+        border-radius: 999px;
+        border: 1px solid var(--glass-border);
+        background: var(--glass-bg);
+        box-shadow: var(--glass-shadow);
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ink-primary);
+        cursor: pointer;
+        transition: all 0.2s var(--ease-out);
+      }
+
+      .pill-tag:hover {
+        background: var(--glass-bg-hover);
+        transform: translateY(-1px);
+      }
+
+      .pill-tag.active {
+        background: var(--accent-soft);
+        border-color: var(--accent);
+        color: var(--ink-primary);
+      }
+
+      .drop-area {
+        height: 220px;
+        border-radius: 20px;
+        border: 1.5px dashed rgba(20, 20, 19, 0.24);
+        background: rgba(255, 255, 255, 0.42);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        cursor: pointer;
+        transition: all 0.25s var(--ease-out);
+      }
+
+      .drop-area:hover {
+        background: rgba(255, 255, 255, 0.68);
+        border-color: var(--accent);
+      }
+
+      .drop-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--ink-primary);
+      }
+
+      .drop-hint {
+        font-size: 13.5px;
+        color: var(--ink-secondary);
+      }
+
+      .state-box {
+        padding: 28px;
+        border-radius: 20px;
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+        box-shadow: var(--glass-shadow);
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      .state-box.error-box {
+        background: var(--danger-bg);
+        border-color: rgba(201, 59, 43, 0.3);
+      }
+
+      .grid-4 {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 14px;
+      }
+
+      .stat-card {
+        padding: 18px 20px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.65);
+        border: 1px solid rgba(255, 255, 255, 0.85);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .stat-k {
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--ink-secondary);
+      }
+
+      .stat-v {
+        font-size: 24px;
+        font-weight: 800;
+        color: var(--ink-primary);
+      }
+
+      /* ==========================================================================
+       Step 3: 音轨选择
+       ========================================================================== */
+      .track-header-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 18px;
+        border-radius: 14px;
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+      }
+
+      .track-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-height: 280px;
+        overflow-y: auto;
+        padding-right: 4px;
+      }
+
+      .track-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 20px;
+        border-radius: 16px;
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+        box-shadow: var(--glass-shadow);
+        cursor: pointer;
+        transition: all 0.2s var(--ease-out);
+      }
+
+      .track-item:hover {
+        background: var(--glass-bg-hover);
+      }
+
+      .track-item.checked {
+        background: rgba(255, 255, 255, 0.82);
+        border-color: var(--accent);
+      }
+
+      .track-item.unchecked {
+        opacity: 0.55;
+      }
+
+      .track-item-left {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .check-box {
+        width: 20px;
+        height: 20px;
+        border-radius: 6px;
+        border: 1.5px solid rgba(20, 20, 19, 0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #ffffff;
+        color: #ffffff;
+      }
+
+      .track-item.checked .check-box {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+
+      .track-name {
+        font-size: 15.5px;
+        font-weight: 700;
+        color: var(--ink-primary);
+      }
+
+      .track-meta {
+        font-size: 13px;
+        color: var(--ink-secondary);
+        margin-top: 2px;
+      }
+
+      /* ==========================================================================
+       Step 4: 深度配置 (折叠分组)
+       ========================================================================== */
+      .preset-notice {
+        padding: 14px 18px;
+        border-radius: 14px;
+        background: var(--success-bg);
+        border: 1px solid rgba(46, 111, 64, 0.25);
+        color: var(--success);
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .fold-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .fold-card {
+        border-radius: 16px;
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+        box-shadow: var(--glass-shadow);
+        overflow: hidden;
+      }
+
+      .fold-trigger {
+        width: 100%;
+        padding: 16px 20px;
+        border: none;
+        background: transparent;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-family: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .fold-title {
+        font-size: 15.5px;
+        font-weight: 700;
+        color: var(--ink-primary);
+      }
+
+      .fold-val {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--accent);
+        margin-top: 2px;
+      }
+
+      .fold-content {
+        display: none;
+        padding: 0 20px 18px;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+      }
+
+      /* 生成无法上报真实进度（主进程一次性完成），用不确定态而不是假百分比。 */
+      .progress-bar-track.indeterminate .progress-bar-fill {
+        width: 35%;
+        animation: mb-sweep 1.15s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      }
+
+      @keyframes mb-sweep {
+        from {
+          transform: translateX(-100%);
+        }
+        to {
+          transform: translateX(300%);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .progress-bar-track.indeterminate .progress-bar-fill {
+          width: 100%;
+          animation: none;
+          opacity: 0.55;
+        }
+      }
+
+      .fold-card.open .fold-content {
+        display: grid;
+      }
+
+      .opt-box {
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 1px solid rgba(20, 20, 19, 0.12);
+        background: rgba(255, 255, 255, 0.6);
+        cursor: pointer;
+        text-align: left;
+        font-family: inherit;
+      }
+
+      .opt-box.selected {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+      }
+
+      .opt-title {
+        font-size: 13.5px;
+        font-weight: 700;
+        color: var(--ink-primary);
+        display: block;
+      }
+
+      .opt-desc {
+        font-size: 12px;
+        color: var(--ink-secondary);
+        margin-top: 3px;
+        display: block;
+      }
+
+      /* ==========================================================================
+       Step 5: 导出位置
+       ========================================================================== */
+      .grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+      }
+
+      .path-card {
+        padding: 16px 18px;
+        border-radius: 16px;
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+        box-shadow: var(--glass-shadow);
+        text-align: left;
+        font-family: inherit;
+        cursor: pointer;
+        transition: all 0.2s var(--ease-out);
+      }
+
+      .path-card.selected {
+        background: rgba(255, 255, 255, 0.85);
+        border-color: var(--accent);
+      }
+
+      .input-clean {
+        width: 100%;
+        height: 50px;
+        padding: 0 18px;
+        border-radius: 14px;
+        border: 1px solid rgba(20, 20, 19, 0.16);
+        background: rgba(255, 255, 255, 0.78);
+        font-family: inherit;
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--ink-primary);
+      }
+
+      /* ==========================================================================
+       Step 6: 生成进度
+       ========================================================================== */
+      .progress-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        padding: 28px 0;
+      }
+
+      .progress-huge {
+        font-size: 72px;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        line-height: 1;
+        color: var(--ink-primary);
+      }
+
+      .progress-bar-track {
+        width: 100%;
+        height: 16px;
+        border-radius: 999px;
+        background: rgba(20, 20, 19, 0.08);
+        overflow: hidden;
+        padding: 2px;
+      }
+
+      .progress-bar-fill {
+        height: 100%;
+        width: 0%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, var(--ink-primary) 0%, var(--accent) 100%);
+        transition: width 0.15s linear;
+      }
+
+      /* ==========================================================================
+       6. 右上角设置面板弹窗 (Minimalist Settings Drawer/Modal)
+       ========================================================================== */
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 90;
+        background: rgba(20, 20, 19, 0.2);
+        backdrop-filter: blur(8px);
+        display: none;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .modal-backdrop.open {
+        display: flex;
+      }
+
+      .settings-dialog {
+        width: 460px;
+        max-width: 92vw;
+        padding: 28px 32px;
+        border-radius: 24px;
+        background: rgba(245, 244, 239, 0.94);
+        border: 1px solid rgba(255, 255, 255, 0.88);
+        box-shadow: 0 28px 60px rgba(20, 20, 19, 0.16);
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      .setting-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 0;
+        border-bottom: 1px solid rgba(20, 20, 19, 0.07);
+      }
+
+      /* ==========================================================================
+       7. 右下角虚线框「状态切换器」 (Corner Dashed-Border State Switcher)
+       ========================================================================== */
+      .state-switcher {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 80;
+        padding: 10px 12px;
+        border-radius: 14px;
+        border: 1.5px dashed rgba(20, 20, 19, 0.28);
+        background: rgba(245, 244, 239, 0.85);
+        backdrop-filter: blur(16px);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .sw-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+
+      .sw-chip {
+        height: 26px;
+        padding: 0 8px;
+        border-radius: 6px;
+        border: 1px solid rgba(20, 20, 19, 0.14);
+        background: rgba(255, 255, 255, 0.75);
+        color: var(--ink-primary);
+        font-family: inherit;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .sw-chip:hover {
+        border-color: var(--accent);
+        background: #ffffff;
+      }
+
+      .sw-chip.active {
+        background: var(--ink-primary);
+        color: #ffffff;
+        border-color: var(--ink-primary);
+      }
+
+      /* 顶部状态反馈条 */
+      .status-toast {
+        position: fixed;
+        top: 64px;
+        left: 50%;
+        transform: translateX(-50%) translateY(-12px);
+        z-index: 120;
+        padding: 10px 20px;
+        border-radius: 999px;
+        background: var(--obsidian);
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: 600;
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.25s var(--ease-out);
+      }
+
+      .status-toast.visible {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+
+      @media (max-width: 640px) {
+        .screen-step {
+          padding: 24px 20px 88px;
+        }
+        .step-h1 {
+          font-size: 28px;
+        }
+        .grid-4 {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .grid-3,
+        .fold-card.open .fold-content {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
   </head>
   <body>
-    <header class="topbar">
-      <div class="brand" aria-label="MusicboxMC">
-        <span class="logo" aria-hidden="true">♫</span>
-        <div>
-          <h1>MusicboxMC</h1>
-          <p>MIDI 转红石音乐投影</p>
-        </div>
-      </div>
-      <div class="topbar-status">
-        <span class="status-dot" aria-hidden="true"></span>
-        <span id="workflowState">等待导入文件</span>
-      </div>
-    </header>
+    <!-- 底层环境光斑 -->
+    <div class="ambient-layer" aria-hidden="true">
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
+      <div class="orb orb-3"></div>
+    </div>
 
-    <main class="app-shell">
-      <section class="workflow-card" aria-labelledby="workflow-title">
-        <div class="workflow-intro">
-          <p class="eyebrow">MUSICBOX WORKFLOW</p>
-          <h2 id="workflow-title">把 MIDI 变成可用的红石音乐投影</h2>
-          <p>先读取曲目，再调整电路参数，最后检查预览并导出。</p>
-        </div>
-        <ol class="workflow-steps" aria-label="转换流程">
-          <li class="flow-step active" id="stepImport">
-            <span class="flow-index">1</span>
-            <span><strong>导入</strong><small>选择 MIDI</small></span>
-          </li>
-          <li class="flow-line" aria-hidden="true"></li>
-          <li class="flow-step" id="stepSettings">
-            <span class="flow-index">2</span>
-            <span><strong>设置</strong><small>调整参数</small></span>
-          </li>
-          <li class="flow-line" aria-hidden="true"></li>
-          <li class="flow-step" id="stepPreview">
-            <span class="flow-index">3</span>
-            <span><strong>检查</strong><small>查看电路</small></span>
-          </li>
-          <li class="flow-line" aria-hidden="true"></li>
-          <li class="flow-step" id="stepExport">
-            <span class="flow-index">4</span>
-            <span><strong>导出</strong><small>生成投影</small></span>
-          </li>
-        </ol>
-      </section>
+    <!-- 轻量反馈提示 -->
+    <div id="statusToast" class="status-toast"></div>
 
-      <section class="source-card" aria-labelledby="source-title">
-        <div class="source-heading">
-          <div class="source-title">
-            <span class="source-icon" aria-hidden="true">↥</span>
-            <div>
-              <p class="eyebrow">SOURCE FILE</p>
-              <h2 id="source-title">选择一个 MIDI 文件</h2>
-            </div>
+    <!-- Electron 无边框全屏应用主壳 -->
+    <div class="electron-window">
+      <!-- 顶部系统标题栏 (含右上角设置、最小化、全屏、关闭) -->
+      <header class="window-titlebar">
+        <div class="titlebar-left">
+          <div class="brand-mark">
+            <span class="brand-dot"></span>
+            <span>MusicboxMC</span>
           </div>
-          <span class="source-state" id="fileState">尚未选择文件</span>
-        </div>
-        <div class="filepick">
-          <label class="sr-only" for="filePath">MIDI 文件路径</label>
-          <input
-            id="filePath"
-            type="text"
-            placeholder="拖入或粘贴 .mid / .midi 文件路径"
-            spellcheck="false"
-          />
-          <button id="btnBrowse" class="btn secondary" type="button">
-            <span aria-hidden="true">⌕</span> 浏览文件
+          <button type="button" id="btnPrevStep" class="nav-back-pill is-hidden">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+            <span>返回</span>
           </button>
-          <button id="btnAnalyze" class="btn dark" type="button">读取曲目</button>
         </div>
-        <div class="source-foot">
-          <span>支持 MIDI 0/1 格式</span>
-          <span>读取只在本机进行，不会上传文件</span>
+
+        <!-- 极简步进指示器 -->
+        <nav class="titlebar-center" aria-label="步骤进度">
+          <button type="button" class="step-node current" data-target="1" title="1. 开始"></button>
+          <button type="button" class="step-node" data-target="2" title="2. 导入"></button>
+          <button type="button" class="step-node" data-target="3" title="3. 选轨"></button>
+          <button type="button" class="step-node" data-target="4" title="4. 配置"></button>
+          <button type="button" class="step-node" data-target="5" title="5. 位置"></button>
+          <button type="button" class="step-node" data-target="6" title="6. 进度"></button>
+          <button type="button" class="step-node" data-target="7" title="7. 完成"></button>
+        </nav>
+
+        <!-- 右上角窗口控制：设置 / 最小化 / 全屏 / 关闭 -->
+        <div class="titlebar-controls">
+          <button type="button" id="btnOpenSettings" class="win-btn" title="设置" aria-label="打开设置">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.9"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="3"></circle>
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+              ></path>
+            </svg>
+          </button>
+
+          <span class="win-divider"></span>
+
+          <button type="button" id="btnWinMin" class="win-btn" title="最小化" aria-label="最小化窗口">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+
+          <button type="button" id="btnWinMax" class="win-btn" title="全屏 / 最大化" aria-label="切换全屏">
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linejoin="round"
+            >
+              <rect x="4" y="4" width="16" height="16" rx="2" />
+            </svg>
+          </button>
+
+          <button type="button" id="btnWinClose" class="win-btn win-close" title="关闭" aria-label="关闭窗口">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
         </div>
-      </section>
+      </header>
 
-      <div class="workspace-layout">
-        <aside class="control-panel" aria-label="生成设置">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">CONTROL PANEL</p>
-              <h2>生成设置</h2>
-            </div>
-            <span class="panel-state" id="controlState">等待解析</span>
-          </div>
-
-          <section class="control-section">
-            <div class="control-section-heading">
-              <span class="section-number">01</span>
-              <div>
-                <h3>播放与密度</h3>
-                <p>决定电路的速度和每个时刻的容量。</p>
-              </div>
-            </div>
-            <div class="field-grid">
-              <label class="field">
-                <span class="label">基准 TPS</span>
-                <input id="baseTps" type="number" min="1" max="100" step="1" value="20" />
-                <small>每秒游戏刻数</small>
-              </label>
-              <label class="field">
-                <span class="label">复音上限 dMax</span>
-                <input id="dMax" type="number" min="1" max="14" step="1" value="14" />
-                <small>单侧最多行数</small>
-              </label>
-            </div>
-            <div class="switch-row">
-              <span class="label">全音域拓展</span>
-              <label class="switch">
-                <input id="extendedRange" type="checkbox" aria-label="全音域拓展" checked />
-                <span class="switch-ui" aria-hidden="true"></span>
-              </label>
-            </div>
-            <div class="pack-action">
-              <button id="btnSavePack" type="button" class="btn secondary full">
-                保存配套资源包（约 50 KB）
+      <!-- 全屏单步视口 -->
+      <main class="workspace-viewport">
+        <!-- ====================================================================
+           Step 1: 开始页 (仅保留副标题 + 显眼主标题 + 开始制作按钮)
+           ==================================================================== -->
+        <section id="step-1" class="screen-step active">
+          <div class="hero-minimal">
+            <p class="hero-subtitle">生成属于你的红石音乐</p>
+            <h1 class="hero-title">MusicboxMC</h1>
+            <div class="hero-cta-wrap">
+              <button type="button" class="btn-obsidian" data-goto="2">
+                <span>开始制作</span>
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M5 12h14" />
+                  <path d="m12 5 7 7-7 7" />
+                </svg>
               </button>
-            </div>
-            <label class="field">
-              <span class="label">仍超出电路音域时</span>
-              <select id="outOfRange">
-                <option value="warn">提示并八度移调</option>
-                <option value="octave">自动八度移调</option>
-                <option value="clamp">改用最近可用音</option>
-                <option value="drop">跳过超出音域的音符</option>
-              </select>
-              <small id="pitchRangeHint"></small>
-            </label>
-            <div class="switch-row">
-              <span class="label">全部使用命令方块播放</span>
-              <label class="switch">
-                <input id="commandPlayback" type="checkbox" aria-label="全部使用命令方块播放" />
-                <span class="switch-ui" aria-hidden="true"></span>
-              </label>
-            </div>
-            <label class="field hidden command-settings" id="commandBudgetField">
-              <span class="label">命令链预算</span>
-              <input id="commandChainBudget" type="number" min="1" max="65536" step="1" value="65536" />
-            </label>
-            <div class="switch-row">
-              <span>
-                <span class="label">合并同乐器音轨</span>
-              </span>
-              <label class="switch">
-                <input id="mergeSameInstrument" type="checkbox" aria-label="合并同乐器音轨" />
-                <span class="switch-ui" aria-hidden="true"></span>
-              </label>
-            </div>
-            <div class="switch-row merge-suboption hidden" id="forceMergeRow">
-              <span>
-                <span class="label">开启强制合并</span>
-              </span>
-              <label class="switch">
-                <input id="forceMergeSameInstrument" type="checkbox" aria-label="开启强制合并" disabled />
-                <span class="switch-ui" aria-hidden="true"></span>
-              </label>
-            </div>
-          </section>
-
-          <section class="control-section">
-            <div class="control-section-heading">
-              <span class="section-number">02</span>
-              <div>
-                <h3>保留哪些音轨</h3>
-                <p>取消勾选不想写入投影的音轨。</p>
-              </div>
-            </div>
-            <div id="trackList" class="tracklist">
-              <p class="empty-note">读取曲目后，这里会列出音轨。</p>
-            </div>
-          </section>
-
-          <section class="control-section output-section">
-            <div class="control-section-heading">
-              <span class="section-number">03</span>
-              <div>
-                <h3>输出投影</h3>
-                <p>生成适用于 Litematica 的文件。</p>
-              </div>
-            </div>
-            <label class="field">
-              <span class="label">作者</span>
-              <input id="author" type="text" value="MusicboxMC" />
-            </label>
-            <label class="field">
-              <span class="label">保存位置</span>
-              <input id="outputPath" type="text" placeholder="点击选择保存位置" spellcheck="false" />
-            </label>
-            <button id="btnSaveAs" class="btn secondary full" type="button">
-              <span aria-hidden="true">↗</span> 选择保存位置
-            </button>
-            <button id="btnGenerate" class="btn primary full" type="button" disabled>
-              <span aria-hidden="true">✦</span> 生成投影
-            </button>
-          </section>
-        </aside>
-
-        <section class="workspace-panel" aria-label="结果工作区">
-          <header class="workspace-heading">
-            <div>
-              <p class="eyebrow">RESULTS</p>
-              <h2 id="workspaceTitle">还没有曲目</h2>
-              <p id="workspaceSubtitle">选择 MIDI 文件后，这里会显示曲目结构和电路结果。</p>
-            </div>
-            <div class="result-meta">
-              <span class="status-dot" aria-hidden="true"></span>
-              <span id="resultStatus">等待解析</span>
-            </div>
-          </header>
-
-          <nav class="view-tabs" role="tablist" aria-label="结果视图">
-            <button class="tab active" data-tab="overview" role="tab" aria-selected="true">
-              <span class="tab-icon" aria-hidden="true">◌</span>曲目概览
-            </button>
-            <button class="tab" data-tab="preview" role="tab" aria-selected="false">
-              <span class="tab-icon" aria-hidden="true">⌘</span>红石布线
-            </button>
-            <button class="tab" data-tab="warnings" role="tab" aria-selected="false">
-              <span class="tab-icon" aria-hidden="true">!</span>需要注意
-              <span id="warnCount" class="badge">0</span>
-            </button>
-            <button class="tab" data-tab="log" role="tab" aria-selected="false">
-              <span class="tab-icon" aria-hidden="true">≡</span>运行记录
-            </button>
-          </nav>
-
-          <div class="tabbody">
-            <div class="tabpane active" id="pane-overview" role="tabpanel">
-              <div id="banner" class="banner hidden"></div>
-              <div class="empty-state" id="overview">
-                <div class="empty-icon" aria-hidden="true">♫</div>
-                <h3>先读取一首 MIDI 曲目</h3>
-                <p>读取后你会看到曲名、时长、音轨和节奏信息。确认参数后，再到红石布线检查布局。</p>
-                <span class="empty-step">下一步：点击上方“读取曲目”</span>
-              </div>
-            </div>
-
-            <div class="tabpane" id="pane-preview" role="tabpanel">
-              <div class="preview-shell">
-                <div class="previewbar">
-                  <div class="preview-heading">
-                    <p class="eyebrow">CIRCUIT VIEW</p>
-                    <h3>红石布线</h3>
-                    <p class="preview-subtitle" id="previewDescription">
-                      向右是时间，向下是不同音轨的空间排布。
-                    </p>
-                  </div>
-                  <div class="preview-actions" aria-label="预览工具">
-                    <div class="preview-toggle">
-                      <label class="check-control"
-                        ><input id="showGrid" type="checkbox" checked /> <span>网格</span></label
-                      >
-                      <label class="check-control"
-                        ><input id="showNotes" type="checkbox" checked /> <span>音符盒</span></label
-                      >
-                    </div>
-                    <div class="zoom-control" aria-label="缩放">
-                      <button
-                        id="previewZoomOut"
-                        class="icon-button"
-                        type="button"
-                        title="缩小预览"
-                        aria-label="缩小预览"
-                      >
-                        −
-                      </button>
-                      <span id="previewZoom" class="zoom-label">100%</span>
-                      <button
-                        id="previewZoomIn"
-                        class="icon-button"
-                        type="button"
-                        title="放大预览"
-                        aria-label="放大预览"
-                      >
-                        ＋
-                      </button>
-                    </div>
-                    <button
-                      id="previewFit"
-                      class="btn secondary preview-fit"
-                      type="button"
-                      title="让电路适配当前窗口"
-                    >
-                      <span aria-hidden="true">⌗</span> 适配窗口
-                    </button>
-                  </div>
-                </div>
-                <div class="preview-summary" id="previewSummary" aria-live="polite">
-                  <span class="summary-item"><strong id="previewSize">—</strong><span>网格尺寸</span></span>
-                  <span class="summary-item"><strong id="previewRegions">—</strong><span>区域</span></span>
-                  <span class="summary-item"><strong id="previewTracks">—</strong><span>音轨</span></span>
-                  <span class="summary-item"><strong id="previewBlocks">—</strong><span>可见方块</span></span>
-                </div>
-                <div class="canvaswrap" id="canvasWrap">
-                  <div class="canvas-stage"><canvas id="canvas"></canvas></div>
-                </div>
-                <div class="preview-footer">
-                  <p class="hint" id="previewHint">尚未生成电路。</p>
-                  <div class="legend" id="legend" aria-label="方块图例"></div>
-                </div>
-              </div>
-            </div>
-
-            <div class="tabpane" id="pane-warnings" role="tabpanel">
-              <div class="subpane-heading">
-                <div>
-                  <p class="eyebrow">QUALITY CHECK</p>
-                  <h3>需要注意的地方</h3>
-                  <p>这里列出音域、时序和空间布局中可能影响结果的问题。</p>
-                </div>
-                <span class="subpane-note">生成后自动更新</span>
-              </div>
-              <div id="warnings" class="empty-state compact-empty">
-                <div class="empty-icon" aria-hidden="true">✓</div>
-                <h3>暂时没有问题</h3>
-                <p>读取或生成文件后，潜在的问题会显示在这里。</p>
-              </div>
-            </div>
-
-            <div class="tabpane" id="pane-log" role="tabpanel">
-              <div class="subpane-heading">
-                <div>
-                  <p class="eyebrow">ACTIVITY</p>
-                  <h3>运行记录</h3>
-                  <p>用于定位解析和生成过程中的细节。</p>
-                </div>
-                <span class="subpane-note">仅保留当前会话</span>
-              </div>
-              <pre id="log"></pre>
             </div>
           </div>
         </section>
-      </div>
-    </main>
 
-    <script type="module" src="main.js"></script>
+        <!-- ====================================================================
+           Step 2: 导入 MIDI
+           ==================================================================== -->
+        <section id="step-2" class="screen-step">
+          <div class="step-inner">
+            <div class="step-head">
+              <span class="step-index tnum">STEP 02 / 07</span>
+              <h2 class="step-h1">导入 MIDI</h2>
+              <p class="step-sub">
+                MIDI 记录的是「何时、用什么乐器、按下哪个音符」的数字乐谱，天然契合红石电路时序。
+              </p>
+            </div>
+
+            <input id="realFileInput" type="file" accept=".mid,.midi" style="display: none" />
+
+            <!-- 空状态 -->
+            <div id="importEmpty" class="drop-area" style="display: none">
+              <svg
+                width="32"
+                height="32"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="var(--accent)"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              <div class="drop-title">拖拽或点击选择 .mid 文件</div>
+              <div class="drop-hint">支持标准 Format 0 / Format 1 MIDI 乐谱</div>
+            </div>
+
+            <!-- 解析中状态 -->
+            <div id="importLoading" class="state-box" style="display: none">
+              <div style="font-size: 18px; font-weight: 700">正在解析音轨与时间轴签名...</div>
+              <div style="font-size: 14px; color: var(--ink-secondary)">校验 MThd 头部块与拍速映射</div>
+            </div>
+
+            <!-- 失败状态 -->
+            <div id="importError" class="state-box error-box" style="display: none">
+              <div id="importErrHeading" style="font-size: 18px; font-weight: 700; color: var(--danger)">
+                文件读不了
+              </div>
+              <div id="importErrDetail" style="font-size: 14px; color: var(--ink-secondary)"></div>
+              <div>
+                <button
+                  type="button"
+                  class="btn-glass"
+                  id="btnResetImport"
+                  style="height: 42px; padding: 0 18px"
+                >
+                  重新选择
+                </button>
+              </div>
+            </div>
+
+            <!-- 已导入状态 -->
+            <div id="importLoaded" class="state-box">
+              <div style="display: flex; justify-content: space-between; align-items: center">
+                <div>
+                  <div id="midiFileTitle" style="font-size: 20px; font-weight: 800">C418 - Sweden.mid</div>
+                  <div style="font-size: 13px; color: var(--ink-secondary); margin-top: 2px">
+                    MThd 校验通过 · 标准多轨序列
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="btn-glass"
+                  id="btnChangeFile"
+                  style="height: 40px; padding: 0 16px; font-size: 13px"
+                >
+                  更换文件
+                </button>
+              </div>
+              <div class="grid-4">
+                <div class="stat-card">
+                  <span class="stat-k">时长</span>
+                  <span id="valDuration" class="stat-v tnum">03:24</span>
+                </div>
+                <div class="stat-card">
+                  <span class="stat-k">拍速</span>
+                  <span id="valBpm" class="stat-v tnum">120 BPM</span>
+                </div>
+                <div class="stat-card">
+                  <span class="stat-k">音轨数</span>
+                  <span id="valTracks" class="stat-v tnum">5</span>
+                </div>
+                <div class="stat-card">
+                  <span class="stat-k">音符数</span>
+                  <span id="valNotes" class="stat-v tnum">1,842</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="action-bar">
+              <button type="button" class="btn-glass" data-goto="1">返回</button>
+              <button type="button" id="btnStep2Next" class="btn-obsidian" data-goto="3">
+                下一步：选择音轨
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+           Step 3: 选轨道
+           ==================================================================== -->
+        <section id="step-3" class="screen-step">
+          <div class="step-inner">
+            <div class="step-head">
+              <span class="step-index tnum">STEP 03 / 07</span>
+              <h2 class="step-h1">选择音轨</h2>
+              <p class="step-sub">默认全选，可按需剔除不需要编译为音符盒的伴奏或打击乐轨道。</p>
+            </div>
+
+            <div class="track-header-bar">
+              <span id="trackStatText" class="tnum" style="font-size: 14px; font-weight: 700"
+                >已选 5 / 5 条音轨 · 共 1,842 个音符</span
+              >
+              <button type="button" id="btnToggleAllTracks" class="pill-tag" style="height: 30px">
+                取消全选
+              </button>
+            </div>
+
+            <div id="trackListBox" class="track-list"></div>
+
+            <div class="action-bar">
+              <button type="button" class="btn-glass" data-goto="2">上一步</button>
+              <button type="button" id="btnStep3Next" class="btn-obsidian" data-goto="4">
+                下一步：深度配置
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+           Step 4: 深度配置
+           ==================================================================== -->
+        <section id="step-4" class="screen-step">
+          <div class="step-inner">
+            <div class="step-head">
+              <span class="step-index tnum">STEP 04 / 07</span>
+              <h2 class="step-h1">深度配置</h2>
+              <p class="step-sub">所有参数已默认收起并采用推荐预设，无需修改即可直接进入下一步。</p>
+            </div>
+
+            <div class="preset-notice">已启用智能推荐预设 — 点击下方分组可按需微调电路参数</div>
+
+            <div class="fold-list">
+              <div class="fold-card" id="fold-pitch">
+                <button type="button" class="fold-trigger" data-fold="fold-pitch">
+                  <div>
+                    <div class="fold-title">音域与复音</div>
+                    <div class="fold-val" id="sumPitch">全音域 F#1–F#7 · 最多 14 音同时</div>
+                  </div>
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+                <div class="fold-content">
+                  <button
+                    type="button"
+                    class="opt-box selected"
+                    data-cfg-group="palette"
+                    data-cfg-val="full"
+                    data-cfg-label="全音域 F#1–F#7"
+                  >
+                    <span class="opt-title">全音域</span>
+                    <span class="opt-desc">五种音符盒基底，F#1–F#7</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="opt-box"
+                    data-cfg-group="palette"
+                    data-cfg-val="piano"
+                    data-cfg-label="钢琴音域 F#3–F#5"
+                  >
+                    <span class="opt-title">钢琴音域</span>
+                    <span class="opt-desc">只用竖琴一种音色，F#3–F#5</span>
+                  </button>
+                  <div
+                    style="
+                      grid-column: span 3;
+                      display: flex;
+                      flex-direction: column;
+                      gap: 8px;
+                      margin-top: 4px;
+                    "
+                  >
+                    <label
+                      for="dMaxInput"
+                      style="font-size: 13px; font-weight: 700; color: var(--ink-secondary)"
+                    >
+                      复音上限（同一时刻最多几个音，1–14）
+                    </label>
+                    <input
+                      id="dMaxInput"
+                      class="input-clean"
+                      type="number"
+                      min="1"
+                      max="14"
+                      step="1"
+                      value="14"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div class="fold-card" id="fold-range">
+                <button type="button" class="fold-trigger" data-fold="fold-range">
+                  <div>
+                    <div class="fold-title">超出电路音域时</div>
+                    <div class="fold-val" id="sumRange">提示并八度移调</div>
+                  </div>
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+                <div class="fold-content">
+                  <button
+                    type="button"
+                    class="opt-box selected"
+                    data-cfg-group="range"
+                    data-cfg-val="warn"
+                    data-cfg-label="提示并八度移调"
+                  >
+                    <span class="opt-title">提示并移调</span>
+                    <span class="opt-desc">移回音域内，并逐条列出动了哪些音</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="opt-box"
+                    data-cfg-group="range"
+                    data-cfg-val="octave"
+                    data-cfg-label="自动八度移调"
+                  >
+                    <span class="opt-title">自动移调</span>
+                    <span class="opt-desc">移回音域内，不逐条打扰，只给汇总</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="opt-box"
+                    data-cfg-group="range"
+                    data-cfg-val="clamp"
+                    data-cfg-label="改用最近可用音"
+                  >
+                    <span class="opt-title">改用最近音</span>
+                    <span class="opt-desc">拉到音域边界，旋律会走音</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="opt-box"
+                    data-cfg-group="range"
+                    data-cfg-val="drop"
+                    data-cfg-label="跳过这些音符"
+                  >
+                    <span class="opt-title">跳过</span>
+                    <span class="opt-desc">这些音不发声，缺失的会列出</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="fold-card" id="fold-backend">
+                <button type="button" class="fold-trigger" data-fold="fold-backend">
+                  <div>
+                    <div class="fold-title">播放后端</div>
+                    <div class="fold-val" id="sumBackend">红石电路</div>
+                  </div>
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+                <div class="fold-content">
+                  <button
+                    type="button"
+                    class="opt-box selected"
+                    data-cfg-group="backend"
+                    data-cfg-val="redstone"
+                    data-cfg-label="红石电路"
+                  >
+                    <span class="opt-title">红石电路</span>
+                    <span class="opt-desc">音符盒与中继器，可以真的去搭</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="opt-box"
+                    data-cfg-group="backend"
+                    data-cfg-val="command"
+                    data-cfg-label="命令方块播放"
+                  >
+                    <span class="opt-title">命令方块播放</span>
+                    <span class="opt-desc">不受复音与距离限制，需要区块常驻</span>
+                  </button>
+                  <div
+                    id="commandBudgetField"
+                    style="
+                      grid-column: span 3;
+                      display: none;
+                      flex-direction: column;
+                      gap: 8px;
+                      margin-top: 4px;
+                    "
+                  >
+                    <label
+                      for="commandBudgetInput"
+                      style="font-size: 13px; font-weight: 700; color: var(--ink-secondary)"
+                    >
+                      命令链长度上限（对应服务端 maxCommandChainLength，默认 65536）
+                    </label>
+                    <input
+                      id="commandBudgetInput"
+                      class="input-clean"
+                      type="number"
+                      min="1"
+                      step="1"
+                      value="65536"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="action-bar">
+              <button type="button" class="btn-glass" data-goto="3">上一步</button>
+              <button type="button" class="btn-obsidian" data-goto="5">下一步：导出位置</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+           Step 5: 选导出位置
+           ==================================================================== -->
+        <section id="step-5" class="screen-step">
+          <div class="step-inner">
+            <div class="step-head">
+              <span class="step-index tnum">STEP 05 / 07</span>
+              <h2 class="step-h1">选择导出位置</h2>
+              <p class="step-sub">生成的 .litematic 会保存到你选择的位置。文件名默认取自曲名，可以改。</p>
+            </div>
+
+            <div class="grid-3">
+              <button
+                type="button"
+                class="path-card selected"
+                id="btnChooseOutput"
+                style="grid-column: span 3; text-align: left"
+              >
+                <div style="font-size: 15px; font-weight: 700">选择保存位置…</div>
+                <div id="outputDirText" style="font-size: 12px; color: var(--ink-secondary); margin-top: 4px">
+                  尚未选择，生成时会弹出系统保存对话框
+                </div>
+              </button>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 8px">
+              <label
+                for="fileNameInput"
+                style="font-size: 13px; font-weight: 700; color: var(--ink-secondary)"
+                >输出文件名</label
+              >
+              <input
+                id="fileNameInput"
+                class="input-clean"
+                type="text"
+                value=""
+                placeholder="读取曲目后自动填入"
+              />
+              <div id="fullPathText" class="tnum" style="font-size: 13px; color: var(--ink-secondary)">
+                完整路径：尚未选择
+              </div>
+            </div>
+
+            <div class="action-bar">
+              <button type="button" class="btn-glass" data-goto="4">上一步</button>
+              <button type="button" id="btnStartGen" class="btn-obsidian">开始生成投影</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+           Step 6: 进度
+           ==================================================================== -->
+        <section id="step-6" class="screen-step">
+          <div class="step-inner">
+            <div class="step-head">
+              <span class="step-index tnum">STEP 06 / 07</span>
+              <h2 id="genTitle" class="step-h1">正在生成投影</h2>
+              <p id="genStageText" class="step-sub">正在排布红石电路并写入文件…</p>
+            </div>
+
+            <!--
+            进度视图：生成在主进程里一次完成，没有可上报的阶段，所以这里不显示百分比。
+            大号数字显示真实经过时间，进度条用不确定态。
+          -->
+            <div id="genRunningBox" class="progress-wrap">
+              <div id="genElapsed" class="progress-huge tnum">0.0s</div>
+              <div class="progress-bar-track indeterminate">
+                <div id="genBarFill" class="progress-bar-fill"></div>
+              </div>
+              <p style="font-size: 13px; color: var(--ink-secondary); margin: 0">
+                曲目越长需要的时间越久，大编制曲子可能要十几秒。
+              </p>
+            </div>
+
+            <!-- 失败/中断视图 -->
+            <div id="genErrorBox" class="state-box error-box" style="display: none">
+              <div id="genErrHeading" style="font-size: 18px; font-weight: 700; color: var(--danger)">
+                生成已中止
+              </div>
+              <div id="genErrDetail" style="font-size: 14px; color: var(--ink-secondary)">
+                任务在写入体素矩阵前已取消，未生成本地文件。
+              </div>
+              <div style="display: flex; gap: 12px">
+                <button type="button" class="btn-glass" data-goto="4">返回修改配置</button>
+                <button type="button" id="btnRetryGen" class="btn-obsidian">重试生成</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+           Step 7: 完成
+           ==================================================================== -->
+        <section id="step-7" class="screen-step">
+          <div class="step-inner">
+            <div class="step-head">
+              <span class="step-index tnum">STEP 07 / 07 · COMPLETED</span>
+              <h2 class="step-h1">红石音乐投影已就绪</h2>
+              <p id="doneFileSub" class="step-sub tnum">Sweden_Redstone_Musicbox.litematic</p>
+            </div>
+
+            <!-- 3 宫格核心成果数据 -->
+            <div class="grid-3">
+              <div class="stat-card">
+                <span class="stat-k">总方块数</span>
+                <span id="doneBlocks" class="stat-v tnum">—</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-k">投影尺寸 (X × Y × Z)</span>
+                <span id="doneDims" class="stat-v tnum">—</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-k">文件大小</span>
+                <span id="doneSize" class="stat-v tnum">—</span>
+              </div>
+            </div>
+
+            <div id="doneWarningBox" class="preset-notice" style="display: none"></div>
+
+            <!-- 游戏内使用三步微指南 -->
+            <div class="grid-3">
+              <div class="stat-card">
+                <span class="stat-k tnum">01 · 放入文件夹</span>
+                <span style="font-size: 13.5px; color: var(--ink-primary); font-weight: 600; margin-top: 4px"
+                  >将文件放入 .minecraft/schematics 目录</span
+                >
+              </div>
+              <div class="stat-card">
+                <span class="stat-k tnum">02 · 加载投影</span>
+                <span style="font-size: 13.5px; color: var(--ink-primary); font-weight: 600; margin-top: 4px"
+                  >游戏内按 M 打开 Litematica 加载并放置</span
+                >
+              </div>
+              <div class="stat-card">
+                <span class="stat-k tnum">03 · 一键演奏</span>
+                <span
+                  id="doneTriggerHint"
+                  style="font-size: 13.5px; color: var(--ink-primary); font-weight: 600; margin-top: 4px"
+                  >在主线起点接上红石信号即可演奏</span
+                >
+              </div>
+            </div>
+
+            <div class="action-bar">
+              <button type="button" id="btnPreview" class="btn-glass">查看红石布线</button>
+              <button type="button" id="btnNextSong" class="btn-glass">转换下一首</button>
+              <button type="button" id="btnOpenFolder" class="btn-obsidian">打开所在文件夹</button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- ========================================================================
+       右上角「设置」弹窗壳子 (Settings Modal Shell)
+       ======================================================================== -->
+    <div id="settingsModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-label="应用设置">
+      <div class="settings-dialog">
+        <div style="display: flex; justify-content: space-between; align-items: center">
+          <h3 style="font-size: 20px; font-weight: 800">应用设置</h3>
+          <button type="button" id="btnCloseSettings" class="win-btn" aria-label="关闭设置">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div class="setting-row">
+          <div>
+            <div style="font-size: 14.5px; font-weight: 700">操作音效</div>
+            <div style="font-size: 12.5px; color: var(--ink-secondary)">切换步骤与完成时播放短音提示</div>
+          </div>
+          <button type="button" class="pill-tag" id="btnToggleSound">音效开</button>
+        </div>
+        <div class="setting-row" style="border-bottom: none">
+          <div>
+            <div style="font-size: 14.5px; font-weight: 700">基准 TPS</div>
+            <div style="font-size: 12.5px; color: var(--ink-secondary)">
+              每秒游戏刻数，默认 20。只有服务端改过才需要调整。
+            </div>
+          </div>
+          <input
+            id="baseTpsInput"
+            class="input-clean"
+            type="number"
+            min="1"
+            max="100"
+            step="1"
+            value="20"
+            style="width: 110px; height: 40px; text-align: center"
+          />
+        </div>
+      </div>
+    </div>
+
+    <!-- 行为全部在 app.js 里，且只通过 window.musicbox 与主进程通信。 -->
+    <script type="module" src="app.js"></script>
   </body>
 </html>

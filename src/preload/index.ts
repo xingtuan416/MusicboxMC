@@ -1,5 +1,8 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { AnalyzeResult, GenerateOptions, GenerateResult } from '../main/service';
+
+/** What the renderer may ask the window to do; it draws its own title bar. */
+export type WindowAction = 'minimize' | 'maximize' | 'close';
 
 /**
  * The only entry point visible to the renderer process.
@@ -26,6 +29,16 @@ export interface MusicboxApi {
   open(path: string): Promise<void>;
   /** Logs printed by the main process (e.g. uncaught exceptions), echoed back into the UI */
   onLog(handler: (line: string) => void): void;
+  /**
+   * Absolute path of a dropped file.
+   *
+   * Electron removed `File.path` in version 32, so a drag-and-drop target cannot work out
+   * where the file lives on its own. `webUtils.getPathForFile` has to be called on the
+   * preload side with the original File.
+   */
+  pathForFile(file: File): string;
+  /** The window is frameless, so its buttons come through here. */
+  windowControl(action: WindowAction): Promise<void>;
 }
 
 const api: MusicboxApi = {
@@ -39,6 +52,8 @@ const api: MusicboxApi = {
   onLog: (handler) => {
     ipcRenderer.on('app:log', (_e, line: string) => handler(line));
   },
+  pathForFile: (file) => webUtils.getPathForFile(file),
+  windowControl: (action) => ipcRenderer.invoke('window:control', action),
 };
 
 contextBridge.exposeInMainWorld('musicbox', api);
