@@ -230,8 +230,8 @@ function renderTracks() {
     row.className = `track-item ${track.checked ? 'checked' : 'unchecked'}`;
     row.dataset.trackIdx = String(index);
 
-    const label = document.createElement('div');
-    label.className = 'track-item-left';
+    const left = document.createElement('div');
+    left.className = 'track-item-left';
 
     const check = document.createElement('div');
     check.className = 'check-box';
@@ -240,18 +240,21 @@ function renderTracks() {
       : '';
 
     const text = document.createElement('div');
+    // Two lines, as the design intends: the heading carries the identity - which track it
+    // is, what the file calls it, and what it sounds as - and the small line carries the
+    // count. Putting the instrument on the small line instead reads as a data dump.
     const name = document.createElement('div');
     name.className = 'track-name';
-    // The real track name from the file, plus the instrument the generator picked for it.
-    name.textContent = track.name || `音轨 ${track.index + 1}`;
+    const heading = track.name ? `音轨 ${track.index + 1}：${track.name}` : `音轨 ${track.index + 1}`;
+    const kind = track.percussion ? `${track.instrument} · 打击乐` : track.instrument;
+    name.textContent = kind ? `${heading}（${kind}）` : heading;
     const meta = document.createElement('div');
     meta.className = 'track-meta tnum';
-    const channel = track.percussion ? '打击乐' : `通道 ${track.channel}`;
-    meta.textContent = `${track.instrument} · ${channel} · ${number(track.noteCount)} 个音符`;
+    meta.textContent = `${number(track.noteCount)} 个音符`;
 
     text.append(name, meta);
-    label.append(check, text);
-    row.append(label);
+    left.append(check, text);
+    row.append(left);
     box.append(row);
   });
 
@@ -313,6 +316,11 @@ function syncOutputText() {
   $('outputDirText').textContent = state.outputPath
     ? state.outputPath.replace(/[\\/][^\\/]*$/, '')
     : '尚未选择，生成时会弹出系统保存对话框';
+
+  // Writing a schematic is what this step is for, so it stays disabled until there is
+  // somewhere to write it. `runGeneration` checks the same thing, because a disabled
+  // button is a hint and not a guarantee.
+  $('btnStartGen').disabled = !state.outputPath;
 }
 
 async function chooseOutputFile() {
@@ -359,6 +367,10 @@ function showGenerateError(message, heading = '生成失败') {
 async function runGeneration() {
   if (!state.midiPath) {
     showGenerateError('还没有选择 MIDI 文件。', '缺少输入');
+    return;
+  }
+  if (!state.outputPath) {
+    showGenerateError('还没有选择保存位置。', '缺少输出位置');
     return;
   }
 
