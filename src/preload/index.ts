@@ -1,6 +1,15 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { AnalyzeResult, GenerateOptions, GenerateResult } from '../main/service';
 
+/** Facts the About section states about this build. */
+export interface AppInfo {
+  name: string;
+  version: string;
+  license: string;
+  repository: string;
+  author: string;
+}
+
 /** What the renderer may ask the window to do; it draws its own title bar. */
 export type WindowAction = 'minimize' | 'maximize' | 'close';
 
@@ -37,6 +46,10 @@ export interface MusicboxApi {
    * preload side with the original File.
    */
   pathForFile(file: File): string;
+  /** Choose the folder a schematic will be written into; null on cancel. */
+  chooseDirectory(): Promise<string | null>;
+  /** Version, licence and repository, for the About section. */
+  appInfo(): Promise<AppInfo>;
   /** The window is frameless, so its buttons come through here. */
   windowControl(action: WindowAction): Promise<void>;
 }
@@ -54,6 +67,8 @@ const api: MusicboxApi = {
   },
   pathForFile: (file) => webUtils.getPathForFile(file),
   windowControl: (action) => ipcRenderer.invoke('window:control', action),
+  chooseDirectory: () => ipcRenderer.invoke('dialog:choose-directory'),
+  appInfo: () => ipcRenderer.invoke('app:info'),
 };
 
 contextBridge.exposeInMainWorld('musicbox', api);

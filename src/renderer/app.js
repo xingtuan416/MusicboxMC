@@ -41,7 +41,8 @@ const state = {
   song: null,
   /** TrackSummary[] plus the user's selection. */
   tracks: [],
-  outputPath: null,
+  /** Folder the schematic will be written into. The file name is kept separately. */
+  outputDir: null,
   /** The rehearsal result, used by the check step. Never the exported one. */
   checkResult: null,
   result: null,
@@ -249,7 +250,7 @@ async function chooseMidiFile() {
  * Step 3: tracks
  * ──────────────────────────────────────────────────────────────────────────── */
 
-function renderTracks() {
+function renderTracks(popIndex = -1) {
   const box = $('trackListBox');
   box.replaceChildren();
 
@@ -257,6 +258,9 @@ function renderTracks() {
     const row = document.createElement('div');
     row.className = `track-item ${track.checked ? 'checked' : 'unchecked'}`;
     row.dataset.trackIdx = String(index);
+    // Only the row whose state changed gets the tick animation. The rest are being
+    // redrawn, not toggled, and animating them reads as the whole list reacting.
+    if (index === popIndex) row.dataset.pop = 'true';
 
     const left = document.createElement('div');
     left.className = 'track-item-left';
@@ -340,33 +344,35 @@ function generateOptions() {
  * ──────────────────────────────────────────────────────────────────────────── */
 
 function syncOutputText() {
-  const name = $('fileNameInput').value.trim();
-  $('fullPathText').textContent = state.outputPath
-    ? `完整路径：${state.outputPath}`
-    : `完整路径：${name || '尚未选择'}（保存时确定目录）`;
-  $('outputDirText').textContent = state.outputPath
-    ? state.outputPath.replace(/[\\/][^\\/]*$/, '')
-    : '尚未选择，生成时会弹出系统保存对话框';
+  const name = $('fileNameInput').value.trim() || '未命名';
+  $('fullPathText').textContent = state.outputDir
+    ? `完整路径：${state.outputDir}\\${name}`
+    : `完整路径：尚未选择文件夹（文件名 ${name}）`;
+  $('outputDirText').textContent = state.outputDir ?? '尚未选择文件夹';
 
   // Writing a schematic is what this step is for, so it stays disabled until there is
   // somewhere to write it. `runGeneration` checks the same thing, because a disabled
   // button is a hint and not a guarantee.
-  $('btnStartGen').disabled = !state.outputPath;
+  $('btnStartGen').disabled = !state.outputDir;
 }
 
 async function chooseOutputFile() {
-  const name = $('fileNameInput').value.trim() || suggestedName(state.midiPath, state.song?.name);
   try {
-    const path = await api.chooseOutput(name);
-    if (!path) return;
-    state.outputPath = path;
-    const leaf = path.split(/[\\/]/).pop();
-    if (leaf) $('fileNameInput').value = leaf;
+    const directory = await api.chooseDirectory();
+    if (!directory) return; // Cancelled.
+    state.outputDir = directory;
     syncOutputText();
     playNote(480, 'sine', 0.08);
   } catch (error) {
-    notify(`无法选择保存位置：${error?.message || error}`);
+    notify(`无法选择文件夹：${error?.message || error}`);
   }
+}
+
+/** The full path the schematic will be written to, or null while no folder is chosen. */
+function outputPath() {
+  if (!state.outputDir) return null;
+  const name = $('fileNameInput').value.trim() || suggestedName(state.midiPath, state.song?.name);
+  return `${state.outputDir}\\${name}`;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -400,7 +406,7 @@ async function runGeneration() {
     showGenerateError('还没有选择 MIDI 文件。', '缺少输入');
     return;
   }
-  if (!state.outputPath) {
+  if (!state.outputDir) {
     showGenerateError('还没有选择保存位置。', '缺少输出位置');
     return;
   }
@@ -413,7 +419,7 @@ async function runGeneration() {
   try {
     // With a destination chosen the main process also writes the file; without one it
     // only builds the result, which is what the preview needs.
-    const result = await api.generate(state.midiPath, generateOptions(), state.outputPath ?? undefined);
+    const result = await api.generate(state.midiPath, generateOptions(), outputPath() ?? undefined);
     clearInterval(elapsedTimer);
 
     if (!result.success) {
@@ -494,7 +500,7 @@ document.addEventListener('click', (event) => {
     const entry = state.tracks[index];
     if (entry) {
       entry.checked = !entry.checked;
-      renderTracks();
+      renderTracks(index);
       playNote(entry.checked ? 440 : 260, 'sine', 0.08);
     }
     return;
@@ -598,7 +604,7 @@ $('btnNextSong').addEventListener('click', () => {
   state.midiPath = null;
   state.song = null;
   state.tracks = [];
-  state.outputPath = null;
+  state.outputDir = null;
   state.checkResult = null;
   state.result = null;
   $('fileNameInput').value = '';
@@ -615,7 +621,24 @@ $('btnWinMin').addEventListener('click', () => void api.windowControl('minimize'
 $('btnWinMax').addEventListener('click', () => void api.windowControl('maximize'));
 $('btnWinClose').addEventListener('click', () => void api.windowControl('close'));
 
+/** Fill the About rows once, the first time the settings dialog is opened. */
+let aboutLoaded = false;
+async function loadAbout() {
+  if (aboutLoaded) return;
+  aboutLoaded = true;
+  try {
+    const info = await api.appInfo();
+    $('aboutVersion').textContent = info.version;
+    $('aboutLicense').textContent = info.license;
+    $('aboutAuthor').textContent = info.author;
+    $('btnOpenRepo').addEventListener('click', () => void api.open(info.repository));
+  } catch (error) {
+    notify(`无法读取版本信息：${error?.message || error}`);
+  }
+}
+
 $('btnOpenSettings').addEventListener('click', () => {
+  void loadAbout();
   $('settingsModal').classList.add('open');
 });
 $('btnCloseSettings').addEventListener('click', () => {

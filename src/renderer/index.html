@@ -9,6 +9,8 @@
        1. 核心色彩与液态玻璃变量 (Claude Warm Minimal × Apple Liquid Glass)
        ========================================================================== */
       :root {
+        /* 让 height:auto 可动画，折叠分组才能真的"撑到它的高度"。 */
+        interpolate-size: allow-keywords;
         --bg-base: #f5f4ef;
         --bg-surface: #eceae3;
 
@@ -1302,17 +1304,6 @@
         }
       }
 
-      @keyframes fold-open {
-        from {
-          opacity: 0;
-          transform: translateY(-6px);
-        }
-        to {
-          opacity: 1;
-          transform: none;
-        }
-      }
-
       .track-item {
         transition:
           background-color 0.2s var(--ease-out),
@@ -1323,13 +1314,10 @@
           background-color 0.18s var(--ease-out),
           border-color 0.18s var(--ease-out);
       }
-      .track-item.checked .check-box {
+      .track-item[data-pop='true'] .check-box {
         animation: check-pop 0.24s var(--ease-out);
       }
 
-      .fold-card.open .fold-content {
-        animation: fold-open 0.24s var(--ease-out);
-      }
       .fold-trigger svg {
         transition: transform 0.24s var(--ease-out);
       }
@@ -1338,9 +1326,11 @@
       }
 
       @media (prefers-reduced-motion: reduce) {
-        .track-item.checked .check-box,
-        .fold-card.open .fold-content {
+        .track-item[data-pop='true'] .check-box {
           animation: none;
+        }
+        .fold-content {
+          transition: none;
         }
       }
     </style>
@@ -2168,7 +2158,7 @@
               <div class="stat-card">
                 <span class="stat-k tnum">01 · 放入文件夹</span>
                 <span style="font-size: 13.5px; color: var(--ink-primary); font-weight: 600; margin-top: 4px"
-                  >将文件放入 .minecraft/schematics 目录</span
+                  >把文件放进 schematics 文件夹</span
                 >
               </div>
               <div class="stat-card">
@@ -2225,6 +2215,38 @@
             <div style="font-size: 12.5px; color: var(--ink-secondary)">切换步骤与完成时播放短音提示</div>
           </div>
           <button type="button" class="pill-tag" id="btnToggleSound">音效开</button>
+        </div>
+        <div class="setting-row">
+          <div>
+            <div style="font-size: 14.5px; font-weight: 700">版本</div>
+            <div style="font-size: 12.5px; color: var(--ink-secondary)">MusicboxMC Desktop</div>
+          </div>
+          <span id="aboutVersion" class="tnum" style="font-size: 13px; font-weight: 700">—</span>
+        </div>
+        <div class="setting-row">
+          <div>
+            <div style="font-size: 14.5px; font-weight: 700">许可</div>
+            <div style="font-size: 12.5px; color: var(--ink-secondary)">
+              开源软件，可自由使用与修改；再发布时需保持同一许可。
+            </div>
+          </div>
+          <span id="aboutLicense" style="font-size: 13px; font-weight: 700">—</span>
+        </div>
+        <div class="setting-row">
+          <div>
+            <div style="font-size: 14.5px; font-weight: 700">作者</div>
+            <div style="font-size: 12.5px; color: var(--ink-secondary)">问题与建议请提到仓库</div>
+          </div>
+          <span id="aboutAuthor" style="font-size: 13px; font-weight: 700">—</span>
+        </div>
+        <div class="setting-row" style="border-bottom: none">
+          <div>
+            <div style="font-size: 14.5px; font-weight: 700">源码仓库</div>
+            <div id="aboutRepo" style="font-size: 12.5px; color: var(--ink-secondary)">
+              github.com/xingtuan416/MusicboxMC
+            </div>
+          </div>
+          <button type="button" class="pill-tag" id="btnOpenRepo">打开</button>
         </div>
       </div>
     </div>

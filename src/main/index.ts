@@ -149,6 +149,31 @@ function registerIpc(): void {
     }
   });
 
+  // Where the schematic goes, without writing it: the file is produced by the next step.
+  ipcMain.handle('dialog:choose-directory', async () => {
+    if (!win) return null;
+    const picked = await dialog.showOpenDialog(win, {
+      title: '选择保存文件夹',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    return picked.canceled || picked.filePaths.length === 0 ? null : picked.filePaths[0];
+  });
+
+  /**
+   * What the About section shows.
+   *
+   * The version comes from the app itself, so a packaged build cannot disagree with it.
+   * The rest is a constant: package.json is not part of a packaged build, so it cannot be
+   * read at runtime, and these are the values a GPL project has to state.
+   */
+  ipcMain.handle('app:info', () => ({
+    name: 'MusicboxMC',
+    version: app.getVersion(),
+    license: 'GPL-3.0-or-later',
+    repository: 'https://github.com/xingtuan416/MusicboxMC',
+    author: 'xingtuan416',
+  }));
+
   // The window is frameless, so the renderer's own buttons drive these.
   ipcMain.handle('window:control', (_e, action: unknown) => {
     if (!win) return;
