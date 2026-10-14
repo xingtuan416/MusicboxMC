@@ -1221,6 +1221,31 @@
         border-radius: 5px;
       }
 
+      .preview-scroll {
+        position: relative;
+        height: 12px;
+        margin: 2px 2px 0;
+        border-radius: 999px;
+        background: rgba(20, 20, 19, 0.06);
+        cursor: pointer;
+        touch-action: none;
+      }
+      .preview-scroll[hidden] {
+        display: none;
+      }
+      .preview-scroll i {
+        position: absolute;
+        top: 2px;
+        bottom: 2px;
+        border-radius: 999px;
+        background: rgba(20, 20, 19, 0.24);
+        transition: background-color 0.18s var(--ease-out);
+      }
+      .preview-scroll:hover i,
+      .preview-scroll[data-dragging='true'] i {
+        background: rgba(20, 20, 19, 0.42);
+      }
+
       .preview-footer {
         display: flex;
         align-items: center;
@@ -2062,6 +2087,10 @@
 
               <div class="canvaswrap" id="canvasWrap">
                 <div class="canvas-stage"><canvas id="canvas"></canvas></div>
+              </div>
+
+              <div class="preview-scroll" id="previewScroll" title="拖动查看其它位置">
+                <i id="previewThumb"></i>
               </div>
 
               <div class="preview-footer">

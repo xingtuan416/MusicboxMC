@@ -554,6 +554,10 @@ function renderPreview(res) {
   }
 
   updatePreviewZoomLabel();
+
+  // The interface draws a position indicator. It cannot poll for this, and the drawing
+  // module should not know about it, so the change is announced instead.
+  document.dispatchEvent(new CustomEvent('preview:drawn'));
 }
 
 function updatePreviewZoomLabel() {
@@ -641,4 +645,24 @@ function fitPreview() {
   renderPreview(state.generated);
 }
 
-export { renderPreview, zoomPreview, panPreview, fitPreview, focusPreviewCell, ZOOM_STEP };
+/**
+ * Where the view sits, for the position indicator the interface draws.
+ *
+ * Returns null before anything has been drawn, so the caller can hide the track rather
+ * than show a thumb at a position that means nothing yet.
+ */
+function previewPosition() {
+  const previewData = state.generated?.preview;
+  const wrap = document.getElementById('canvasWrap');
+  if (!previewData?.size?.x || !wrap) return null;
+  const { cell } = viewGeometry({ previewScale: state.previewScale });
+  const usable = Math.max(cell, wrap.clientWidth - GUTTER);
+  return {
+    x0: Math.max(0, state.previewView?.x0 ?? 0),
+    columns: Math.max(1, Math.floor(usable / cell)),
+    total: previewData.size.x,
+    cell,
+  };
+}
+
+export { renderPreview, zoomPreview, panPreview, fitPreview, focusPreviewCell, previewPosition, ZOOM_STEP };

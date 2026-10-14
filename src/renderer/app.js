@@ -12,7 +12,7 @@
  */
 
 import { maybePromptForPack, savePack } from './resourcepack.js';
-import { focusPreviewCell, panPreview, renderPreview } from './preview.js';
+import { focusPreviewCell, panPreview, previewPosition, renderPreview } from './preview.js';
 import {
   locateWarning,
   WARNING_DISPLAY_LIMIT,
@@ -914,6 +914,63 @@ for (const id of ['showGrid', 'showNotes']) {
     },
     { passive: false },
   );
+})();
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * The position indicator under the canvas
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** Redraw the thumb from the view the drawing module reports. */
+function syncPreviewScroll() {
+  const track = $('previewScroll');
+  const thumb = $('previewThumb');
+  const position = previewPosition();
+  if (!position) {
+    track.hidden = true;
+    return;
+  }
+
+  track.hidden = false;
+  const width = Math.max(24, track.clientWidth * Math.min(1, position.columns / position.total));
+  const travel = Math.max(0, track.clientWidth - width);
+  const offset =
+    position.total > position.columns ? (position.x0 / (position.total - position.columns)) * travel : 0;
+  thumb.style.width = width + 'px';
+  thumb.style.left = Math.max(0, Math.min(travel, offset)) + 'px';
+}
+
+/** Put the view where a click or drag on the track points. */
+function seekPreview(clientX) {
+  const track = $('previewScroll');
+  const position = previewPosition();
+  if (!position) return;
+  const box = track.getBoundingClientRect();
+  const fraction = Math.max(0, Math.min(1, (clientX - box.left) / box.width));
+  const target = fraction * Math.max(0, position.total - position.columns);
+  panPreview((target - position.x0) * position.cell, 0);
+}
+
+document.addEventListener('preview:drawn', syncPreviewScroll);
+window.addEventListener('resize', syncPreviewScroll);
+
+(() => {
+  const track = $('previewScroll');
+  let dragging = false;
+  track.addEventListener('pointerdown', (event) => {
+    dragging = true;
+    track.dataset.dragging = 'true';
+    track.setPointerCapture(event.pointerId);
+    seekPreview(event.clientX);
+  });
+  track.addEventListener('pointermove', (event) => {
+    if (dragging) seekPreview(event.clientX);
+  });
+  const stop = () => {
+    dragging = false;
+    delete track.dataset.dragging;
+  };
+  track.addEventListener('pointerup', stop);
+  track.addEventListener('pointercancel', stop);
 })();
 
 /** Logs from the main process (uncaught exceptions) still deserve to be visible. */
