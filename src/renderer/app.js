@@ -49,6 +49,9 @@ const state = {
   dMax: 14,
   outOfRange: 'warn',
   backend: 'redstone',
+  /** 'off' | 'same' | 'force' - one value, because merge and force-merge conflict. */
+  merge: 'off',
+  author: 'MusicboxMC',
   commandBudget: 65536,
   baseTps: 20,
   sound: true,
@@ -214,6 +217,11 @@ async function loadMidi(path) {
 
     $('fileNameInput').value = suggestedName(path, result.song.name);
 
+    const dropped = result.tracks.length - state.tracks.length;
+    $('trackFilterHint').style.display = dropped > 0 ? 'block' : 'none';
+    $('trackFilterHint').textContent =
+      dropped > 0 ? `已过滤 ${dropped} 条不含音符的音轨（指挥轨，或从未使用的通道）。` : '';
+
     renderTracks();
     syncOutputText();
     setImportView('loaded');
@@ -318,7 +326,10 @@ function generateOptions() {
     // The generator works on exclusions, so a track the user cleared is left out.
     excludeTracks: state.tracks.filter((track) => !track.checked).map((track) => track.index),
     commandPlayback: state.backend === 'command',
+    mergeSameInstrument: state.merge === 'same',
+    forceMergeSameInstrument: state.merge === 'force',
   };
+  if (state.author.trim()) options.author = state.author.trim();
   if (state.backend === 'command') options.commandChainBudget = state.commandBudget;
   if (chosen.length === 0) options.excludeTracks = state.tracks.map((track) => track.index);
   return options;
@@ -440,7 +451,7 @@ function showResult(result) {
   $('doneTriggerHint').textContent =
     result.playbackMode === 'command'
       ? '粘贴后结构自带信号源，确认命令方块已开启即可播放'
-      : '在主线起点接上红石信号（拉杆或红石块）即可演奏';
+      : '在主线起点接上红石线，再接一个按钮来驱动';
 
   $('doneWarningBox').style.display = 'none';
   $('doneWarningBox').textContent = '';
@@ -507,7 +518,11 @@ document.addEventListener('click', (event) => {
     if (group === 'palette') state.palette = value;
     if (group === 'range') state.outOfRange = value;
     if (group === 'backend') state.backend = value;
+    if (group === 'merge') state.merge = value;
     syncSummary();
+    // The notice invites the user to leave the defaults alone. Once they have not, it has
+    // nothing left to say.
+    $('configNotice').style.display = 'none';
     playNote(420, 'sine', 0.08);
   }
 });
@@ -616,6 +631,11 @@ $('btnToggleSound').addEventListener('click', () => {
   if (state.sound) playNote(587, 'sine', 0.1);
 });
 
+$('authorInput').addEventListener('input', (event) => {
+  state.author = event.target.value;
+  syncSummary();
+});
+
 $('baseTpsInput').addEventListener('change', (event) => {
   const value = Number(event.target.value);
   state.baseTps = Number.isFinite(value) ? Math.max(1, Math.min(100, Math.round(value))) : 20;
@@ -679,25 +699,77 @@ function issueElement(result, warning) {
   return item;
 }
 
+/** How many issues one group shows before it offers to show more. */
+const ISSUE_PAGE = 50;
+
+/** Group headings, in the order they are shown. */
+const ISSUE_GROUPS = [
+  { severity: 'warn', title: '需要处理的' },
+  { severity: 'info', title: '仅供了解' },
+];
+
+/**
+ * Append one page of a group, and a button for the next page while any remain.
+ *
+ * Rebuilt from the index each time rather than tracked with a cursor, because a group can
+ * be hundreds long and the button has to disappear exactly when the last page is shown.
+ */
+function appendIssuePage(result, container, items, from) {
+  const page = items.slice(from, from + ISSUE_PAGE);
+  for (const warning of page) container.append(issueElement(result, warning));
+
+  const next = from + ISSUE_PAGE;
+  if (next >= items.length) return;
+
+  const more = document.createElement('button');
+  more.type = 'button';
+  more.className = 'btn-glass';
+  more.style.alignSelf = 'flex-start';
+  more.textContent = `继续加载（还有 ${number(items.length - next)} 条）`;
+  more.addEventListener('click', () => {
+    more.remove();
+    appendIssuePage(result, container, items, next);
+  });
+  container.append(more);
+}
+
 function renderIssues(result) {
   const list = $('issueList');
   list.replaceChildren();
 
-  const warnings = result.warnings ?? [];
-  const shown = warnings.slice(0, WARNING_DISPLAY_LIMIT);
+  const warnings = (result.warnings ?? []).slice(0, WARNING_DISPLAY_LIMIT);
+  const bySeverity = new Map(ISSUE_GROUPS.map((group) => [group.severity, []]));
+  for (const warning of warnings) {
+    const severity = warnSeverity(warning.code) === 'warn' ? 'warn' : 'info';
+    bySeverity.get(severity).push(warning);
+  }
 
+  if (warnings.length === 0) {
+    $('checkSummary').textContent = '没有发现问题，可以直接生成。';
+    return;
+  }
+
+  const actionable = bySeverity.get('warn').length;
   $('checkSummary').textContent =
-    warnings.length === 0
-      ? '没有需要处理的错误。'
-      : `共 ${number(warnings.length)} 处需要看一眼。点「在红石布线里定位」可以跳到对应位置。`;
+    actionable > 0
+      ? `共 ${number(warnings.length)} 条，其中 ${number(actionable)} 条建议处理。` +
+        '点「在红石布线里定位」可以跳到对应位置；想改配置就点「上一步」。'
+      : `共 ${number(warnings.length)} 条，都不影响生成，看一眼即可。`;
 
-  for (const warning of shown) list.append(issueElement(result, warning));
+  for (const group of ISSUE_GROUPS) {
+    const items = bySeverity.get(group.severity);
+    if (items.length === 0) continue;
 
-  if (warnings.length > shown.length) {
-    const more = document.createElement('p');
-    more.className = 'issue-detail';
-    more.textContent = `还有 ${number(warnings.length - shown.length)} 条同类提示没有列出。`;
-    list.append(more);
+    const heading = document.createElement('div');
+    heading.className = 'issue-group';
+    heading.dataset.severity = group.severity;
+    heading.textContent = `${group.title} · ${number(items.length)} 条`;
+    list.append(heading);
+
+    const body = document.createElement('div');
+    body.className = 'issue-list';
+    list.append(body);
+    appendIssuePage(result, body, items, 0);
   }
 }
 

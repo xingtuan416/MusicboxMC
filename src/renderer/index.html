@@ -702,7 +702,7 @@
       }
 
       /* ==========================================================================
-       Step 4: 深度配置 (折叠分组)
+       Step 4: 配置 (折叠分组)
        ========================================================================== */
       .preset-notice {
         padding: 14px 18px;
@@ -1030,6 +1030,30 @@
         gap: 10px;
       }
 
+      /* 分组标题；需要处理的那组用强调色，其余保持灰。 */
+      .issue-group {
+        margin: 8px 0 -2px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        color: var(--ink-muted);
+      }
+      .issue-group[data-severity='warn'] {
+        color: var(--accent);
+      }
+
+      /* 不影响生成的提示一律压灰：它们不该和需要处理的抢注意力。 */
+      .issue[data-severity='info'] {
+        border-left-color: rgba(20, 20, 19, 0.14);
+        background: rgba(255, 255, 255, 0.45);
+      }
+      .issue[data-severity='info'] .issue-title {
+        color: var(--ink-secondary);
+      }
+      .issue[data-severity='info'] .issue-detail {
+        color: var(--ink-muted);
+      }
+
       .issue {
         display: flex;
         gap: 14px;
@@ -1153,8 +1177,13 @@
       }
 
       .canvaswrap {
-        min-height: 265px;
-        max-height: calc(100vh - 380px);
+        /*
+          用满可用高度，而不是只满足 265px 的下限。
+          音轨之间的 Z 间隔是 2×和弦行数+2，和弦多的曲子会拉得很开（dMax 14 时就是 30 格），
+          画布太矮就变成一次只能看见一条音轨，得靠拖动去找。
+        */
+        height: min(58vh, 520px);
+        min-height: 240px;
         /* 画布本身就是视口，自己不滚动；平移在 JS 里做。 */
         overflow: hidden;
         cursor: grab;
@@ -1219,6 +1248,87 @@
         gap: 14px;
         font-size: 12px;
         color: var(--ink-secondary);
+      }
+      /* ========================================================================
+         滚动条：细、无轨道、悬停才明显。默认的那种方灰色滚动条和这套界面不搭。
+         ======================================================================== */
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(20, 20, 19, 0.22) transparent;
+      }
+      *::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+      *::-webkit-scrollbar-track,
+      *::-webkit-scrollbar-corner {
+        background: transparent;
+      }
+      *::-webkit-scrollbar-thumb {
+        border: 3px solid transparent;
+        border-radius: 999px;
+        background-clip: content-box;
+        background-color: rgba(20, 20, 19, 0.2);
+      }
+      *::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(20, 20, 19, 0.36);
+      }
+
+      /* ========================================================================
+         动效：选择音轨与展开分组原来是瞬间切换，显得生硬。
+         ======================================================================== */
+      @keyframes check-pop {
+        0% {
+          transform: scale(0.84);
+        }
+        60% {
+          transform: scale(1.08);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      @keyframes fold-open {
+        from {
+          opacity: 0;
+          transform: translateY(-6px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      .track-item {
+        transition:
+          background-color 0.2s var(--ease-out),
+          border-color 0.2s var(--ease-out);
+      }
+      .track-item .check-box {
+        transition:
+          background-color 0.18s var(--ease-out),
+          border-color 0.18s var(--ease-out);
+      }
+      .track-item.checked .check-box {
+        animation: check-pop 0.24s var(--ease-out);
+      }
+
+      .fold-card.open .fold-content {
+        animation: fold-open 0.24s var(--ease-out);
+      }
+      .fold-trigger svg {
+        transition: transform 0.24s var(--ease-out);
+      }
+      .fold-card.open .fold-trigger svg {
+        transform: rotate(180deg);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .track-item.checked .check-box,
+        .fold-card.open .fold-content {
+          animation: none;
+        }
       }
     </style>
   </head>
@@ -1494,29 +1604,33 @@
               </button>
             </div>
 
+            <p
+              id="trackFilterHint"
+              style="font-size: 12.5px; color: var(--ink-muted); margin: 0; display: none"
+            ></p>
             <div id="trackListBox" class="track-list"></div>
 
             <div class="action-bar">
               <button type="button" class="btn-glass" data-goto="2">上一步</button>
-              <button type="button" id="btnStep3Next" class="btn-obsidian" data-goto="4">
-                下一步：深度配置
-              </button>
+              <button type="button" id="btnStep3Next" class="btn-obsidian" data-goto="4">下一步：配置</button>
             </div>
           </div>
         </section>
 
         <!-- ====================================================================
-           Step 4: 深度配置
+           Step 4: 配置
            ==================================================================== -->
         <section id="step-4" class="screen-step">
           <div class="step-inner">
             <div class="step-head">
               <span class="step-index tnum">STEP 04 / 08</span>
-              <h2 class="step-h1">深度配置</h2>
+              <h2 class="step-h1">配置</h2>
               <p class="step-sub">所有参数已默认收起并采用推荐预设，无需修改即可直接进入下一步。</p>
             </div>
 
-            <div class="preset-notice">下面三组都已经是默认值，直接下一步即可；需要时再展开微调。</div>
+            <div class="preset-notice" id="configNotice">
+              下面几组都已经是默认值，直接下一步即可；需要时再展开微调。
+            </div>
 
             <div class="fold-list">
               <div class="fold-card" id="fold-pitch">
@@ -1646,6 +1760,98 @@
                 </div>
               </div>
 
+              <div class="fold-card" id="fold-misc">
+                <button type="button" class="fold-trigger" data-fold="fold-misc">
+                  <div>
+                    <div class="fold-title">其它</div>
+                    <div class="fold-val" id="sumMisc">每条音轨各自一条主线 · 作者 MusicboxMC</div>
+                  </div>
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+                <div class="fold-content">
+                  <button
+                    type="button"
+                    class="opt-box selected"
+                    data-cfg-group="merge"
+                    data-cfg-val="off"
+                    data-cfg-label="每条音轨各自一条主线"
+                  >
+                    <span class="opt-title">不合并</span>
+                    <span class="opt-desc">每条 MIDI 音轨单独占一条线</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="opt-box"
+                    data-cfg-group="merge"
+                    data-cfg-val="same"
+                    data-cfg-label="同乐器合到一条主线"
+                  >
+                    <span class="opt-title">合并同乐器</span>
+                    <span class="opt-desc">同一种乐器的音轨共用一条主线</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="opt-box"
+                    data-cfg-group="merge"
+                    data-cfg-val="force"
+                    data-cfg-label="强制合并成全曲一条主线"
+                  >
+                    <span class="opt-title">强制合并</span>
+                    <span class="opt-desc">全曲一条线，统一启动等待做补偿</span>
+                  </button>
+                  <div
+                    style="
+                      grid-column: span 3;
+                      display: flex;
+                      flex-direction: column;
+                      gap: 8px;
+                      margin-top: 4px;
+                    "
+                  >
+                    <label
+                      for="authorInput"
+                      style="font-size: 13px; font-weight: 700; color: var(--ink-secondary)"
+                    >
+                      作者（写进投影元数据，Litematica 里会显示）
+                    </label>
+                    <input id="authorInput" class="input-clean" type="text" value="MusicboxMC" />
+                  </div>
+                  <div
+                    style="
+                      grid-column: span 3;
+                      display: flex;
+                      flex-direction: column;
+                      gap: 8px;
+                      margin-top: 4px;
+                    "
+                  >
+                    <label
+                      for="baseTpsInput"
+                      style="font-size: 13px; font-weight: 700; color: var(--ink-secondary)"
+                    >
+                      基准 TPS（每秒游戏刻数；只有服务端改过才需要动）
+                    </label>
+                    <input
+                      id="baseTpsInput"
+                      class="input-clean"
+                      type="number"
+                      min="1"
+                      max="100"
+                      step="1"
+                      value="20"
+                    />
+                  </div>
+                </div>
+              </div>
               <div class="fold-card" id="fold-backend">
                 <button type="button" class="fold-trigger" data-fold="fold-backend">
                   <div>
@@ -1782,7 +1988,19 @@
               <div>
                 <div style="font-size: 14.5px; font-weight: 700">配套资源包（全音域建议安装）</div>
                 <div style="font-size: 12.5px; color: var(--ink-secondary); margin-top: 4px">
-                  全音域由五种原版基底音色拼成：bass、guitar、harp、flute、bell。旋律跨过八度边界时音色会跟着换，听起来不像同一架琴。装上它把这五段统一成钢琴采样。
+                  全音域由五种原版基底音色拼成：bass、guitar、harp、flute、bell。旋律跨过八度边界时音色会跟着换，听起来不像同一架琴。
+                </div>
+                <div
+                  id="packRequired"
+                  style="
+                    font-size: 12.5px;
+                    font-weight: 600;
+                    color: var(--danger);
+                    margin-top: 6px;
+                    display: none;
+                  "
+                >
+                  当前选了全音域，必须安装这个资源包，否则同一个旋律会换好几种乐器。
                 </div>
               </div>
               <button type="button" id="btnSavePack" class="pill-tag" style="flex: none">
@@ -1822,7 +2040,7 @@
                 <div>
                   <div class="preview-title">红石布线</div>
                   <p id="previewDescription" class="preview-subtitle">
-                    向右是时间，向下是不同音轨的空间排布。
+                    向右是时间，向下是不同音轨的空间排布。按住拖动可以平移，滚轮横向移动。
                   </p>
                 </div>
                 <div class="preview-tools">
@@ -1949,7 +2167,7 @@
                 <span
                   id="doneTriggerHint"
                   style="font-size: 13.5px; color: var(--ink-primary); font-weight: 600; margin-top: 4px"
-                  >在主线起点接上红石信号即可演奏</span
+                  >在主线起点接上红石线，再接一个按钮来驱动</span
                 >
               </div>
             </div>
@@ -1992,24 +2210,6 @@
             <div style="font-size: 12.5px; color: var(--ink-secondary)">切换步骤与完成时播放短音提示</div>
           </div>
           <button type="button" class="pill-tag" id="btnToggleSound">音效开</button>
-        </div>
-        <div class="setting-row" style="border-bottom: none">
-          <div>
-            <div style="font-size: 14.5px; font-weight: 700">基准 TPS</div>
-            <div style="font-size: 12.5px; color: var(--ink-secondary)">
-              每秒游戏刻数，默认 20。只有服务端改过才需要调整。
-            </div>
-          </div>
-          <input
-            id="baseTpsInput"
-            class="input-clean"
-            type="number"
-            min="1"
-            max="100"
-            step="1"
-            value="20"
-            style="width: 110px; height: 40px; text-align: center"
-          />
         </div>
       </div>
     </div>
