@@ -38,6 +38,22 @@ npm run lint
 npm run typecheck
 npm test
 npm run build
+
+### Checking the interface
+
+`npm test` covers the core, not the window. Two scripts in the working `out/` directory
+drive the real thing instead:
+
+- `out/verify-ui.cjs` walks all seven steps against a result from the actual generator, and
+  fails on a missing element, a statistic left blank, horizontal overflow, a control that
+  does nothing and any uncaught error.
+- `out/verify-about.cjs` launches the application and checks what the About section
+  reports, including the version it reads from the manifest.
+
+They need `playwright-core` and a Chromium-based browser on the machine, and they use the
+system browser channel, so they are not portable as they stand. That is deliberate: the
+project takes no dependency it cannot justify, and adding one that only works on the
+author's machine would be worse than saying so here.
 ```
 
 `npm run format` applies Prettier. Everything is already formatted, so it should
