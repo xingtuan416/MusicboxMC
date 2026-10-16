@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.1.0"><img alt="Download v0.1.0" src="https://img.shields.io/badge/download-v0.1.0-2ea44f"></a>
+  <a href="https://github.com/xingtuan416/MusicboxMC/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/xingtuan416/MusicboxMC?color=2ea44f"></a>
   <a href="https://github.com/xingtuan416/MusicboxMC/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/xingtuan416/MusicboxMC/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue"></a>
 </p>
@@ -34,7 +34,7 @@ of a song.
 ## Download
 
 Windows x64. Grab either file from the
-[latest release](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.1.0).
+[latest release](https://github.com/xingtuan416/MusicboxMC/releases/latest).
 
 | File                                 | What it is                                                                   |
 | ------------------------------------ | ---------------------------------------------------------------------------- |
@@ -137,7 +137,7 @@ requires it, and the schematic is identical either way.
 The pack **ships inside the application**. A _Save companion resource pack_ button sits
 under the full-range switch, and the first full-range export offers it once. Put the
 file in `.minecraft/resourcepacks/` and enable it in game. It is also on the
-[release page](https://github.com/xingtuan416/MusicboxMC/releases/download/v0.1.0/MusicboxMC-piano-pack-1.20.4.zip)
+[release page](https://github.com/xingtuan416/MusicboxMC/releases/latest/download/MusicboxMC-piano-pack-1.20.4.zip)
 if you would rather download it directly.
 
 `npm run resourcepack:check <pack.zip>` validates any pack against the mapping the
@@ -199,4 +199,4 @@ code lives, and the part worth reading if you want to change how a circuit is bu
 
 ## License
 
-[GNU General Public License v3.0 or later](LICENSE).
+[GNU General Public License v3.0](LICENSE).

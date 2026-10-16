@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.1.0"><img alt="下载 v0.1.0" src="https://img.shields.io/badge/download-v0.1.0-2ea44f"></a>
+  <a href="https://github.com/xingtuan416/MusicboxMC/releases/latest"><img alt="最新发布" src="https://img.shields.io/github/v/release/xingtuan416/MusicboxMC?color=2ea44f"></a>
   <a href="https://github.com/xingtuan416/MusicboxMC/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/xingtuan416/MusicboxMC/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="许可证：GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue"></a>
 </p>
@@ -31,7 +31,7 @@ MusicboxMC 读取 MIDI 文件，编译成红石电路，再写成 Litematica 的
 ## 下载
 
 Windows x64。两个文件任选其一，均来自
-[最新发布](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.1.0)。
+[最新发布](https://github.com/xingtuan416/MusicboxMC/releases/latest)。
 
 | 文件                                 | 说明                                                            |
 | ------------------------------------ | --------------------------------------------------------------- |
@@ -109,7 +109,7 @@ Windows x64。两个文件任选其一，均来自
 资源包**已内置在应用里**：「全音域拓展」开关下方有一个"保存配套资源包"按钮，第一次用
 全音域导出时也会提示一次。把它放进 `.minecraft/resourcepacks/` 并在游戏里启用即可。
 想直接下载的话，
-[Release 页面](https://github.com/xingtuan416/MusicboxMC/releases/download/v0.1.0/MusicboxMC-piano-pack-1.20.4.zip)
+[Release 页面](https://github.com/xingtuan416/MusicboxMC/releases/latest/download/MusicboxMC-piano-pack-1.20.4.zip)
 也有。
 
 `npm run resourcepack:check <pack.zip>` 可以按生成器期望的映射校验任意资源包。
@@ -174,4 +174,4 @@ npm run dist:dir   # 只出免安装目录，用于快速验证
 
 ## 许可证
 
-[GNU General Public License v3.0 或更高版本](LICENSE)。
+[GNU General Public License v3.0](LICENSE)。
