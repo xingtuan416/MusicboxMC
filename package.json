@@ -29,7 +29,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "dist": "npm run build && electron-builder --win --x64",
-    "dist:dir": "npm run build && electron-builder --win --x64 --dir"
+    "dist:dir": "npm run build && electron-builder --win --x64 --dir",
+    "smoke": "node scripts/smoke-ipc.cjs"
   },
   "dependencies": {
     "@tonejs/midi": "^2.0.28"

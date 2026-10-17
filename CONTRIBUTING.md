@@ -49,11 +49,12 @@ drive the real thing instead:
   does nothing and any uncaught error.
 - `out/verify-about.cjs` launches the application and checks what the About section
   reports, including the version it reads from the manifest.
-- `out/smoke-ipc.cjs [song.mid]` drives the built application through the real preload
-  bridge and the real IPC handlers: it analyzes a song, generates a schematic, and checks
-  that the file on disk is the size the result claims. It is the only one of the three that
-  proves the main process works rather than that the interface renders. It needs Electron
-  but no browser, so it runs anywhere the application does.
+- `npm run smoke -- song.mid` drives the built application through the real preload bridge
+  and the real IPC handlers: it analyzes a song, generates a schematic, and checks that the
+  file on disk is the size the result claims. It is the only one of the three that proves
+  the main process works rather than that the interface renders. It needs Electron but no
+  browser, so it runs anywhere the application does. Unlike the two above it lives in
+  `scripts/`, so it is part of the repository rather than a local convenience.
 
 They need `playwright-core` and a Chromium-based browser on the machine, and they use the
 system browser channel, so they are not portable as they stand. That is deliberate: the
