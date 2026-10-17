@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import {
   buildLitematic,
@@ -45,7 +48,15 @@ describe('NBT writer/reader round-trip', () => {
   });
 });
 
-describe('litematic assembly and read-back', () => {
+/**
+ * Self-consistency, not format correctness.
+ *
+ * These assertions prove the writer and reader agree with each other. They cannot prove
+ * either agrees with the format: both once agreed that NBT strings were plain UTF-8, and
+ * Java refused the result. Format correctness is covered by the describe block at the end
+ * of this file, which is anchored to a reader written from the specification.
+ */
+describe('litematic assembly and read-back (self-consistency)', () => {
   const region: RegionData = {
     position: { x: 0, y: 0, z: 0 },
     size: { x: 4, y: 3, z: 2 },
@@ -128,5 +139,78 @@ describe('litematic assembly and read-back', () => {
         }),
       'LITEMATIC_BLOCK_OUT_OF_BOUNDS',
     );
+  });
+});
+
+/**
+ * Format correctness, anchored to something that is not this project.
+ *
+ * `test/fixtures/VerifyLitematic.java` parses NBT and unpacks the bit array from the format
+ * description alone: tag framing, `readUTF`, and entries that cross 64-bit word boundaries.
+ * Its output is the authority below. Reproduce it with:
+ *
+ *   java test/fixtures/VerifyLitematic.java test/fixtures/tiny.litematic
+ *
+ * which prints:
+ *
+ *   Version=6  MinecraftDataVersion=3700  Metadata.RegionCount=1
+ *   region_0 size=2x1x2 palette=5 bits=3 words=1 expectedWords=1
+ *   cell(0,0,0) paletteIndex=1 block=minecraft:stone
+ *   cell(1,0,0) paletteIndex=2 block=minecraft:note_block
+ *   cell(0,0,1) paletteIndex=3 block=minecraft:repeater
+ *   cell(1,0,1) paletteIndex=4 block=minecraft:redstone_wire
+ */
+describe('litematic format, checked against a reader written from the specification', () => {
+  const FIXTURE = resolve('test/fixtures/tiny.litematic');
+  const RAW_FIXTURE = resolve('test/fixtures/tiny.litematic.nbt');
+
+  const region: RegionData = {
+    position: { x: 0, y: 0, z: 0 },
+    size: { x: 2, y: 1, z: 2 },
+    // Four distinct blocks, so a packing error cannot hide behind repetition.
+    blocks: [
+      { x: 0, y: 0, z: 0, state: { name: 'minecraft:stone' } },
+      { x: 1, y: 0, z: 0, state: { name: 'minecraft:note_block', properties: { note: '7' } } },
+      { x: 0, y: 0, z: 1, state: { name: 'minecraft:repeater', properties: { delay: '3' } } },
+      { x: 1, y: 0, z: 1, state: { name: 'minecraft:redstone_wire', properties: { power: '0' } } },
+    ],
+  };
+  const meta = { name: 'fixture', author: 'test', description: '', dataVersion: 3700, version: 6 };
+
+  it('produces a file of the size Java read', () => {
+    // A byte-exact comparison is not possible, and not because of gzip: the metadata writes
+    // TimeCreated and TimeModified from Date.now(), so six bytes of the 685 differ on every
+    // build. Length plus the per-cell assertions below cover what a byte comparison would
+    // have caught - a change to the palette, the entry width or the tag framing moves one or
+    // the other.
+    const raw = gunzipSync(buildLitematic([region], meta));
+    expect(raw.length).toBe(readFileSync(RAW_FIXTURE).length);
+  });
+
+  it('parses the fixture into the structure Java reported', () => {
+    const parsed = parseLitematic(readFileSync(FIXTURE));
+    expect(parsed.version).toBe(6);
+    expect(parsed.dataVersion).toBe(3700);
+    expect(parsed.metadata.regionCount).toBe(1);
+
+    const parsedRegion = parsed.regions[0]!;
+    expect(parsedRegion.size).toEqual({ x: 2, y: 1, z: 2 });
+    // Five entries: air plus the four blocks. That is what makes the entry width 3 bits.
+    expect(parsedRegion.palette).toHaveLength(5);
+  });
+
+  it('unpacks every cell to the block Java found in it', () => {
+    const parsedRegion = parseLitematic(readFileSync(FIXTURE)).regions[0]!;
+    const expected: Array<[number, number, number, string]> = [
+      [0, 0, 0, 'minecraft:stone'],
+      [1, 0, 0, 'minecraft:note_block'],
+      [0, 0, 1, 'minecraft:repeater'],
+      [1, 0, 1, 'minecraft:redstone_wire'],
+    ];
+
+    for (const [x, y, z, block] of expected) {
+      const index = parsedRegion.indices[blockIndex(x, y, z, parsedRegion.size.x, parsedRegion.size.z)]!;
+      expect(parsedRegion.palette[index]?.name, `cell(${x},${y},${z})`).toBe(block);
+    }
   });
 });
