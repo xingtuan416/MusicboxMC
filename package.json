@@ -1,6 +1,6 @@
 {
   "name": "musicboxmc",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "MIDI → Minecraft 红石音乐 .litematic 投影生成器",
   "license": "GPL-3.0-only",
