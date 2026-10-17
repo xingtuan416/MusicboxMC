@@ -172,11 +172,14 @@
         color: var(--ink-primary);
       }
 
-      .brand-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: var(--accent);
+      /* The application icon, in the title bar. Copied into the renderer directory by
+         scripts/copy-assets.mjs: app:// refuses paths that leave it. */
+      .brand-icon {
+        display: block;
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        object-fit: cover;
       }
 
       .nav-back-pill {
@@ -1377,7 +1380,7 @@
       <header class="window-titlebar">
         <div class="titlebar-left">
           <div class="brand-mark">
-            <span class="brand-dot"></span>
+            <img class="brand-icon" src="./icon.png" alt="" />
             <span>MusicboxMC</span>
           </div>
           <button type="button" id="btnPrevStep" class="nav-back-pill is-hidden">
@@ -2255,9 +2258,7 @@
         <div class="setting-row">
           <div>
             <div style="font-size: 14.5px; font-weight: 700">许可</div>
-            <div style="font-size: 12.5px; color: var(--ink-secondary)">
-              开源软件，可自由使用与修改；再发布时需保持同一许可。
-            </div>
+            <div style="font-size: 12.5px; color: var(--ink-secondary)">开源许可证</div>
           </div>
           <span id="aboutLicense" class="tnum" style="font-size: 13px; font-weight: 700; white-space: nowrap"
             >—</span

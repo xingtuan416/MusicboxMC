@@ -33,5 +33,11 @@ if (existsSync(iconFrom)) {
   const iconTo = join(root, 'dist', 'src', 'main', 'icon.png');
   mkdirSync(dirname(iconTo), { recursive: true });
   cpSync(iconFrom, iconTo);
-  console.log(`[copy-assets] icon: ${iconFrom} → ${iconTo}`);
+  // The renderer shows the same icon in its title bar, and it cannot reach outside its
+  // own directory: the app:// handler treats anything that leaves the renderer root as a
+  // path escape and refuses it. So the icon is copied in alongside the markup.
+  const iconForRenderer = join(root, 'dist', 'src', 'renderer', 'icon.png');
+  mkdirSync(dirname(iconForRenderer), { recursive: true });
+  cpSync(iconFrom, iconForRenderer);
+  console.log(`[copy-assets] icon: ${iconFrom} → ${iconTo} + renderer/icon.png`);
 }
