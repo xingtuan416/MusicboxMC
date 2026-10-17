@@ -73,7 +73,10 @@ class NbtReader {
   str(): string {
     const len = this.u16();
     this.need(len);
-    const s = decodeModifiedUtf8(this.buf.subarray(this.pos, this.pos + len));
+    // The decoder reports positions relative to the bytes it was given; every other NBT
+    // diagnostic reports an absolute stream offset, so pass the start and let it add up.
+    const start = this.pos;
+    const s = decodeModifiedUtf8(this.buf.subarray(start, start + len), start);
     this.pos += len;
     return s;
   }

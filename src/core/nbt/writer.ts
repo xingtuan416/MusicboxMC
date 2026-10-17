@@ -70,6 +70,13 @@ class NbtWriter {
 
   /** Modified UTF-8 string with an unsigned 16-bit byte length, as Java writes it. */
   str(s: string): void {
+    // Reject before encoding. Modified UTF-8 uses at least one byte per UTF-16 code unit,
+    // so a string longer than the limit in code units cannot fit, and there is no reason to
+    // allocate three times its length to find that out. `s.length` is a lower bound on the
+    // encoded size, which is why the exact check below stays.
+    if (s.length > MAX_MODIFIED_UTF8_BYTES) {
+      throw coreError('NBT_STRING_TOO_LONG', { bytes: s.length });
+    }
     const bytes = encodeModifiedUtf8(s);
     if (bytes.length > MAX_MODIFIED_UTF8_BYTES) {
       throw coreError('NBT_STRING_TOO_LONG', { bytes: bytes.length });

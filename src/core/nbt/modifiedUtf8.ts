@@ -44,7 +44,7 @@ export function encodeModifiedUtf8(value: string): Buffer {
 }
 
 /** Decode Modified UTF-8, rejecting what `DataInput.readUTF` would reject. */
-export function decodeModifiedUtf8(buffer: Buffer): string {
+export function decodeModifiedUtf8(buffer: Buffer, start = 0): string {
   const units: number[] = [];
   let at = 0;
   while (at < buffer.length) {
@@ -57,7 +57,7 @@ export function decodeModifiedUtf8(buffer: Buffer): string {
     if ((first & 0xe0) === 0xc0) {
       const second = buffer[at + 1];
       if (second === undefined || (second & 0xc0) !== 0x80) {
-        throw coreError('NBT_INVALID_UTF8', { position: at });
+        throw coreError('NBT_INVALID_UTF8', { position: start + at });
       }
       units.push(((first & 0x1f) << 6) | (second & 0x3f));
       at += 2;
@@ -72,14 +72,14 @@ export function decodeModifiedUtf8(buffer: Buffer): string {
         (second & 0xc0) !== 0x80 ||
         (third & 0xc0) !== 0x80
       ) {
-        throw coreError('NBT_INVALID_UTF8', { position: at });
+        throw coreError('NBT_INVALID_UTF8', { position: start + at });
       }
       units.push(((first & 0x0f) << 12) | ((second & 0x3f) << 6) | (third & 0x3f));
       at += 3;
       continue;
     }
     // A four-byte lead byte, or a continuation byte with nothing before it.
-    throw coreError('NBT_INVALID_UTF8', { position: at });
+    throw coreError('NBT_INVALID_UTF8', { position: start + at });
   }
 
   // Chunked, because spreading a large array into `fromCharCode` overflows the stack.

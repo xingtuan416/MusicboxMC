@@ -32,9 +32,9 @@ export function parseMidi(buffer: Buffer | Uint8Array): SongModel {
     timeSec: t.time ?? 0,
     bpm: t.bpm,
   }));
-  if (tempos.length === 0) {
-    tempos.push({ ticks: 0, timeSec: 0, bpm: DEFAULT_BPM });
-  }
+  // `tempos[0]` is guaranteed here: the block above inserts a tick-0 tempo whenever the
+  // file has none, so a fallback at this point would be unreachable and would give the
+  // default tempo a second definition.
 
   const ts = midi.header.timeSignatures[0];
   const timeSignature: [number, number] | null = ts ? [ts.timeSignature[0]!, ts.timeSignature[1]!] : null;
