@@ -1,0 +1,74 @@
+{
+  "$comment": "Review rules for MusicboxMC. Paths are globs relative to the repository root; the first matching rule wins. Written to tell a reviewer what this project can actually get wrong, instead of asking it to look for bugs in general.",
+
+  "$includeComment": "Markdown is excluded by default as an unsupported extension, but the docs are where a project's false claims live - this one had four that contradicted the code and the licence. Listing them here overrides that default; sensitive-path protection still runs first.",
+  "include": ["docs/**/*.md", "README.md", "README.en.md", "CONTRIBUTING.md"],
+
+  "exclude": [
+    "dist/**",
+    "out/**",
+    "release/**",
+    "node_modules/**",
+    "docs/images/**",
+    "assets/**",
+    "**/*.litematic",
+    "**/*.zip",
+    "**/*.mid",
+    "package-lock.json"
+  ],
+
+  "rules": [
+    {
+      "path": "src/core/layout/**",
+      "rule": "This is the redstone layout engine, and it has four invariants a change can silently break. Check each one explicitly.\n\n1. Redstone dust contributes ZERO delay; only repeaters delay. All multi-track alignment depends on padding a line with dust to reach a shared X without touching the music timeline. Any change that inserts a repeater into a padding run, or starts routing alignment through repeaters, breaks synchronisation silently - the schematic still builds and still plays, just at the wrong times.\n\n2. The block directly above a note block must be air, because dust, repeaters and note blocks share one layer. A change that stacks anything above a note block makes it silent.\n\n3. Padding and a chord's branch column SHARE one strength budget. The branch column is powered at WIRE_STRENGTH - last padding run, and row r of a branch needs at least 1 strength left on arrival. The last padding run must therefore stay within WIRE_STRENGTH - 1 - branch reach. This was violated once: a 29-note chord left rows 12-14 with no power while reporting success and no warnings.\n\n4. A repeater's `facing` property points at its INPUT, not its output: vanilla's DiodeBlock reads from pos.relative(facing). Getting this backwards yields a circuit that looks right and never fires.\n\nAlso check: chord capacity is 2 * min(14, dMax) + 1; notes past that overflow to another lane and must not be silently dropped."
+    },
+    {
+      "path": "src/core/nbt/**",
+      "rule": "NBT strings are Java Modified UTF-8 (DataInput.readUTF), not standard UTF-8. Check that any new string path goes through encodeModifiedUtf8 / decodeModifiedUtf8: U+0000 must be the two bytes C0 80, characters above U+FFFF must be written as their surrogate pair in three bytes each, and a four-byte sequence must be rejected because Java rejects it. BMP characters - Chinese included - encode identically in both forms, so a round-trip test through this project's own reader proves nothing; compare against bytes produced by Java's writeUTF. Also check big-endian tag framing, the unsigned 16-bit length prefix, and that a malformed stream is rejected rather than reinterpreted."
+    },
+    {
+      "path": "src/core/litematic/**",
+      "rule": "The litematic format is fixed: MinecraftDataVersion 3700 and litematic Version 6 for Minecraft 1.20.4. Check the bit packing carefully - entries are packed contiguously across 64-bit word boundaries, so an entry may straddle two words, and the array length is ceil(volume * bits / 64). Check the linear index is y * (sizeX * sizeZ) + z * sizeX + x, that block state ids are palette indices, and that region positions and sizes are written so a paste lands where the preview shows."
+    },
+    {
+      "path": "src/core/midi/**",
+      "rule": "MIDI timing has two traps that produced real bugs here. First, tempo: every event time derives from the first tempo event, including the span BEFORE it, so a file whose first tempo starts late is played at that tempo from tick 0 unless the specification's default 120 BPM is inserted explicitly at tick 0. Second, SMPTE time division has no ticks-per-quarter-note, so the library leaves ppq undefined and every derived time becomes NaN; NaN then compares false against itself, which once hung the main process in an unbounded loop. Refuse such files with a readable reason, and verify no grouping loop can fail to advance. Also check text decoding: track names may be GBK, UTF-8 or mojibake, and the decision must be made from byte structure rather than from whether a decoder threw."
+    },
+    {
+      "path": "src/core/command/**",
+      "rule": "Command playback places blocks with relative ~ coordinates and relies on a frame table plus reusable voice slots rather than one command block per note. Check that the chain length stays within the declared budget, that the relative offsets are correct for the orientation the structure is generated in, and that the documented in-game requirements still match what the builder emits: command blocks enabled, block entity NBT preserved, the whole structure loaded, maxCommandChainLength greater than the chain. Note that stopping playback removes the power to the clock; the chain must not be described as traversed while idle."
+    },
+    {
+      "path": "src/core/palette/**",
+      "rule": "Five vanilla instruments cover F#1 to F#7 (MIDI 30 to 102): oak planks/bass, white wool/guitar, dirt/harp, clay/flute, gold block/bell, each spanning 0-24 in the note property at ONE semitone per value. Check that an out-of-range pitch is moved by the FEWEST whole octaves that reach the range - the earlier implementation anchored on the low end and folded MIDI 103 down to 31, 72 semitones below where a single octave to 91 would have done. Check that the resource pack is described as optional: all five instruments are vanilla, so a schematic plays without it, but for a full range the timbre changes across octave boundaries, so it is recommended in practice. Both halves of that are needed; saying only the first is misleading."
+    },
+    {
+      "path": "src/main/**",
+      "rule": "The main process owns all file access and all dialogs. Check that every IPC handler validates its argument type - the renderer can send anything over the bridge - and that no handler trusts a path the renderer supplied. Check the custom app:// protocol handler enforces a real directory boundary: a startsWith test is not one, because a sibling directory whose name begins the same way passes it; compare relative paths instead. Check that errors reaching the renderer carry a stable code and a message that names the actual cause, and that generation failures are reported rather than presented as success."
+    },
+    {
+      "path": "src/preload/**",
+      "rule": "Context isolation and the sandbox are on, and this file is the only surface the renderer can reach. Check that it exposes no Node capability - no fs, no path that takes a resolved absolute path from the renderer, no raw ipcRenderer. Every method should map to one named channel and return structured data. File paths must come from main-process dialogs or from webUtils.getPathForFile, never from a string the renderer constructed."
+    },
+    {
+      "path": "src/renderer/**",
+      "rule": "The renderer is plain ES modules with no framework and no bundler, served over a custom scheme. Conventions, in order of how often they matter: user-facing text is Chinese, every code comment is English (the single exception is a mojibake example in textDecoding, where the Chinese is sample data, not prose). Check that state which drives redrawing is actually set somewhere reachable - a pan or focus handler that returns early because its state object was only assigned by a file no longer loaded is a dead control with no error at all, which happened here. Check that generated markup does not interpolate untrusted text into innerHTML. Check that a scrollable surface can actually scroll: justify-content: center on a flex container clips a too-tall child at both ends instead of scrolling, and margin: auto on the child is the fix."
+    },
+    {
+      "path": "test/**",
+      "rule": "Tests assert behaviour, not one file per unit - names follow the behaviour being pinned. Check that a fix arrives with a test that would have failed before it. Check that no test silently skips when a fixture is missing: fixtures must live in the repository (test/fixtures, tiny and purpose built), never in a gitignored working directory, or a fresh clone runs fewer tests than the author and nothing says so. Check that a test which claims to verify a format does not do so by round-tripping through this project's own reader - assert against bytes from an independent implementation instead."
+    },
+    {
+      "path": "scripts/**",
+      "rule": "Build and tooling scripts. Check that copy-assets copies every file the runtime needs and nothing it does not, that the CLI and the application share one generation path rather than duplicating option handling, and that a script which verifies something refuses to run against a stale build instead of reporting a pass from the wrong code."
+    },
+    {
+      "path": "docs/**",
+      "rule": "Documentation is checked for accuracy, not style. Numbers that also exist as constants in the source must match them - the pad run, alignment tolerance, branch reach, the F#1-F#7 MIDI range, both quantisation bounds, the litematic data version. Prose claims about behaviour must match what the code does, in particular the two-rounding quantisation figure (up to 1.5 game ticks, not one) and the command-playback limitations. Flag any claim the code cannot support."
+    },
+    {
+      "path": "**/*.{md,json,yml,yaml}",
+      "rule": "Configuration and prose. Check that anything describing the licence agrees with LICENSE, which is GPL-3.0-only: no 'or later' claim may appear, because the licence file does not elect one. Check that release links use releases/latest rather than a pinned tag, which goes stale at the next release. Check that a CI workflow pins nothing that would silently upgrade the toolchain."
+    }
+  ]
+}
