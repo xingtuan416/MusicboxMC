@@ -1,5 +1,5 @@
 /**
- * The renderer's whole behaviour: a seven-step flow wired to the main process.
+ * The renderer's whole behaviour: an eight-step flow wired to the main process.
  *
  * Every value shown here comes from an `AnalyzeResult` or a `GenerateResult`, or from a
  * path the user picked in a system dialog. There is no sample data in this file: the
@@ -43,8 +43,6 @@ const state = {
   tracks: [],
   /** Folder the schematic will be written into. The file name is kept separately. */
   outputDir: null,
-  /** The rehearsal result, used by the check step. Never the exported one. */
-  checkResult: null,
   result: null,
   palette: 'full',
   dMax: 14,
@@ -605,7 +603,6 @@ $('btnNextSong').addEventListener('click', () => {
   state.song = null;
   state.tracks = [];
   state.outputDir = null;
-  state.checkResult = null;
   state.result = null;
   $('fileNameInput').value = '';
   setImportView('empty');
@@ -665,14 +662,7 @@ $('baseTpsInput').addEventListener('change', (event) => {
   event.target.value = String(state.baseTps);
 });
 
-/**
- * The preview canvas is not wired up yet.
- *
- * It needs the container markup and roughly thirty CSS rules that live with the previous
- * renderer, and its modules reach for their own element ids. Until that is ported the
- * button stays disabled and says so, rather than offering a control that cannot work -
- * which is the same class of problem as the placeholder text this pass removed.
- */
+/** Send the result step's preview button back to the check step, where the wiring view lives. */
 function setupPreviewButton() {
   const button = $('btnPreview');
   button.disabled = false;
@@ -723,7 +713,33 @@ function issueElement(result, warning) {
 }
 
 /** How many issues one group shows before it offers to show more. */
-const ISSUE_PAGE = 50;
+const ISSUE_PAGE = 4;
+
+/**
+ * Tell the reader there is more below when the next-step button is out of view.
+ *
+ * A short window puts the action bar below the fold, and a step that ends in visible
+ * whitespace reads as a dead end rather than as something to scroll. The observer is rooted
+ * at the step itself, so the hint cannot appear while another step is on screen.
+ */
+function wireScrollHint() {
+  const screen = document.getElementById('step-6');
+  const button = document.getElementById('btnGoGenerate');
+  const hint = document.getElementById('scrollHint');
+  if (!screen || !button || !hint || typeof IntersectionObserver === 'undefined') return;
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      const entry = entries[0];
+      if (entry) hint.hidden = entry.isIntersecting;
+    },
+    // Half is enough: at 0.85 a button whose top edge was a few pixels below the fold still
+    // counted as hidden, so the hint stayed up while the button was plainly visible.
+    { root: screen, threshold: 0.5 },
+  );
+  observer.observe(button);
+}
+wireScrollHint();
 
 /** Group headings, in the order they are shown. */
 const ISSUE_GROUPS = [
@@ -838,7 +854,6 @@ async function runCheck() {
 
   try {
     const result = await api.generate(state.midiPath, generateOptions());
-    state.checkResult = result;
     if (!result.success) {
       $('checkSummary').textContent = '这一遍没能跑完。';
       const item = document.createElement('div');
@@ -891,11 +906,26 @@ for (const id of ['showGrid', 'showNotes']) {
     dragging = { x: event.clientX, z: event.clientY };
     wrap.setPointerCapture(event.pointerId);
   });
+  // Panning redraws the whole schematic, which on a long song takes longer than the gap
+  // between pointer events. Redrawing on every event therefore fell behind the cursor: the
+  // drawing moved a fraction of the distance dragged, and the lost deltas made a diagonal
+  // drag look like it was only following one axis. Accumulate and draw once per frame.
+  let pending = null;
+  let frame = 0;
+  const flush = () => {
+    frame = 0;
+    if (!pending) return;
+    panPreview(pending.x, pending.z);
+    pending = null;
+  };
   wrap.addEventListener('pointermove', (event) => {
     if (!dragging) return;
     // Moving the mouse right should move the drawing right, hence the negative delta.
-    panPreview(dragging.x - event.clientX, dragging.z - event.clientY);
+    const dx = dragging.x - event.clientX;
+    const dz = dragging.z - event.clientY;
     dragging = { x: event.clientX, z: event.clientY };
+    pending = { x: (pending?.x ?? 0) + dx, z: (pending?.z ?? 0) + dz };
+    if (!frame) frame = requestAnimationFrame(flush);
   });
   const stop = () => {
     dragging = null;

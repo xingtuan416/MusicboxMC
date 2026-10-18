@@ -53,4 +53,4 @@ function displayBlockName(block) {
   return names[block] || shortName(block);
 }
 
-export { colorOf, shortName, displayBlockName };
+export { colorOf, displayBlockName };

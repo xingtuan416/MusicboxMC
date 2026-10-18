@@ -103,17 +103,6 @@ function registerIpc(): void {
     return res.canceled || res.filePaths.length === 0 ? null : res.filePaths[0]!;
   });
 
-  ipcMain.handle('dialog:choose-output', async (_e, defaultName: unknown) => {
-    const raw = typeof defaultName === 'string' && defaultName.length > 0 ? defaultName : 'output';
-    const name = raw.replace(/\.litematic$/i, '');
-    const res = await dialog.showSaveDialog(win ?? undefined!, {
-      title: '保存投影',
-      defaultPath: `${name}.litematic`,
-      filters: [{ name: 'Litematica 投影', extensions: ['litematic'] }],
-    });
-    return res.canceled || !res.filePath ? null : res.filePath;
-  });
-
   // Hand the user a copy of the bundled resource pack. Nothing else reads it.
   ipcMain.handle('dialog:save-resource-pack', async () => {
     if (!existsSync(RESOURCE_PACK_FILE)) {
@@ -218,7 +207,14 @@ function registerIpc(): void {
   });
 
   ipcMain.handle('shell:open', async (_e, path: unknown) => {
-    if (typeof path !== 'string' || !existsSync(path)) return;
+    if (typeof path !== 'string') return;
+    // A URL is not a path: `openPath` would refuse it and the click would do nothing, which
+    // is exactly what the repository link in the About section did.
+    if (/^https?:\/\//i.test(path)) {
+      await shell.openExternal(path);
+      return;
+    }
+    if (!existsSync(path)) return;
     const err = await shell.openPath(path);
     if (err) throw new Error(err);
   });

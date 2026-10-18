@@ -6,7 +6,6 @@ import {
   clampView,
   DETAIL_MIN_CELL,
   dustSizes,
-  fitCell,
   GUTTER,
   noteBlockSizes,
   repeaterSizes,
@@ -28,13 +27,6 @@ const READABLE_CELL = 28;
 const HEAD_BG = '#e9e7e2';
 /** The result the view was last fitted to, so a new one re-fits instead of scrolling. */
 let fittedFor = null;
-/** Whether that fit was measured against a panel that actually had a size. */
-/** Multiplicative zoom step: the range is far wider than the old fit-only zoom. */
-const ZOOM_STEP = 1.3;
-/** Smallest panel the fit calculation will consider, and the margin it leaves. */
-const MIN_FIT_WIDTH = 320;
-const MIN_FIT_HEIGHT = 220;
-const FIT_PADDING = 24;
 /** Smallest canvas to draw, so a collapsed panel cannot produce a zero-sized one. */
 const MIN_CANVAS_WIDTH = 320;
 const MIN_CANVAS_HEIGHT = 200;
@@ -113,14 +105,12 @@ function renderPreview(res) {
   if (!preview || preview.size.x === 0) {
     canvas.width = 0;
     canvas.height = 0;
-    state.previewRenderScale = 1;
     hint.textContent = '尚未生成电路。';
     $('legend').replaceChildren();
     $('previewSize').textContent = '—';
     $('previewRegions').textContent = '—';
     $('previewTracks').textContent = '—';
     $('previewBlocks').textContent = '—';
-    updatePreviewZoomLabel();
     return;
   }
 
@@ -135,7 +125,6 @@ function renderPreview(res) {
   const dpr = window.devicePixelRatio || 1;
   const geometry = viewGeometry({ previewScale: state.previewScale });
   const { cell: CELL, detail, gap } = geometry;
-  state.previewRenderScale = geometry.renderScale;
   const showGrid = $('showGrid').checked;
   const showNotes = $('showNotes').checked;
 
@@ -553,59 +542,9 @@ function renderPreview(res) {
     legend.append(create('span', 'legend-note', '红石线 · 中继器档位 · 音符盒底色代表音色'));
   }
 
-  updatePreviewZoomLabel();
-
   // The interface draws a position indicator. It cannot poll for this, and the drawing
   // module should not know about it, so the change is announced instead.
   document.dispatchEvent(new CustomEvent('preview:drawn'));
-}
-
-function updatePreviewZoomLabel() {
-  const label = document.getElementById('previewZoom');
-  if (label) label.textContent = `${Math.round(scaleForCell(cellForScale(state.previewScale)) * 100)}%`;
-}
-
-/**
- * Scale at which as much of the grid as stays legible is visible.
- *
- * Returns null when the panel has no size yet, which is the case while its pane is
- * hidden. Fitting against the fallback size would produce a wrong zoom that then stuck,
- * because the view is only fitted once per result.
- */
-function fitScaleFor(res) {
-  const preview = res?.preview;
-  const wrap = $('canvasWrap');
-  if (!preview || !preview.size?.x || !wrap || wrap.clientWidth === 0) return null;
-  return scaleForCell(
-    fitCell({
-      x: preview.size.x,
-      z: preview.size.z,
-      availableWidth: Math.max(MIN_FIT_WIDTH, wrap.clientWidth - FIT_PADDING),
-      availableHeight: Math.max(MIN_FIT_HEIGHT, wrap.clientHeight - FIT_PADDING),
-    }),
-  );
-}
-
-/** Zoom about the centre of the view, so what you are looking at stays where it is. */
-function zoomPreview(factor) {
-  const wrap = $('canvasWrap');
-  const halfWidth = (wrap?.clientWidth ?? 0) / 2;
-  const halfHeight = (wrap?.clientHeight ?? 0) / 2;
-  const before = viewGeometry({ previewScale: state.previewScale });
-  const centre = {
-    x: state.previewView.x0 + halfWidth / before.cell,
-    z: state.previewView.z0 + halfHeight / before.cell,
-  };
-
-  state.previewScale *= factor;
-  const after = viewGeometry({ previewScale: state.previewScale });
-  state.previewView = {
-    x0: centre.x - halfWidth / after.cell,
-    z0: centre.z - halfHeight / after.cell,
-  };
-  state.previewFocus = null;
-  updatePreviewZoomLabel();
-  if (state.generated) renderPreview(state.generated);
 }
 
 /** Scroll the view by a pixel offset, which is what a wheel or drag produces. */
@@ -635,16 +574,6 @@ function focusPreviewCell(x, z) {
   if (state.generated) renderPreview(state.generated);
 }
 
-function fitPreview() {
-  if (!state.generated) return;
-  const fit = fitScaleFor(state.generated);
-  if (fit === null) return;
-  state.previewScale = fit;
-  state.previewView = { x0: 0, z0: 0 };
-  state.previewFocus = null;
-  renderPreview(state.generated);
-}
-
 /**
  * Where the view sits, for the position indicator the interface draws.
  *
@@ -665,4 +594,4 @@ function previewPosition() {
   };
 }
 
-export { renderPreview, zoomPreview, panPreview, fitPreview, focusPreviewCell, previewPosition, ZOOM_STEP };
+export { renderPreview, panPreview, focusPreviewCell, previewPosition };

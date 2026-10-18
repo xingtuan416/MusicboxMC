@@ -10,7 +10,7 @@ const asLatin1 = (bytes: number[]): string => String.fromCharCode(...bytes);
 
 describe('MIDI text decoding', () => {
   it('recovers a GBK name read as Latin-1', () => {
-    // 主旋律 in GBK is D6 F7 D0 FD C2 C9.
+    // The GBK bytes D6 F7 D0 FD C2 C9 are the name this test expects back.
     expect(decodeMidiText(asLatin1([0xd6, 0xf7, 0xd0, 0xfd, 0xc2, 0xc9]))).toBe('主旋律');
   });
 
@@ -53,8 +53,7 @@ describe('MIDI text decoding', () => {
   });
 
   it('accepts a GBK pair followed by ASCII', () => {
-    // 主A: the pair is one GBK character and the 0x41 is a plain A, which is a complete
-    // decode rather than a failure.
+    // One GBK pair followed by a plain ASCII 0x41: a complete decode, not a failure.
     expect(decodeMidiText(asLatin1([0xd6, 0xf7, 0x41]))).toBe('主A');
   });
 });

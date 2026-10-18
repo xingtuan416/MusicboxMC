@@ -4,9 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MusicboxMC</title>
+    <!-- Without an explicit icon Chromium asks for /favicon.ico, which the app:// handler
+         refuses; the title bar already shows this same file. -->
+    <link rel="icon" href="./icon.png" type="image/png" />
     <style>
       /* ==========================================================================
-       1. 核心色彩与液态玻璃变量 (Claude Warm Minimal × Apple Liquid Glass)
+       1. Core palette and liquid-glass variables (Claude Warm Minimal x Apple Liquid Glass)
        ========================================================================== */
       :root {
         /* Makes height:auto animatable, so a group opens to its real height. */
@@ -75,7 +78,7 @@
       }
 
       /* ==========================================================================
-       2. 底层呼吸光斑 (Subtle Ambient Light)
+       2. Ambient breathing orbs (Subtle Ambient Light)
        ========================================================================== */
       .ambient-layer {
         position: fixed;
@@ -128,7 +131,7 @@
       }
 
       /* ==========================================================================
-       3. Electron 全屏桌面窗口骨架 (Frameless Window Layout)
+       3. Frameless Electron window shell (Frameless Window Layout)
        ========================================================================== */
       .electron-window {
         position: relative;
@@ -286,7 +289,7 @@
       }
 
       /* ==========================================================================
-       4. 全屏单步工作区 (One Screen, One Step Stage)
+       4. One screen, one step workspace (One Screen, One Step Stage)
        ========================================================================== */
       .workspace-viewport {
         position: relative;
@@ -305,14 +308,16 @@
         flex-direction: column;
         align-items: center;
         /*
-          纵向居中靠 .step-inner 的 margin:auto，不靠 justify-content:center。
-          两者在内容比屏幕矮时看不出区别，但内容一超高，flex 居中会把顶部推到
-          可视区之外，而滚动条救不回来——第 4 步展开全部选项后按钮点不到就是这么来的。
+          Vertical centring comes from .step-inner's margin:auto, not from
+          justify-content:center. The two look the same while the content is shorter than
+          the screen, but once it is taller, flex centring pushes the top out of view and
+          the scrollbar cannot bring it back - which is how step 4's buttons became
+          unreachable with every fold open.
         */
         padding: 40px 64px 80px;
         /*
-          比屏幕高的步骤必须能滚，否则它自己的操作按钮会落在窗口外面。
-          这同样影响音轨很多的第 3 步。
+          A step taller than the screen has to scroll, or its own action buttons fall
+          outside the window. The same applies to step 3 with many tracks.
         */
         overflow-y: auto;
         overflow-x: hidden;
@@ -334,9 +339,10 @@
       }
 
       /*
-        竖直居中靠 auto 外边距，不靠 .screen-step 的 justify-content:center：
-        后者在内容比屏幕高时会把顶部推出可视区且滚不回来。
-        第 1 步用的不是 .step-inner，所以两个都要写。
+        Vertical centring comes from auto margins, not from .screen-step's
+        justify-content:center: the latter pushes the top out of view when the content is
+        taller than the screen and it cannot be scrolled back. Step 1 does not use
+        .step-inner, so both selectors are needed.
       */
       .step-inner,
       .hero-minimal {
@@ -382,7 +388,7 @@
       }
 
       /* ==========================================================================
-       5. 通用按钮与液态玻璃控件
+       5. Shared buttons and liquid-glass controls
        ========================================================================== */
       .btn-obsidian {
         display: inline-flex;
@@ -459,7 +465,7 @@
       }
 
       /* ==========================================================================
-       Step 1: 极简首屏 (主标题 + 一句短副标题 + 主按钮)
+       Step 1: minimal landing screen (title + one short subtitle + primary button)
        ========================================================================== */
       .hero-minimal {
         display: flex;
@@ -490,7 +496,7 @@
       }
 
       /* ==========================================================================
-       Step 2: 导入 MIDI (四种状态)
+       Step 2: MIDI import (four states)
        ========================================================================== */
       .note-banner {
         display: flex;
@@ -521,6 +527,38 @@
         font-size: 13px;
         font-weight: 600;
         color: var(--ink-muted);
+      }
+
+      /* The two settings buttons sit in rows of the same kind, so they should be the same
+         size; the Open and Sound-on buttons are not, and the difference read as
+         misalignment. */
+      #btnToggleSound,
+      #btnOpenRepo {
+        min-width: 78px;
+        justify-content: center;
+      }
+
+      /* Shown while the next-step button is out of view, so a short window does not look
+         like a dead end. Sticky rather than fixed: it belongs to the step that scrolls. */
+      .scroll-hint {
+        position: sticky;
+        bottom: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        margin: 4px auto 0;
+        padding: 7px 14px;
+        width: max-content;
+        border-radius: 999px;
+        background: rgba(20, 20, 19, 0.86);
+        color: #fff;
+        font-size: 12.5px;
+        font-weight: 600;
+        pointer-events: none;
+      }
+      .scroll-hint[hidden] {
+        display: none;
       }
 
       .pill-tag {
@@ -624,7 +662,7 @@
       }
 
       /* ==========================================================================
-       Step 3: 音轨选择
+       Step 3: track selection
        ========================================================================== */
       .track-header-bar {
         display: flex;
@@ -707,7 +745,7 @@
       }
 
       /* ==========================================================================
-       Step 4: 配置 (折叠分组)
+       Step 4: configuration (fold groups)
        ========================================================================== */
       .preset-notice {
         padding: 14px 18px;
@@ -823,7 +861,7 @@
       }
 
       /* ==========================================================================
-       Step 5: 导出位置
+       Step 5: export location
        ========================================================================== */
       .grid-3 {
         display: grid;
@@ -862,7 +900,7 @@
       }
 
       /* ==========================================================================
-       Step 6: 生成进度
+       Step 7: generation progress
        ========================================================================== */
       .progress-wrap {
         display: flex;
@@ -897,7 +935,7 @@
       }
 
       /* ==========================================================================
-       6. 右上角设置面板弹窗 (Minimalist Settings Drawer/Modal)
+       6. Settings modal in the top-right corner (Minimalist Settings Drawer/Modal)
        ========================================================================== */
       .modal-backdrop {
         position: fixed;
@@ -941,7 +979,7 @@
       }
 
       /* ==========================================================================
-       7. 右下角虚线框「状态切换器」 (Corner Dashed-Border State Switcher)
+       7. Dashed 'state switcher' in the bottom-right corner (Corner Dashed-Border State Switcher)
        ========================================================================== */
       .state-switcher {
         position: fixed;
@@ -1026,9 +1064,9 @@
           grid-template-columns: 1fr;
         }
       }
-      /* ========================================================================
-         第 7 步：问题清单与红石布线预览
-         ======================================================================== */
+      /* ==========================================================================
+       Step 6: issue list and redstone wiring preview
+       ========================================================================== */
       .issue-list {
         display: flex;
         flex-direction: column;
@@ -1196,9 +1234,10 @@
 
       .canvaswrap {
         /*
-          用满可用高度，而不是只满足 265px 的下限。
-          音轨之间的 Z 间隔是 2×和弦行数+2，和弦多的曲子会拉得很开（dMax 14 时就是 30 格），
-          画布太矮就变成一次只能看见一条音轨，得靠拖动去找。
+          Use the available height instead of merely meeting the 240px floor. Tracks are
+          spaced by 2 * chord rows + 2, which a chord-heavy song stretches wide (30 cells
+          at dMax 14); too short a canvas then shows one track at a time and finding
+          another means dragging.
         */
         height: min(58vh, 520px);
         min-height: 240px;
@@ -1292,13 +1331,12 @@
         font-size: 12px;
         color: var(--ink-secondary);
       }
-      /* ========================================================================
-         滚动条：细、无轨道、悬停才明显。默认的那种方灰色滚动条和这套界面不搭。
-         ======================================================================== */
-      * {
-        scrollbar-width: thin;
-        scrollbar-color: rgba(20, 20, 19, 0.22) transparent;
-      }
+      /* ==========================================================================
+       Scrollbars: thin, no track, visible on hover. The default square grey scrollbar does not fit this interface.
+       ========================================================================== */
+      /* Only the ::-webkit- rules are set. Setting `scrollbar-width` as well makes Chromium
+         use its standard scrollbar and ignore the pseudo-elements below, which is why some
+         surfaces kept the default grey bar. */
       *::-webkit-scrollbar {
         width: 10px;
         height: 10px;
@@ -1317,9 +1355,9 @@
         background-color: rgba(20, 20, 19, 0.36);
       }
 
-      /* ========================================================================
-         动效：选择音轨与展开分组原来是瞬间切换，显得生硬。
-         ======================================================================== */
+      /* ==========================================================================
+       Motion: selecting a track and opening a fold used to switch instantly, which felt stiff.
+       ========================================================================== */
       @keyframes check-pop {
         0% {
           transform: scale(0.84);
@@ -1482,7 +1520,7 @@
       <!-- One step per screen. -->
       <main class="workspace-viewport">
         <!-- ====================================================================
-           Step 1: 开始页 (仅保留副标题 + 显眼主标题 + 开始制作按钮)
+           Step 1: landing screen (subtitle + prominent title + start button)
            ==================================================================== -->
         <section id="step-1" class="screen-step active">
           <div class="hero-minimal">
@@ -1510,7 +1548,7 @@
         </section>
 
         <!-- ====================================================================
-           Step 2: 导入 MIDI
+           Step 2: import MIDI
            ==================================================================== -->
         <section id="step-2" class="screen-step">
           <div class="step-inner">
@@ -1616,7 +1654,7 @@
         </section>
 
         <!-- ====================================================================
-           Step 3: 选轨道
+           Step 3: choose tracks
            ==================================================================== -->
         <section id="step-3" class="screen-step">
           <div class="step-inner">
@@ -1649,7 +1687,7 @@
         </section>
 
         <!-- ====================================================================
-           Step 4: 配置
+           Step 4: configuration
            ==================================================================== -->
         <section id="step-4" class="screen-step">
           <div class="step-inner">
@@ -1687,20 +1725,24 @@
                     class="opt-box selected"
                     data-cfg-group="palette"
                     data-cfg-val="full"
-                    data-cfg-label="全音域 F#1–F#7"
+                    data-cfg-label="全竖琴音域 F#1–F#7"
                   >
-                    <span class="opt-title">全音域</span>
-                    <span class="opt-desc">五种音符盒基底，F#1–F#7</span>
+                    <span class="opt-title">全竖琴音域</span>
+                    <span class="opt-desc">
+                      用竖琴的音色替换其它音符盒方块的音频，换来 F#1–F#7 完整音域；需要配套资源包
+                    </span>
                   </button>
                   <button
                     type="button"
                     class="opt-box"
                     data-cfg-group="palette"
                     data-cfg-val="piano"
-                    data-cfg-label="钢琴音域 F#3–F#5"
+                    data-cfg-label="不扩展音域"
                   >
-                    <span class="opt-title">钢琴音域</span>
-                    <span class="opt-desc">只用竖琴一种音色，F#3–F#5</span>
+                    <span class="opt-title">不扩展音域</span>
+                    <span class="opt-desc">
+                      只用竖琴一种音色，F#3–F#5；不需要资源包，超出这个音域的音会按下面的策略处理
+                    </span>
                   </button>
                   <div
                     style="
@@ -1958,7 +2000,7 @@
         </section>
 
         <!-- ====================================================================
-           Step 5: 选导出位置
+           Step 5: export location
            ==================================================================== -->
         <section id="step-5" class="screen-step">
           <div class="step-inner">
@@ -2001,8 +2043,10 @@
             </div>
 
             <!--
-              可选资源包。措辞是有意的：全音域用的是五种原版乐器，不装这个包也能完整演奏，
-              它只让五个八度段听起来像同一架钢琴。说成"必需"正是这个功能要纠正的事。
+              The optional resource pack. The wording is deliberate: the full range uses
+              five vanilla instruments and plays without the pack; the pack only makes the
+              five octave bands sound like one piano. Calling it required is exactly what
+              this feature exists to correct.
             -->
             <div
               style="
@@ -2021,18 +2065,6 @@
                 <div style="font-size: 12.5px; color: var(--ink-secondary); margin-top: 4px">
                   全音域由五种原版基底音色拼成：bass、guitar、harp、flute、bell。旋律跨过八度边界时音色会跟着换，听起来不像同一架琴。
                 </div>
-                <div
-                  id="packRequired"
-                  style="
-                    font-size: 12.5px;
-                    font-weight: 600;
-                    color: var(--danger);
-                    margin-top: 6px;
-                    display: none;
-                  "
-                >
-                  当前选了全音域，必须安装这个资源包，否则同一个旋律会换好几种乐器。
-                </div>
               </div>
               <button type="button" id="btnSavePack" class="pill-tag" style="flex: none">
                 保存（约 50 KB）
@@ -2047,10 +2079,7 @@
         </section>
 
         <!-- ====================================================================
-           Step 6: 进度
-           ==================================================================== -->
-        <!-- ====================================================================
-           Step 6: 检查结果（先空跑一遍，把问题找出来）
+           Step 6: check results (dry run first, to surface problems)
            ==================================================================== -->
         <section id="step-6" class="screen-step">
           <div class="step-inner">
@@ -2061,8 +2090,8 @@
             </div>
 
             <!--
-            问题列表。每一项都能跳到红石布线里对应的位置，所以这一页和下面的预览是同一件事的
-            两种看法：一个是清单，一个是位置。
+            The issue list. Every entry can jump to its cell in the wiring view, so this
+            page and the preview below are two views of the same thing: a list and a place.
           -->
             <div id="issueList" class="issue-list"></div>
 
@@ -2112,28 +2141,42 @@
               <button type="button" class="btn-glass" id="btnBackToExport">上一步</button>
               <button type="button" class="btn-obsidian" id="btnGoGenerate">下一步：生成投影</button>
             </div>
+            <div class="scroll-hint" id="scrollHint" hidden>
+              <span>下面还有内容</span>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </div>
           </div>
         </section>
 
         <!-- ====================================================================
-           Step 7: 生成
+           Step 7: generate
            ==================================================================== -->
         <section id="step-7" class="screen-step">
           <div class="step-inner">
             <div class="step-head">
               <span class="step-index tnum">STEP 07 / 08</span>
               <h2 id="genTitle" class="step-h1">正在生成投影</h2>
-              <p id="genStageText" class="step-sub">正在排布红石电路并写入文件…</p>
+              <p class="step-sub">正在排布红石电路并写入文件…</p>
             </div>
 
             <!--
-            进度视图：生成在主进程里一次完成，没有可上报的阶段，所以这里不显示百分比。
-            大号数字显示真实经过时间，进度条用不确定态。
+            Progress view: generation completes in one pass in the main process and reports
+            no stages, so no percentage is shown. The large number is real elapsed time and
+            the bar is indeterminate.
           -->
             <div id="genRunningBox" class="progress-wrap">
               <div id="genElapsed" class="progress-huge tnum">0.0s</div>
               <div class="progress-bar-track indeterminate">
-                <div id="genBarFill" class="progress-bar-fill"></div>
+                <div class="progress-bar-fill"></div>
               </div>
               <p style="font-size: 13px; color: var(--ink-secondary); margin: 0">
                 曲目越长需要的时间越久，大编制曲子可能要十几秒。
@@ -2157,7 +2200,7 @@
         </section>
 
         <!-- ====================================================================
-           Step 8: 完成
+           Step 8: done
            ==================================================================== -->
         <section id="step-8" class="screen-step">
           <div class="step-inner">
@@ -2219,9 +2262,9 @@
       </main>
     </div>
 
-    <!-- ========================================================================
-       右上角「设置」弹窗壳子 (Settings Modal Shell)
-       ======================================================================== -->
+    <!-- ====================================================================
+       Settings modal shell (top-right)
+       ==================================================================== -->
     <div id="settingsModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-label="应用设置">
       <div class="settings-dialog">
         <div style="display: flex; justify-content: space-between; align-items: center">

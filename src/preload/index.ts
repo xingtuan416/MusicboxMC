@@ -24,8 +24,6 @@ export type WindowAction = 'minimize' | 'maximize' | 'close';
 export interface MusicboxApi {
   /** Open a file dialog and return the chosen MIDI path; returns null on cancel */
   chooseMidi(): Promise<string | null>;
-  /** Choose where to save the .litematic; returns null on cancel */
-  chooseOutput(defaultName: string): Promise<string | null>;
   /** Write a copy of the bundled resource pack where the user chooses; null on cancel */
   saveResourcePack(): Promise<string | null>;
   /** Parse only, without generating circuits */
@@ -56,7 +54,6 @@ export interface MusicboxApi {
 
 const api: MusicboxApi = {
   chooseMidi: () => ipcRenderer.invoke('dialog:choose-midi'),
-  chooseOutput: (defaultName) => ipcRenderer.invoke('dialog:choose-output', defaultName),
   saveResourcePack: () => ipcRenderer.invoke('dialog:save-resource-pack'),
   analyze: (path) => ipcRenderer.invoke('song:analyze', path),
   generate: (path, options, outputPath) => ipcRenderer.invoke('song:generate', path, options, outputPath),
