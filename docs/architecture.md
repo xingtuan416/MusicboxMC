@@ -21,7 +21,7 @@ src/
 └── renderer/     the GUI: plain DOM + Canvas, no framework
 ```
 
-The renderer is plain ES modules with no build step: `main.js` is the entry point
+The renderer is plain ES modules with no build step: `app.js` is the entry point
 and imports the rest. Electron serves it over a custom `app://` scheme rather than
 `file://`, because Chromium refuses to load module scripts from a `file://` page —
 the origin is opaque. Registering the scheme as standard and secure fixes that, and
@@ -44,7 +44,7 @@ SongModel                       { tracks: TrackModel[], tempos, ppq, ... }
   │     │  core/layout/track.ts     one track: main line, chord branches, taps
   │     └─ core/layout/forced.ts    one spine per instrument (opt-in)
   │
-  └─ core/command/playback.ts ─►  CommandPlaybackResult { region, info, warnings }
+  └─ core/command/index.ts  ──►  CommandPlaybackResult { region, info, warnings }
         (independent backend; does not go through layout/)
 
 LayoutResult
@@ -90,7 +90,8 @@ thrown, so the GUI can display them without a try/catch around every call.
 - **The opt-in single-spine layout** → `core/layout/forced.ts`, plus
   `core/layout/forcedValidation.ts`, which audits the produced block graph and
   refuses to export when it is unsafe.
-- **Command-block playback** → `core/command/playback.ts`.
+- **Command-block playback** → `core/command/` (`index.ts` orchestrates; `schedule.ts`,
+  `commands.ts` and `player.ts` hold the table, the command text and the layout).
 - **The `.litematic` binary format** → `core/litematic/`.
 - **Anything the user sees** → `src/renderer/`.
 

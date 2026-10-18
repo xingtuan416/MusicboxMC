@@ -38,29 +38,29 @@ npm run lint
 npm run typecheck
 npm test
 npm run build
+```
 
 ### Checking the interface
 
-`npm test` covers the core, not the window. Two scripts in the working `out/` directory
-drive the real thing instead:
+`npm test` covers the core, not the window. Three scripts drive the real thing instead:
 
-- `out/verify-ui.cjs` walks all seven steps against a result from the actual generator, and
+- `npm run verify:ui` walks all eight steps against a result from the actual generator, and
   fails on a missing element, a statistic left blank, horizontal overflow, a control that
-  does nothing and any uncaught error.
-- `out/verify-about.cjs` launches the application and checks what the About section
-  reports, including the version it reads from the manifest.
+  does nothing, a scroll hint that shows when it should not, a custom scrollbar suppressed
+  by a standard property, and any uncaught error. Screenshots land in `out/ui-shots/`.
+- `npm run verify:about` launches the application and checks what the About section
+  reports, including the version it reads from the manifest and whether the title-bar icon
+  actually decoded.
 - `npm run smoke -- song.mid` drives the built application through the real preload bridge
   and the real IPC handlers: it analyzes a song, generates a schematic, and checks that the
   file on disk is the size the result claims. It is the only one of the three that proves
   the main process works rather than that the interface renders. It needs Electron but no
-  browser, so it runs anywhere the application does. Unlike the two above it lives in
-  `scripts/`, so it is part of the repository rather than a local convenience.
+  browser, so it runs anywhere the application does.
 
 They need `playwright-core` and a Chromium-based browser on the machine, and they use the
 system browser channel, so they are not portable as they stand. That is deliberate: the
 project takes no dependency it cannot justify, and adding one that only works on the
 author's machine would be worse than saying so here.
-```
 
 `npm run format` applies Prettier. Everything is already formatted, so it should
 be a no-op unless you added something.
@@ -82,7 +82,7 @@ than to fight them.
 
 **Warnings line up in three places.** A `LayoutWarning` code is declared in
 `core/layout/types.ts`, emitted from somewhere under `src/`, and given text in
-`renderer/warnings.js`. `test/warningCoverage.test.ts` fails if any of the three
+`renderer/warningText.js`. `test/warningCoverage.test.ts` fails if any of the three
 disagrees, because this went wrong before: two codes were declared and
 translated but never emitted, so the interface promised a diagnostic the
 generator could not produce.

@@ -38,10 +38,10 @@ Windows x64. Grab either file from the
 
 | File                                 | What it is                                                                   |
 | ------------------------------------ | ---------------------------------------------------------------------------- |
-| `MusicboxMC-Setup-0.1.0-win-x64.exe` | Installer. Choose a directory, get Start menu and desktop shortcuts.         |
-| `MusicboxMC-0.1.0-win-x64.zip`       | Portable. Unzip and run `MusicboxMC.exe`; writes nothing outside its folder. |
+| `MusicboxMC-Setup-0.2.1-win-x64.exe` | Installer. Choose a directory, get Start menu and desktop shortcuts.         |
+| `MusicboxMC-0.2.1-win-x64.zip`       | Portable. Unzip and run `MusicboxMC.exe`; writes nothing outside its folder. |
 
-You also need Minecraft Java Edition **1.20.4**, and the
+Supported Minecraft Java Edition versions: **1.17.1 – 26.3 (latest)**. **1.16.5 and below will not work.** You also need
 [Litematica](https://masa.dy.fi/mcmods/client_mods/?mod=litematica) mod to paste
 what it generates.
 
@@ -55,21 +55,22 @@ what it generates.
 2. **Adjust.** Most songs need nothing changed. The settings that matter are `dMax`
    — how wide one chord column may be — and what to do with notes outside the
    covered range.
-3. **Generate.** The **redstone wiring** view shows the circuit before you commit to it:
-   one row per Z row, one column per X cell, time running to the right. It is a
-   **viewport**, not the whole drawing at once — scroll or drag to pan, `+` / `-` to
-   zoom, and _fit_ to see as much as fits. Any song length can be zoomed in until
-   individual cells are legible.
+3. **Check, then generate.** After choosing a folder the app runs the generator once
+   without writing anything, lists what it found on the **check results** step, and
+   draws the **redstone wiring** view: one row per Z row, one column per X cell, time
+   running to the right. It is a **viewport**, not the whole drawing — drag or scroll
+   to pan, at a fixed, readable cell size. When it looks right, **generate** writes
+   the file.
 
    ![The redstone wiring view](docs/images/preview.png)
 
 4. **Paste.** Put the `.litematic` in `.minecraft/schematics/`, load it with
    Litematica in game, and power the circuit at its start.
 
-If anything needs attention afterwards, the **Needs attention** tab lists it. Every
-warning that has a location carries a **Locate** button: one click opens the wiring
-view centred on that cell, zoomed in far enough to read, with the cell ringed — no
-hunting for it by hand.
+If anything needs attention afterwards, the **check results** step lists it. Every
+warning that has a location carries a **locate in the wiring view** button: one click
+opens the wiring view centred on that cell, with the cell ringed — no hunting for it
+by hand.
 
 ## What it does
 
@@ -126,17 +127,18 @@ instruments — bass, guitar, harp, flute and bell — cover **F#1 to F#7** (MID
 resource pack at all.** The five octave bands simply have different timbres, which
 is audible on a melody that crosses them.
 
-The **full range** switch, on by default, is what controls this. Turn it off and the
-generator uses the harp slot alone: **F#3 to F#5**, with no resource pack ever needed,
-and everything outside that span falls to the out-of-range setting.
+The **full harp range** option, selected by default, is what controls this. Choose
+**no range extension** and the generator uses the harp slot alone: **F#3 to F#5**, with
+no resource pack ever needed, and everything outside that span falls to the out-of-range
+setting.
 
 A companion resource pack replaces those five sound events with piano samples, so the
 whole range sounds like a single piano. **It is optional**: nothing in the generator
 requires it, and the schematic is identical either way.
 
-The pack **ships inside the application**. A _Save companion resource pack_ button sits
-under the full-range switch, and the first full-range export offers it once. Put the
-file in `.minecraft/resourcepacks/` and enable it in game. It is also on the
+The pack **ships inside the application**. A _Save (about 50 KB)_ button sits on the
+export step, and the first full-range export offers it once. Put the file in
+`.minecraft/resourcepacks/` and enable it in game. It is also on the
 [release page](https://github.com/xingtuan416/MusicboxMC/releases/latest/download/MusicboxMC-piano-pack-1.20.4.zip)
 if you would rather download it directly.
 

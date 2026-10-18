@@ -15,7 +15,7 @@ The obvious implementation — one command block per note — does not scale. A
 46,000-note song becomes 46,308 command blocks and a 348 KB schematic, and the
 command chain has to walk all 46,293 steps on every single game tick.
 
-Instead, `core/command/playback.ts` stores the schedule as data and reuses a
+Instead, `core/command/index.ts` stores the schedule as data and reuses a
 bounded number of commands:
 
 - **Voice** — a distinct `(sound, pitch)` pair. At most five note-block
