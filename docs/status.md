@@ -28,11 +28,11 @@
 | `npm run verify:ui`    | 通过，无 console 错误、无横向溢出；覆盖模式切换与分配表           |
 | `npm run verify:about` | 通过（版本 0.2.2、许可 GPL-3.0、标题栏图标 1063×1063 已解码）     |
 | `npm run format:check` | 通过                                                              |
-| CI                     | 本轮未推送；上一次绿是 run #31（`11b3280`），不代表当前工作区     |
+| CI                     | 绿：run #33（`a53d07e`），Node 20 / 22 各 11/11 步通过            |
 
 ## 已完成（按时间倒序，只留结论）
 
-- **0.2.2 发布**：多乐器支持、紧凑和弦行、多轨间距与强制合并修复；安装包/免安装/资源包已上传 GitHub Releases，tag `v0.2.2`。
+- **0.2.2 发布**：多乐器支持、紧凑和弦行、多轨间距与强制合并修复；安装包/免安装/资源包已上传 [GitHub Releases](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.2)，tag `v0.2.2`。
 - **配置摘要联动**：第 4 步「其它」折叠下的小字现在随合并模式、作者、基准 TPS 更新；之前一直停在初始文案。`verify:ui` 增加了对应检查。
 - **和弦行相邻**：强制合并的紧凑路径改成普通和弦列——≤3 音只给内联音一个中继器、两侧靠单跳；≥4 音每行一个同延迟中继器，音符行**相邻不留空**；超过 27 音的极端和弦才退回 staged 两行总线。新增 `test/chordSpacing.test.ts`（3/4/20 音）。
 - **间距与强制合并修复**：普通模式的 Z 间距改为按每条轨自己的和弦上下行数计算，相邻轨之间固定留一格空行（16 轨夹具从每轨间 5–6 格缩到 1 格）；「强制合并」改为全曲合成一条主线（之前是每种乐器一条，16 轨仍有 12 条），每个音仍按自己源轨的乐器/八度映射，`forcedValidation` 校验整条主线；预览初始定位到音符最多的主行，不再开在空白上支。
@@ -54,7 +54,7 @@
 - `release/MusicboxMC-Setup-0.2.2-win-x64.exe`（79.7 MB）
 - `release/MusicboxMC-0.2.2-win-x64.zip`（109.3 MB）
 - `release/MusicboxMC-piano-pack-1.20.4.zip`（51 KB）
-- GitHub Release：`v0.2.2`，tag 与 `package.json` 版本一致。
+- GitHub Release：[v0.2.2](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.2)，tag 与 `package.json` 版本一致；三个资产均为 `uploaded`。
 
 ## 已知问题（诚实清单）
 
