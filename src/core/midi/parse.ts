@@ -60,6 +60,7 @@ export function parseMidi(buffer: Buffer | Uint8Array): SongModel {
       index,
       name: decodeMidiText(track.name),
       channel: track.channel,
+      program: track.instrument?.number,
       instrument: track.instrument?.name ?? 'unknown',
       percussion: track.instrument?.percussion ?? false,
       notes,

@@ -86,6 +86,25 @@ function drawTileShadow(ctx, x, y, width, height, radius) {
  * slab with a torch at each end and an arrow) with its delay setting above it; a note
  * block is drawn as a note block, with the block underneath shown in its corner.
  */
+/** The Z row with the most note blocks; usually the main line of a track. */
+function mainRowOf(preview) {
+  const width = preview.size.x;
+  if (!width) return 0;
+  let bestRow = 0;
+  let bestCount = 0;
+  for (let row = 0; row < preview.size.z; row += 1) {
+    let count = 0;
+    for (let col = 0; col < width; col += 1) {
+      if (preview.noteCells[row * width + col]) count += 1;
+    }
+    if (count > bestCount) {
+      bestCount = count;
+      bestRow = row;
+    }
+  }
+  return bestRow;
+}
+
 function renderPreview(res) {
   const canvas = $('canvas');
   const hint = $('previewHint');
@@ -114,9 +133,9 @@ function renderPreview(res) {
     return;
   }
 
-  if (fittedFor !== res) {
+  const isNewResult = fittedFor !== res;
+  if (isNewResult) {
     fittedFor = res;
-    state.previewView = { x0: 0, z0: 0 };
     state.previewFocus = null;
   }
   state.previewScale = scaleForCell(READABLE_CELL);
@@ -146,6 +165,12 @@ function renderPreview(res) {
   const w = viewportWidth;
   const h = viewportHeight;
   const { cols, rows } = visibleCells({ viewportWidth, viewportHeight, cell: CELL });
+  if (isNewResult) {
+    // Open on the row that carries the most notes, which is the main line. A tall
+    // fan-out otherwise opens on empty upper branches with the music below the fold.
+    const focus = mainRowOf(preview);
+    state.previewView = { x0: 0, z0: Math.max(0, focus - Math.floor(rows / 2)) };
+  }
   const view = (state.previewView = clampView({ x, z }, state.previewView, { cols, rows }));
   const gx0 = view.x0;
   const gz0 = view.z0;
@@ -217,9 +242,11 @@ function renderPreview(res) {
       const label =
         res.playbackMode === 'command'
           ? '命令播放器'
-          : t
-            ? `轨${region.trackIndex + 1} ${t.instrument}`
-            : `轨${region.trackIndex + 1}`;
+          : region.trackIndex < 0
+            ? '合并主线'
+            : t
+              ? `轨${region.trackIndex + 1} ${t.instrument}`
+              : `轨${region.trackIndex + 1}`;
       ctx.fillStyle = '#4d4a44';
       ctx.font = '12px system-ui, sans-serif';
       // Leave the number column clear: the gutter is 150 px and the number sits at 116.

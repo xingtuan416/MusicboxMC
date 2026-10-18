@@ -32,7 +32,7 @@ const countNotes = (result: ReturnType<typeof layout>): number =>
   );
 
 describe('forced instrument merge', () => {
-  it('globally groups interleaved instruments and arbitrary gaps, preserving exclusions and first indices', () => {
+  it('folds interleaved instruments and arbitrary gaps onto one spine, preserving exclusions', () => {
     const source = multiTrackSong([
       { ticks: [0] },
       { instrument: 'violin', ticks: [4] },
@@ -42,9 +42,12 @@ describe('forced instrument merge', () => {
       { percussion: true, instrument: 'woodblock', ticks: [10] },
     ]);
     const result = layout(source, { forceMergeSameInstrument: true, excludeTracks: [3] });
-    expect(result.tracks.map((track) => track.trackIndex)).toEqual([0, 1, 4]);
+    expect(result.tracks.map((track) => track.trackIndex)).toEqual([-1]);
     expect(countNotes(result)).toBe(5);
-    expect(result.tracks[0]!.taps).toHaveLength(2);
+    expect(result.tracks[0]!.taps).toHaveLength(5);
+    // One placement entry per source track at each group, so warnings can still locate.
+    expect(new Set(result.placed.map((entry) => entry.trackIndex))).toEqual(new Set([0, 1, 2, 4, 5]));
+    expect(result.trackInstruments).toHaveLength(5);
   });
 
   it.each([1, 3, 14, 15, 28, 29, 30, 80, 470, 616])(
@@ -78,17 +81,16 @@ describe('forced instrument merge', () => {
       { forceMergeSameInstrument: true },
     );
     expect(countNotes(result)).toBe(117);
-    expect(result.tracks).toHaveLength(2);
+    expect(result.tracks).toHaveLength(1);
     for (const p of result.placed) {
       expect(p.actual - Math.round(p.tick / 2) * 2).toBe(result.startupDelayTicks);
     }
-    for (const track of result.tracks) {
-      validateForcedTrack(
-        track,
-        1,
-        result.placed.filter((p) => p.trackIndex === track.trackIndex).map((p) => p.actual),
-      );
-    }
+    const track = result.tracks[0]!;
+    validateForcedTrack(
+      track,
+      1,
+      track.taps.map((tap) => tap.t * 2 + result.startupDelayTicks!),
+    );
   });
 
   it('legacy behavior is unchanged; forcing takes precedence if both options reach the API', () => {
@@ -108,12 +110,14 @@ describe('forced instrument merge', () => {
       forceMergeSameInstrument: true,
       outOfRange: 'drop',
       transpose: { 0: 1, 1: -2 },
-      blocks: { tracks: { 0: { noteBase: 'minecraft:gold_block' } } },
+      // The override follows the note's own source track now that both tracks share
+      // one spine; a per-spine override would have no single owner.
+      blocks: { tracks: { 1: { noteBase: 'minecraft:gold_block' } } },
     });
     expect(countNotes(result)).toBe(1);
     const note = result.tracks[0]!.taps[0]!.notes[0]!;
     expect(note.block).toBe('minecraft:gold_block');
-    expect(note.note).toBe(6); // MIDI 72, flute region starting at 66.
+    expect(note.note).toBe(6); // MIDI 36 after -2 octaves, bass region starting at 30.
     expect(result.warnings).toContainEqual(
       expect.objectContaining({ code: 'OUT_OF_RANGE', midi: 10, action: 'drop' }),
     );
@@ -156,7 +160,7 @@ describe('forced instrument merge', () => {
   });
 
   it.each([1, 2, 3, 7, 14])(
-    'respects per-section dMax=%i with random dense sequences and safe track spacing',
+    'respects per-section dMax=%i with random dense sequences on one spine',
     (dMax) => {
       const n = Math.min(dMax, 7) * 12;
       const ticks = Array.from({ length: 12 }, (_, i) =>
@@ -166,12 +170,14 @@ describe('forced instrument merge', () => {
         forceMergeSameInstrument: true,
         config: { dMax, trackPitch: 1 },
       });
+      expect(result.tracks).toHaveLength(1);
       expect(countNotes(result)).toBe(ticks.length + 2);
-      const ranges = result.tracks.map((track) => {
-        const zs = track.placements.map((p) => p.pos.z);
-        return { min: Math.min(...zs), max: Math.max(...zs) };
-      });
-      expect(ranges[1]!.min - ranges[0]!.max).toBeGreaterThan(1);
+      const track = result.tracks[0]!;
+      validateForcedTrack(
+        track,
+        1,
+        track.taps.map((tap) => tap.t * 2 + result.startupDelayTicks!),
+      );
       for (const p of result.placed)
         expect(p.actual - Math.round(p.tick / 2) * 2).toBe(result.startupDelayTicks);
     },
@@ -234,10 +240,11 @@ describe('forced instrument merge', () => {
     expect(result.tracks).toHaveLength(1);
     expect(countNotes(result)).toBe(noteCount);
 
+    const track = result.tracks[0]!;
     const audit = validateForcedTrack(
-      result.tracks[0]!,
+      track,
       1,
-      result.placed.map((p) => p.actual),
+      track.taps.map((tap) => tap.t * 2 + result.startupDelayTicks!),
     );
     expect(audit.noteCount).toBe(noteCount);
     expect(audit.minWireStrength).toBeGreaterThan(0);

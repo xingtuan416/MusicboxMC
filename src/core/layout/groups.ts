@@ -1,4 +1,7 @@
-import { mapPitch, type NoteBlockInstrument, type PitchRegion, type RegionTable } from '../palette/pitchMap';
+import type { TrackVoicing } from '../palette/assignment';
+import { mapDrumNote, mapPitchToInstrument, type InstrumentPitch } from '../palette/instrumentPitch';
+import { INSTRUMENTS, type NoteBlockInstrument } from '../palette/instruments';
+import { mapPitch, type MappedPitch, type PitchRegion, type RegionTable } from '../palette/pitchMap';
 import type { LayoutWarning } from './types';
 import { gameTickToRedstone, type OverflowGroup, type TrackNote } from './model';
 
@@ -13,6 +16,10 @@ import { gameTickToRedstone, type OverflowGroup, type TrackNote } from './model'
  *   - a group wider than one chord column can hold keeps only the highest notes
  *     and hands the rest back as overflow, so the caller can re-emit them on
  *     another track instead of losing them.
+ *
+ * A track is voiced in one of three ways: the five-slot piano palette (`pitch`),
+ * one fixed instrument, or mixed channel-9 percussion. The mapping differs, but the
+ * grouping and overflow rules are the same for all three.
  */
 
 /** A note ready to be placed: already mapped to a note value, region and base block. */
@@ -21,7 +28,8 @@ export interface NoteToPlace {
   source: TrackNote;
   midi: number;
   note: number;
-  region: PitchRegion;
+  /** Set for the five-slot palette only; a fixed instrument has no pitch region. */
+  region?: PitchRegion;
   block: string;
   instrument: NoteBlockInstrument;
   degraded: boolean;
@@ -46,6 +54,12 @@ export interface PrepareGroupsOptions {
   maxChordNotes: number;
   /** When false, the surplus is dropped rather than reported for re-emission. */
   collectOverflow: boolean;
+  /** How this track sounds; defaults to the five-slot piano palette. */
+  voicing?: TrackVoicing;
+  /** Whole-track octave shift for a fixed instrument. */
+  octaveOffset?: number;
+  /** Track title, used only as the channel-9 name fallback. */
+  trackName?: string;
   /**
    * Whether to report notes outside the pitch range.
    *
@@ -72,6 +86,9 @@ export function prepareGroups(options: PrepareGroupsOptions): {
     maxChordNotes,
     collectOverflow,
     trackIndex,
+    voicing = { kind: 'pitch' },
+    octaveOffset = 0,
+    trackName = '',
     reportRangeWarnings = true,
   } = options;
   const warnings: LayoutWarning[] = [];
@@ -81,11 +98,34 @@ export function prepareGroups(options: PrepareGroupsOptions): {
   // used to report zero shifted notes.
   let shiftedNotes = 0;
   let maxShiftSemitones = 0;
+  let droppedDrums = 0;
 
   // 1) Map pitches, then group by redstone tick
   const groupMap = new Map<number, PreparedGroup>();
   for (const note of notes) {
-    const mapped = mapPitch(note.midi, regions, outOfRange, transpose);
+    let mapped: MappedPitch | InstrumentPitch;
+
+    if (voicing.kind === 'pitch') {
+      mapped = mapPitch(note.midi, regions, outOfRange, transpose);
+    } else if (voicing.kind === 'instrument') {
+      mapped = mapPitchToInstrument(note.midi, voicing.instrument, outOfRange, transpose, octaveOffset);
+    } else {
+      const drum = mapDrumNote(note.midi, trackName);
+      if (drum === null) {
+        droppedDrums += 1;
+        continue;
+      }
+      mapped = drum;
+    }
+
+    let rangeFields: { instrument?: NoteBlockInstrument; low?: number; high?: number } = {};
+    if (voicing.kind === 'instrument') {
+      const range = INSTRUMENTS[voicing.instrument].range;
+      if (range !== null) {
+        rangeFields = { instrument: voicing.instrument, low: range[0], high: range[1] };
+      }
+    }
+
     if (mapped.dropped) {
       if (reportRangeWarnings) {
         warnings.push({
@@ -94,6 +134,7 @@ export function prepareGroups(options: PrepareGroupsOptions): {
           action: 'drop',
           trackIndex,
           tick: note.tick,
+          ...rangeFields,
         });
       }
       continue;
@@ -113,6 +154,7 @@ export function prepareGroups(options: PrepareGroupsOptions): {
         action: outOfRange,
         trackIndex,
         tick: note.tick,
+        ...rangeFields,
       });
     }
 
@@ -134,6 +176,10 @@ export function prepareGroups(options: PrepareGroupsOptions): {
     });
   }
   const groups = [...groupMap.values()].sort((a, b) => a.rt - b.rt);
+
+  if (reportRangeWarnings && droppedDrums > 0) {
+    warnings.push({ code: 'DRUM_NOTES_DROPPED', trackIndex, count: droppedDrums });
+  }
 
   // 2) Chord capacity: anything past the column's physical limit goes to overflow
   const prepared: PreparedGroup[] = [];

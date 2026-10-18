@@ -155,8 +155,11 @@ describe('note circuit geometry (note blocks inline on the main line, branch rep
       config: cfg,
       regions: DEFAULT_REGIONS,
     });
-    const wire = res.tracks[0]!.placements.find(
-      (p) => p.block === 'minecraft:redstone_wire' && p.pos.z === 1,
+    const track = res.tracks[0]!;
+    // The upper branch row: its north neighbour is empty and its south neighbour is the
+    // main line. Expressed relative to zBase, because that is what the layout owns.
+    const wire = track.placements.find(
+      (p) => p.block === 'minecraft:redstone_wire' && p.pos.z === track.zBase - 1,
     );
     expect(wire?.props).toMatchObject({
       north: 'none',

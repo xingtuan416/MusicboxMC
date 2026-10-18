@@ -1,3 +1,5 @@
+import type { NoteBlockInstrument } from '../palette/instruments';
+
 export interface Vec3 {
   x: number;
   y: number;
@@ -79,8 +81,22 @@ export type LayoutWarning =
    * shift read as one timing problem per track, with no note to point at.
    */
   | { code: 'STARTUP_LEAD_IN'; ticks: number }
-  /** `trackIndex` and `tick` are what let the interface say which note is meant. */
-  | { code: 'OUT_OF_RANGE'; midi: number; action: string; trackIndex: number; tick: number }
+  /**
+   * `trackIndex` and `tick` are what let the interface say which note is meant.
+   *
+   * `instrument`/`low`/`high` are set when the note was mapped onto one fixed
+   * instrument, so the text can name that instrument's own two-octave range.
+   */
+  | {
+      code: 'OUT_OF_RANGE';
+      midi: number;
+      action: string;
+      trackIndex: number;
+      tick: number;
+      instrument?: NoteBlockInstrument;
+      low?: number;
+      high?: number;
+    }
   /** `x` and `z` are the cell the note block was placed at, so the view can point at it. */
   | {
       code: 'TIMING_ADJUSTED';
@@ -98,7 +114,49 @@ export type LayoutWarning =
   | { code: 'FANOUT_EXPANDED'; tick: number; n: number; limit: number; stages: number }
   /** This group could not be padded with dust to reach the shared X reference line.
    *  Reports the residual drift in cells; no timing is altered and no note is dropped. */
-  | { code: 'SPATIAL_DRIFT'; tick: number; drift: number };
+  | { code: 'SPATIAL_DRIFT'; tick: number; drift: number }
+  /** No GM program, no usable track name: the track falls back to harp. */
+  | { code: 'INSTRUMENT_UNKNOWN'; trackIndex: number }
+  /** Extended mode replaced one of the five piano-slot instruments. */
+  | {
+      code: 'INSTRUMENT_SUBSTITUTED';
+      trackIndex: number;
+      native: NoteBlockInstrument;
+      effective: NoteBlockInstrument;
+    }
+  /** The whole track was moved by `octaves` to fit its instrument's two-octave range. */
+  | {
+      code: 'INSTRUMENT_OCTAVE_SHIFT';
+      trackIndex: number;
+      instrument: NoteBlockInstrument;
+      octaves: number;
+      notes: number;
+    }
+  /** The track spans more than 24 semitones, so some notes need individual handling. */
+  | {
+      code: 'INSTRUMENT_RANGE_OVERFLOW';
+      trackIndex: number;
+      instrument: NoteBlockInstrument;
+      span: number;
+      outside: number;
+    }
+  /** Channel-9 notes that neither the drum map nor the track name could place. */
+  | { code: 'DRUM_NOTES_DROPPED'; trackIndex: number; count: number };
+
+/** What a source track became after mode selection and instrument detection. */
+export interface TrackInstrumentInfo {
+  trackIndex: number;
+  /** `drums` means mixed channel-9 percussion, mapped note by note. */
+  native: NoteBlockInstrument | 'drums';
+  /** `piano` means the five-slot extension rather than one fixed instrument. */
+  effective: NoteBlockInstrument | 'piano' | 'drums';
+  source: 'gm' | 'name' | 'drum' | 'fallback';
+  substituted: boolean;
+  /** Whole-track octave shift; 0 for the piano extension and for drums. */
+  octaveOffset: number;
+  /** Notes still outside the instrument's range after that shift. */
+  outsideNotes: number;
+}
 
 export interface LayoutResult {
   tracks: TrackSkeleton[];
@@ -130,6 +188,8 @@ export interface LayoutResult {
    * report zero.
    */
   rangeShift: { notes: number; maxSemitones: number };
+  /** One entry per source track that was laid out, in track order. */
+  trackInstruments: TrackInstrumentInfo[];
 }
 
 export interface LayoutConfig {

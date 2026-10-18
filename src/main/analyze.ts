@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { parseMidi } from '../core/midi/parse';
 import type { SongModel } from '../core/midi/types';
+import { detectTrack } from '../core/palette/instrumentMap';
 import { formatDuration } from '../core/tempo/speed';
 import { MAX_LAYOUT_ERROR_MS, MAX_QUANTIZE_ERROR_MS, secondsToTick } from '../core/tempo/tick';
 import type { AnalyzeResult, TrackSummary } from './types';
@@ -16,12 +17,16 @@ import type { AnalyzeResult, TrackSummary } from './types';
 function summarizeTracks(song: SongModel): TrackSummary[] {
   return song.tracks.map((t) => {
     const ticks = t.notes.map((n) => secondsToTick(n.timeSec));
+    const detection = detectTrack(t);
     return {
       index: t.index,
       name: t.name,
       channel: t.channel,
+      program: t.program,
       instrument: t.instrument,
       percussion: t.percussion,
+      detectedInstrument: detection.native,
+      detectionSource: detection.source,
       noteCount: t.notes.length,
       minTick: ticks.length > 0 ? Math.min(...ticks) : 0,
       maxTick: ticks.length > 0 ? Math.max(...ticks) : 0,

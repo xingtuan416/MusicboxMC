@@ -23,6 +23,8 @@ export interface NoteSpec {
 export interface TrackSpec {
   notes: NoteSpec[];
   instrument?: string;
+  /** General MIDI program number, when the test wants GM-first detection. */
+  program?: number;
   percussion?: boolean;
   name?: string;
   /** Override the track index; defaults to the array position. */
@@ -62,6 +64,7 @@ export function buildSong(spec: SongSpec): SongModel {
         index,
         name: track.name ?? `track-${index}`,
         channel,
+        program: track.program,
         instrument: track.instrument ?? 'acoustic grand piano',
         percussion: track.percussion ?? false,
         notes: toEvents(track.notes, channel),

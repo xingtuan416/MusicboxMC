@@ -1,4 +1,7 @@
 import { coreError } from '../errors';
+import type { NoteBlockInstrument } from './instruments';
+
+export type { NoteBlockInstrument } from './instruments';
 
 export type PitchRegion = 'A' | 'B' | 'C' | 'D' | 'E';
 export type OutOfRangePolicy = 'warn' | 'clamp' | 'octave' | 'drop';
@@ -19,14 +22,6 @@ export interface RegionDef {
  * every lookup below has to cope with a slot being absent.
  */
 export type RegionTable = Readonly<Partial<Record<PitchRegion, RegionDef>>>;
-
-/**
- * Instrument events of the Minecraft Java note block.
- *
- * These events each have a different pitch range; this project can use the five
- * slots bass / guitar / harp / flute / bell to assemble F#1–F#7.
- */
-export type NoteBlockInstrument = 'bass' | 'guitar' | 'harp' | 'flute' | 'bell';
 
 export interface MappedPitch {
   /** Whether it was dropped (may be true when outOfRange = 'drop') */

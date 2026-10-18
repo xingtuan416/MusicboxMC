@@ -11,6 +11,7 @@
  * step than as a general renderer.
  */
 
+import { instrumentName } from './instruments.js';
 import { maybePromptForPack, savePack } from './resourcepack.js';
 import { focusPreviewCell, panPreview, previewPosition, renderPreview } from './preview.js';
 import {
@@ -44,7 +45,8 @@ const state = {
   /** Folder the schematic will be written into. The file name is kept separately. */
   outputDir: null,
   result: null,
-  palette: 'full',
+  /** 'extended' keeps the five-slot piano range; 'native' follows every MIDI instrument. */
+  instrumentMode: 'extended',
   dMax: 14,
   outOfRange: 'warn',
   backend: 'redstone',
@@ -165,9 +167,9 @@ function goStep(target) {
 
   // The pack nudge belongs on the last step, not on the check step: arriving at the check
   // step with a modal over it hides the very thing the user was sent there to read. It is
-  // shown once, and only for an export that actually wrote a full-range file.
+  // shown once, and only for an export that actually wrote an extended-mode file.
   if (next === 8 && state.result?.outputPath) {
-    maybePromptForPack(state.palette === 'full');
+    maybePromptForPack(state.instrumentMode === 'extended');
   }
 }
 
@@ -282,7 +284,22 @@ function renderTracks(popIndex = -1) {
     meta.className = 'track-meta tnum';
     meta.textContent = `${number(track.noteCount)} 个音符`;
 
-    text.append(name, meta);
+    const detected =
+      track.detectedInstrument === 'drums' ? '打击乐' : instrumentName(track.detectedInstrument);
+    const sourceText =
+      track.detectionSource === 'gm'
+        ? `GM ${track.program ?? '?'}`
+        : track.detectionSource === 'name'
+          ? '轨道名'
+          : track.detectionSource === 'drum'
+            ? '鼓通道'
+            : '未识别，按竖琴处理';
+    const detection = document.createElement('div');
+    detection.className = 'track-meta';
+    detection.textContent =
+      track.detectionSource === 'fallback' ? '识别：未识别，按竖琴处理' : `识别：${detected} · ${sourceText}`;
+
+    text.append(name, meta, detection);
     left.append(check, text);
     row.append(left);
     box.append(row);
@@ -303,10 +320,16 @@ function renderTracks(popIndex = -1) {
  * ──────────────────────────────────────────────────────────────────────────── */
 
 function syncSummary() {
-  $('sumPitch').textContent =
-    state.palette === 'full'
-      ? `全音域 F#1–F#7 · 最多 ${state.dMax} 音同时`
-      : `钢琴音域 F#3–F#5 · 最多 ${state.dMax} 音同时`;
+  const extended = state.instrumentMode === 'extended';
+  $('sumPitch').textContent = extended
+    ? `扩展竖琴音域 · 钢琴 F#1–F#7 · 最多 ${state.dMax} 音同时`
+    : `原版乐器 · 各乐器两个八度 · 最多 ${state.dMax} 音同时`;
+  $('packTitle').textContent = extended
+    ? '配套资源包（扩展竖琴音域建议安装）'
+    : '配套资源包（原版乐器模式不需要）';
+  $('packDescription').textContent = extended
+    ? '扩展竖琴音域的五种音色（bass、guitar、harp、flute、bell）各有一段钢琴采样；装包后它们听起来像同一架钢琴。'
+    : '原版乐器模式每条轨使用自己的音色；装了这个包反而会把原生 bass、guitar、flute、bell 也替换成钢琴，所以不建议安装。';
   $('sumRange').textContent = {
     warn: '提示并八度移调',
     octave: '自动八度移调',
@@ -314,6 +337,14 @@ function syncSummary() {
     drop: '跳过这些音符',
   }[state.outOfRange];
   $('sumBackend').textContent = state.backend === 'command' ? '命令方块播放' : '红石电路';
+  const mergeText =
+    {
+      off: '每条音轨各自一条主线',
+      same: '同乐器合并到一条主线',
+      force: '全曲强制合并为一条主线',
+    }[state.merge] ?? '每条音轨各自一条主线';
+  const tpsText = state.baseTps === 20 ? '' : ` · 基准 ${state.baseTps} TPS`;
+  $('sumMisc').textContent = `${mergeText}${tpsText} · 作者 ${state.author.trim() || 'MusicboxMC'}`;
   $('commandBudgetField').style.display = state.backend === 'command' ? 'flex' : 'none';
 }
 
@@ -324,7 +355,7 @@ function generateOptions() {
     baseTps: state.baseTps,
     dMax: state.dMax,
     outOfRange: state.outOfRange,
-    extendedRange: state.palette === 'full',
+    instrumentMode: state.instrumentMode,
     // The generator works on exclusions, so a track the user cleared is left out.
     excludeTracks: state.tracks.filter((track) => !track.checked).map((track) => track.index),
     commandPlayback: state.backend === 'command',
@@ -461,17 +492,20 @@ function showResult(result) {
   $('doneWarningBox').textContent = '';
 
   const notes = [];
-  if (result.outOfRangeNotes > 0) notes.push(`${result.outOfRangeNotes} 个音符超出电路音域`);
+  if (result.outOfRangeNotes > 0) notes.push(`${result.outOfRangeNotes} 个音符超出乐器音域`);
   if (result.rangeShift?.notes > 0) {
     notes.push(`其中 ${result.rangeShift.notes} 个被移调，最多移动 ${result.rangeShift.maxSemitones} 个半音`);
   }
   const otherWarnings = result.warnings.filter((warning) => warning.code !== 'OUT_OF_RANGE');
-  if (otherWarnings.length > 0) notes.push(`${otherWarnings.length} 条排布提示`);
+  if (otherWarnings.length > 0) notes.push(`${otherWarnings.length} 条乐器/排布提示`);
 
   if (notes.length > 0) {
     $('doneWarningBox').style.display = 'block';
-    $('doneWarningBox').textContent = `${notes.join('；')}。展开「查看红石布线」可以看到它们的位置。`;
+    $('doneWarningBox').textContent = `${notes.join('；')}。展开「查看红石布线」或「乐器分配」可以看到细节。`;
   }
+
+  renderAssignmentTable('doneAssignments', result);
+  $('doneAssignments').style.display = 'flex';
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -519,7 +553,7 @@ document.addEventListener('click', (event) => {
       .querySelectorAll(`[data-cfg-group="${group}"]`)
       .forEach((box) => box.classList.toggle('selected', box === option));
 
-    if (group === 'palette') state.palette = value;
+    if (group === 'instrument') state.instrumentMode = value;
     if (group === 'range') state.outOfRange = value;
     if (group === 'backend') state.backend = value;
     if (group === 'merge') state.merge = value;
@@ -660,6 +694,7 @@ $('baseTpsInput').addEventListener('change', (event) => {
   const value = Number(event.target.value);
   state.baseTps = Number.isFinite(value) ? Math.max(1, Math.min(100, Math.round(value))) : 20;
   event.target.value = String(state.baseTps);
+  syncSummary();
 });
 
 /** Send the result step's preview button back to the check step, where the wiring view lives. */
@@ -834,11 +869,78 @@ function renderTrackChips(result) {
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'pill-tag';
-    chip.textContent = track?.name ? `${index + 1} ${track.name}` : `音轨 ${index + 1}`;
+    chip.textContent =
+      index < 0 ? '合并主线' : track?.name ? `${index + 1} ${track.name}` : `音轨 ${index + 1}`;
     chip.title = `跳到 z${z} 行`;
     chip.addEventListener('click', () => focusPreviewCell(0, z));
     box.append(chip);
   }
+}
+
+/**
+ * What each source track became: native instrument, effective instrument, octave shift
+ * and why. This is reference rather than a warning, so it gets its own fold.
+ */
+function renderAssignmentTable(containerId, result) {
+  const box = $(containerId);
+  box.replaceChildren();
+  const rows = result.trackInstruments ?? [];
+
+  if (rows.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'assignment-empty';
+    empty.textContent = '没有可显示的乐器分配。';
+    box.append(empty);
+    return;
+  }
+
+  const head = document.createElement('div');
+  head.className = 'assignment-row head';
+  for (const label of ['轨', '乐器', '八度', '说明']) {
+    const cell = document.createElement('span');
+    cell.textContent = label;
+    head.append(cell);
+  }
+  box.append(head);
+
+  const nameOf = (id) => (id === 'drums' ? '打击乐' : id === 'piano' ? '钢琴扩展' : instrumentName(id));
+
+  for (const info of rows) {
+    const track = (result.tracks ?? []).find((entry) => entry.index === info.trackIndex);
+    const native = nameOf(info.native);
+    const effective = nameOf(info.effective);
+    const instrumentText = info.substituted ? `${native} → ${effective}` : effective;
+    const octave = info.octaveOffset === 0 ? '—' : `${info.octaveOffset > 0 ? '+' : ''}${info.octaveOffset}`;
+    const notes = [];
+    if (info.source === 'fallback') notes.push('未识别，按竖琴');
+    if (info.substituted) notes.push('扩展模式替代');
+    if (info.octaveOffset !== 0) notes.push(`整轨${info.octaveOffset > 0 ? '升' : '降'}八度`);
+    if (info.outsideNotes > 0) notes.push(`${info.outsideNotes} 个音单独移调`);
+    if (info.effective === 'drums') notes.push('鼓通道按音符映射');
+    if (notes.length === 0) notes.push('原版音色');
+
+    const row = document.createElement('div');
+    row.className = 'assignment-row';
+    for (const text of [
+      `轨${info.trackIndex + 1}`,
+      instrumentText,
+      octave,
+      `${notes.join('；')}${track?.name ? ` · ${track.name}` : ''}`,
+    ]) {
+      const cell = document.createElement('span');
+      cell.textContent = text;
+      row.append(cell);
+    }
+    box.append(row);
+  }
+
+  const substituted = rows.filter((row) => row.substituted).length;
+  const shifted = rows.filter((row) => row.octaveOffset !== 0).length;
+  $('sumAssignments').textContent =
+    `${rows.length} 条轨` +
+    (substituted > 0 ? ` · ${substituted} 条替代` : '') +
+    (shifted > 0 ? ` · ${shifted} 条移八度` : '') +
+    ' · 点开看详情';
 }
 
 /**
@@ -881,6 +983,7 @@ async function runCheck() {
         : `共 ${number(issues)} 处需要看一眼。点「在红石布线里定位」可以跳到对应位置；想改配置就点「上一步」。`;
     renderIssues(result);
     renderTrackChips(result);
+    renderAssignmentTable('assignmentTable', result);
     // The canvas measures its container, so this runs after the step is on screen.
     renderPreview(result);
     if (issues === 0) notify('没有发现问题，可以生成');

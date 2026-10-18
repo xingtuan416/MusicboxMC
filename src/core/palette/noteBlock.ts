@@ -1,6 +1,6 @@
 /** Note block blockstate serialization. */
 
-import type { NoteBlockInstrument } from './pitchMap';
+import type { NoteBlockInstrument } from './instruments';
 
 export interface BlockState {
   /** Full block id, e.g. minecraft:note_block */

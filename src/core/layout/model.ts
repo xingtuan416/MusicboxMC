@@ -229,16 +229,42 @@ export function chordRowLayout(n: number): ChordRow[] {
   return Array.from({ length: n - 1 }, (_, j) => ({ ...branchRow(j), conducted: false }));
 }
 
-/** Pre-scan a track's widest chord (used to inset zBase and to plan track spacing). */
-export function maxChordRows(notes: TrackNote[], maxSideRows: number = MAX_SIDE_ROWS): number {
+/**
+ * How many rows a track's chords use above and below its main line.
+ *
+ * The two sides are not symmetric: a two-note chord extends only downwards, and a
+ * four-note one uses one row upwards but two downwards. Reserving the maximum on both
+ * sides wasted a row between every pair of tracks; the layout now needs the real sides
+ * so the gap stays at exactly one empty row.
+ */
+export interface ChordSides {
+  /** Rows above the main line (negative Z). */
+  up: number;
+  /** Rows below the main line (positive Z). */
+  down: number;
+}
+
+export function chordSideRows(notes: TrackNote[], maxSideRows: number = MAX_SIDE_ROWS): ChordSides {
   const counts = new Map<number, number>();
   for (const n of notes) {
     const rt = gameTickToRedstone(n.tick);
     counts.set(rt, (counts.get(rt) ?? 0) + 1);
   }
-  let max = 0;
-  for (const c of counts.values()) {
-    max = Math.max(max, Math.min(chordRows(c), maxSideRows));
+
+  let up = 0;
+  let down = 0;
+  const capacity = 2 * maxSideRows + 1;
+  for (const count of counts.values()) {
+    for (const row of chordRowLayout(Math.min(count, capacity))) {
+      if (row.side === 1) down = Math.max(down, row.row);
+      else up = Math.max(up, row.row);
+    }
   }
-  return max;
+  return { up: Math.min(up, maxSideRows), down: Math.min(down, maxSideRows) };
+}
+
+/** Pre-scan a track's widest chord on either side. */
+export function maxChordRows(notes: TrackNote[], maxSideRows: number = MAX_SIDE_ROWS): number {
+  const sides = chordSideRows(notes, maxSideRows);
+  return Math.max(sides.up, sides.down);
 }

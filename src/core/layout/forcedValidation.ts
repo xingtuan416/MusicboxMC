@@ -93,7 +93,9 @@ export function validateForcedTrack(
   for (let head = 0; head < queue.length; head++) {
     const signal = queue[head]!;
     const { block, tick, strength } = signal;
-    if (block.block === 'minecraft:note_block') continue;
+    // A powered note block conducts one hop, exactly like the ordinary layout's
+    // inline note: it lights the adjacent note blocks and the dust that continues the
+    // main line. Treating it as a sink made every inline note break reachability.
     const output =
       block.block === 'minecraft:repeater'
         ? DIRECTIONS.find((dir) => dir.opposite === block.props?.facing)

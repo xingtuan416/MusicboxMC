@@ -1,3 +1,4 @@
+import type { NoteBlockInstrument } from './instruments';
 import type { PitchRegion } from './pitchMap';
 
 /**
@@ -39,6 +40,8 @@ export const DEFAULT_BLOCK_TABLE: BlockTable = {
 export interface BlockDefaults {
   global: BlockTable;
   regions?: Partial<Record<PitchRegion, Partial<BlockTable>>>;
+  /** Defaults for a fixed instrument; used when a track follows its MIDI instrument. */
+  instruments?: Partial<Record<NoteBlockInstrument, Partial<BlockTable>>>;
 }
 
 /** Track-level / region-level overrides; a value may be any block id (incl. `minecraft:air`). */
@@ -51,22 +54,26 @@ export interface BlockQuery {
   slot: BlockSlot;
   trackIndex?: number;
   region?: PitchRegion;
+  /** Set instead of `region` when the note belongs to a fixed instrument. */
+  instrument?: NoteBlockInstrument;
 }
 
 export type BlockResolver = (query: BlockQuery) => string;
 
 /**
  * Resolution priority (from specific to broad):
- *   override·region > override·track > default·region > default·global
+ *   override·region > override·track > default·region > default·instrument > default·global
  *
  * Overrides take priority over defaults; region takes priority over track, because the
  * region directly determines the timbre (swap the base block and the instrument changes).
+ * `default·instrument` is only reached when the caller names a fixed instrument, which
+ * is the multi-instrument path.
  */
 export function createBlockResolver(
   defaults: BlockDefaults = { global: DEFAULT_BLOCK_TABLE },
   overrides: BlockOverrides = {},
 ): BlockResolver {
-  return ({ slot, trackIndex, region }) => {
+  return ({ slot, trackIndex, region, instrument }) => {
     if (region !== undefined) {
       const o = overrides.regions?.[region]?.[slot];
       if (o !== undefined) return o;
@@ -79,6 +86,11 @@ export function createBlockResolver(
 
     if (region !== undefined) {
       const d = defaults.regions?.[region]?.[slot];
+      if (d !== undefined) return d;
+    }
+
+    if (instrument !== undefined) {
+      const d = defaults.instruments?.[instrument]?.[slot];
       if (d !== undefined) return d;
     }
 

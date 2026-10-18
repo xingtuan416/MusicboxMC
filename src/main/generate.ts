@@ -4,8 +4,15 @@ import { parseMidi } from '../core/midi/parse';
 import type { SongModel } from '../core/midi/types';
 import { layout, DEFAULT_LAYOUT_CONFIG } from '../core/layout/index';
 import { sliceRegions } from '../core/layout/regions';
-import type { LayoutConfig } from '../core/layout/types';
-import { coveredRange, regionsFor, type RegionTable } from '../core/palette/pitchMap';
+import type { LayoutConfig, LayoutWarning, TrackInstrumentInfo } from '../core/layout/types';
+import {
+  assignTracks,
+  voicingMap,
+  type InstrumentMode,
+  type TrackAssignment,
+} from '../core/palette/assignment';
+import { chooseOctaveOffset } from '../core/palette/instrumentPitch';
+import { coveredRange, DEFAULT_REGIONS, type RegionTable } from '../core/palette/pitchMap';
 import { buildLitematic, MC_1_20_4_DATA_VERSION, LITEMATIC_VERSION_1_20_4 } from '../core/litematic/build';
 import { speedTable } from '../core/tempo/speed';
 import { buildCommandPlayback } from '../core/command';
@@ -23,21 +30,71 @@ import type { AnalyzeResult, GenerateOptions, GenerateResult } from './types';
 
 const DEFAULT_PRESETS = [1.0, 0.75, 0.5, 1.5, 2.0];
 
-/**
- * The note-block palette the user asked for.
- *
- * The five-slot palette is the default. Turning it off drops to the harp slot alone,
- * which needs no resource pack at all but only reaches F#3-F#5; notes outside then
- * fall to the out-of-range policy like any other out-of-range note.
- */
-function paletteRegions(options: GenerateOptions): RegionTable {
-  return regionsFor(options.extendedRange === false ? 'piano' : 'full');
+/** The five-slot piano palette; fixed instruments get their own base blocks. */
+const PALETTE_REGIONS: RegionTable = DEFAULT_REGIONS;
+
+/** New API first; the old `extendedRange` boolean stays as a compatibility alias. */
+function resolveMode(options: GenerateOptions): InstrumentMode {
+  if (options.instrumentMode) return options.instrumentMode;
+  return options.extendedRange === false ? 'native' : 'extended';
 }
 
-/** The MIDI span the chosen palette can sound, so the interface can name it. */
-function paletteRange(options: GenerateOptions): { low: number; high: number } {
-  const [low, high] = coveredRange(paletteRegions(options));
+/** The piano span, or undefined when no track uses the five-slot extension. */
+function pitchRangeFor(assignments: readonly TrackAssignment[]): { low: number; high: number } | undefined {
+  if (!assignments.some((assignment) => assignment.voicing.kind === 'pitch')) return undefined;
+  const [low, high] = coveredRange(PALETTE_REGIONS);
   return { low, high };
+}
+
+/** Assignment-level notices; the layout emits the same ones for the redstone backend. */
+function assignmentWarnings(assignments: readonly TrackAssignment[]): LayoutWarning[] {
+  const warnings: LayoutWarning[] = [];
+  for (const assignment of assignments) {
+    if (assignment.voicing.kind === 'drums') continue;
+    if (assignment.source === 'fallback') {
+      warnings.push({ code: 'INSTRUMENT_UNKNOWN', trackIndex: assignment.trackIndex });
+    }
+    if (assignment.substituted && assignment.native !== 'drums' && assignment.voicing.kind === 'instrument') {
+      warnings.push({
+        code: 'INSTRUMENT_SUBSTITUTED',
+        trackIndex: assignment.trackIndex,
+        native: assignment.native,
+        effective: assignment.voicing.instrument,
+      });
+    }
+  }
+  return warnings;
+}
+
+/** Per-track summary for the result page and the assignment table. */
+function summarizeAssignments(
+  song: SongModel,
+  assignments: readonly TrackAssignment[],
+): TrackInstrumentInfo[] {
+  return assignments.map((assignment) => {
+    const track = song.tracks.find((entry) => entry.index === assignment.trackIndex);
+    let octaveOffset = 0;
+    let outsideNotes = 0;
+    if (assignment.voicing.kind === 'instrument' && track) {
+      const fit = chooseOctaveOffset(track.notes, assignment.voicing.instrument);
+      octaveOffset = fit.offset;
+      outsideNotes = fit.outside;
+    }
+    return {
+      trackIndex: assignment.trackIndex,
+      native: assignment.native,
+      effective:
+        assignment.voicing.kind === 'pitch'
+          ? 'piano'
+          : assignment.voicing.kind === 'drums'
+            ? 'drums'
+            : assignment.voicing.instrument,
+      source: assignment.source,
+      substituted: assignment.substituted,
+      octaveOffset,
+      outsideNotes,
+    };
+  });
 }
 
 function generateCommands(
@@ -45,11 +102,16 @@ function generateCommands(
   base: AnalyzeResult,
   options: GenerateOptions,
   start: number,
+  assignments: readonly TrackAssignment[],
 ): { result: GenerateResult; buffer: Buffer | null } {
   const presets = options.speedPresets ?? DEFAULT_PRESETS;
   const baseTps = options.baseTps ?? DEFAULT_LAYOUT_CONFIG.baseTps;
   try {
-    const compiled = buildCommandPlayback(song, { ...options, regions: paletteRegions(options) });
+    const compiled = buildCommandPlayback(song, {
+      ...options,
+      regions: PALETTE_REGIONS,
+      assignments: voicingMap(assignments),
+    });
     const region = compiled.region;
     const buffer = buildLitematic([region], {
       name: song.name || base.file,
@@ -80,7 +142,7 @@ function generateCommands(
         playbackMode: 'command',
         commandPlayback: compiled.info,
         outOfRangeNotes: compiled.warnings.filter((warning) => warning.code === 'OUT_OF_RANGE').length,
-        pitchRange: paletteRange(options),
+        pitchRange: pitchRangeFor(assignments),
         stats: {
           tickCount: compiled.totalTicks,
           noteBlockCount: 0,
@@ -92,11 +154,12 @@ function generateCommands(
           startupDelayTicks: 0,
         },
         speedTable: speedTable(song.durationSec, presets, baseTps),
-        warnings: compiled.warnings,
+        warnings: [...assignmentWarnings(assignments), ...compiled.warnings],
         // Command playback places no grouped cells, so there is nothing to point at.
         placed: [],
         // Its own mapping is not counted here yet; see the review note in docs.
         rangeShift: { notes: 0, maxSemitones: 0 },
+        trackInstruments: summarizeAssignments(song, assignments),
         regions: [
           {
             name: 'region_0',
@@ -122,7 +185,7 @@ function generateCommands(
   }
 }
 
-function layoutOptions(options: GenerateOptions) {
+function layoutOptions(options: GenerateOptions, assignments: Record<number, TrackAssignment>) {
   // Pass through only the options the user set explicitly; layout() merges the rest with defaults
   const config: Partial<LayoutConfig> = {};
   if (options.baseTps !== undefined) config.baseTps = options.baseTps;
@@ -130,13 +193,14 @@ function layoutOptions(options: GenerateOptions) {
 
   return {
     config,
-    regions: paletteRegions(options),
+    regions: PALETTE_REGIONS,
     outOfRange: options.outOfRange,
     excludeTracks: options.excludeTracks,
     transpose: options.transpose,
     blocks: options.blocks,
     mergeSameInstrument: options.mergeSameInstrument,
     forceMergeSameInstrument: options.forceMergeSameInstrument,
+    assignments,
   };
 }
 
@@ -169,6 +233,7 @@ function failure(ctx: FailureContext): GenerateResult {
     warnings: [],
     placed: [],
     rangeShift: { notes: 0, maxSemitones: 0 },
+    trackInstruments: [],
     regions: [],
     preview: EMPTY_PREVIEW,
   };
@@ -188,7 +253,13 @@ export function generate(
 
   const song = parseMidi(readFileSync(path));
   const base = analyze(song, path);
-  if (options.commandPlayback) return generateCommands(song, base, options, start);
+  const assignments = assignTracks(song, resolveMode(options));
+  const byTrack: Record<number, TrackAssignment> = {};
+  for (const assignment of assignments) byTrack[assignment.trackIndex] = assignment;
+
+  if (options.commandPlayback) {
+    return generateCommands(song, base, options, start, assignments);
+  }
 
   const included = song.tracks.filter(
     (t) => t.notes.length > 0 && !(options.excludeTracks ?? []).includes(t.index),
@@ -208,7 +279,7 @@ export function generate(
 
   let result;
   try {
-    result = layout(song, layoutOptions(options));
+    result = layout(song, layoutOptions(options, byTrack));
   } catch (e) {
     return {
       result: failure({
@@ -269,7 +340,7 @@ export function generate(
       playbackMode: 'redstone',
       bytes: buffer.length,
       outOfRangeNotes,
-      pitchRange: paletteRange(options),
+      pitchRange: pitchRangeFor(assignments),
       stats: {
         tickCount: result.totalTicks,
         noteBlockCount,
@@ -283,6 +354,7 @@ export function generate(
       warnings: result.warnings,
       placed: result.placed,
       rangeShift: result.rangeShift,
+      trackInstruments: result.trackInstruments,
       regions: slices.map((s, i) => ({
         name: `region_${i}`,
         trackIndex: s.trackIndex,

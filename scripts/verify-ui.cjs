@@ -147,10 +147,46 @@ function buildSource(directory) {
     if (trackRows !== result.tracks.length) {
       problems.push(`track list shows ${trackRows} rows, expected ${result.tracks.length}`);
     }
+    const firstTrackText = await page.locator('#trackListBox .track-item').first().textContent();
+    if (!firstTrackText.includes('识别：')) {
+      problems.push('track rows do not show the detected instrument');
+    }
     await shot('3-tracks');
 
     await page.locator('#btnStep3Next').click();
     await page.locator('[data-fold="fold-pitch"]').click();
+
+    // Both instrument modes must exist, and switching modes must update the summary
+    // and the resource-pack advice.
+    const modeBoxes = await page.locator('[data-cfg-group="instrument"]').count();
+    if (modeBoxes !== 2) problems.push(`expected two instrument modes, found ${modeBoxes}`);
+    await page.locator('[data-cfg-group="instrument"][data-cfg-val="native"]').click();
+    const nativeSummary = await page.locator('#sumPitch').textContent();
+    if (!nativeSummary.includes('原版乐器')) {
+      problems.push(`native mode summary is wrong: ${nativeSummary}`);
+    }
+    const nativePack = await page.locator('#packDescription').textContent();
+    if (!nativePack.includes('不建议安装')) {
+      problems.push('native mode still recommends the piano resource pack');
+    }
+    await page.locator('[data-cfg-group="instrument"][data-cfg-val="extended"]').click();
+    const extendedSummary = await page.locator('#sumPitch').textContent();
+    if (!extendedSummary.includes('扩展竖琴音域')) {
+      problems.push(`extended mode summary is wrong: ${extendedSummary}`);
+    }
+
+    // The fold summaries must follow the controls, not stay at their initial text.
+    await page.locator('[data-fold="fold-misc"]').click();
+    await page.locator('[data-cfg-group="merge"][data-cfg-val="force"]').click();
+    const miscSummary = await page.locator('#sumMisc').textContent();
+    if (!miscSummary.includes('强制合并')) {
+      problems.push(`merge summary did not update: ${miscSummary}`);
+    }
+    await page.locator('#authorInput').fill('UI check');
+    const authorSummary = await page.locator('#sumMisc').textContent();
+    if (!authorSummary.includes('UI check')) {
+      problems.push(`author summary did not update: ${authorSummary}`);
+    }
     await shot('4-config');
 
     // Every fold open is the tallest this step gets, and its own buttons must stay
@@ -212,6 +248,17 @@ function buildSource(directory) {
     await page.waitForFunction(() => document.querySelectorAll('#issueList .issue').length > 0, {
       timeout: 40000,
     });
+
+    // What each track became is shown on this step; it has to be populated, not an
+    // empty frame.
+    const assignmentRows = await page.locator('#assignmentTable .assignment-row').count();
+    if (assignmentRows < 2) {
+      problems.push(`assignment table has ${assignmentRows} rows, expected a header plus tracks`);
+    }
+    const assignmentSummary = await page.locator('#sumAssignments').textContent();
+    if (!assignmentSummary.includes('条轨')) {
+      problems.push(`assignment summary is empty: ${assignmentSummary}`);
+    }
 
     const canvas = await page.evaluate(() => {
       const element = document.getElementById('canvas');
@@ -330,6 +377,14 @@ function buildSource(directory) {
     // Nothing may claim a value it did not compute.
     if (done.blocks === '—' || done.dims === '—' || done.size === '—') {
       problems.push('the result page left a statistic unfilled');
+    }
+
+    const doneRows = await page.locator('#doneAssignments .assignment-row').count();
+    if (doneRows < 2) {
+      problems.push(`result page assignment table has ${doneRows} rows`);
+    }
+    if (!(await page.locator('#doneAssignments').isVisible())) {
+      problems.push('result page assignment table is hidden');
     }
 
     // A narrow pass, since a frameless window can be resized very small.

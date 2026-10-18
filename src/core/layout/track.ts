@@ -1,3 +1,4 @@
+import type { TrackVoicing } from '../palette/assignment';
 import type { RegionTable } from '../palette/pitchMap';
 import type { BlockResolver } from '../palette/blockTable';
 import { noteBlock, plainBlock, redstoneWire, repeater, type BlockState } from '../palette/noteBlock';
@@ -49,6 +50,12 @@ export interface BuildTrackOptions {
   resolve: BlockResolver;
   transpose?: number;
   outOfRange?: 'warn' | 'clamp' | 'octave' | 'drop';
+  /** How this track sounds; defaults to the five-slot piano palette. */
+  voicing?: TrackVoicing;
+  /** Whole-track octave shift for a fixed instrument. */
+  octaveOffset?: number;
+  /** Track title, used only as the channel-9 name fallback. */
+  trackName?: string;
   /**
    * Notes beyond the column's chord capacity are not dropped: they are recorded so
    * the caller can re-emit them on a new track.
@@ -111,6 +118,9 @@ export function buildTrack(opts: BuildTrackOptions): {
     maxChordNotes,
     collectOverflow: opts.collectOverflow === true,
     trackIndex: opts.trackIndex,
+    voicing: opts.voicing,
+    octaveOffset: opts.octaveOffset,
+    trackName: opts.trackName,
     reportRangeWarnings: opts.reportRangeWarnings !== false,
   });
 
@@ -153,12 +163,12 @@ export function buildTrack(opts: BuildTrackOptions): {
   const putNote = (x: number, z: number, n: NoteToPlace, path: Vec3[]): PlacedNote => {
     const notePos: Vec3 = { x, y: opts.config.circuitY, z };
     placements.push(place(notePos, noteBlock(n.note, n.instrument)));
-    placements.push(
-      place(
-        { x, y: opts.config.floorY, z },
-        plainBlock(opts.resolve({ slot: 'noteBase', trackIndex: opts.trackIndex, region: n.region })),
-      ),
-    );
+    // The five-slot palette picks the base by pitch region; a fixed instrument picks
+    // it by the instrument itself. A track-level override wins over either.
+    const base = n.region
+      ? opts.resolve({ slot: 'noteBase', trackIndex: opts.trackIndex, region: n.region })
+      : opts.resolve({ slot: 'noteBase', trackIndex: opts.trackIndex, instrument: n.instrument });
+    placements.push(place({ x, y: opts.config.floorY, z }, plainBlock(base)));
     return {
       notePos,
       blockPos: { x, y: opts.config.floorY, z },

@@ -3,13 +3,13 @@ import {
   chordCapacity,
   GAME_TICKS_PER_REDSTONE_TICK,
   gameTickToRedstone,
+  chordSideRows,
   groupByTick,
-  maxChordRows,
   naturalSamples,
   type TrackNote,
   type XPlan,
 } from './track';
-import type { LayoutConfig, LayoutResult, LayoutWarning, Vec3 } from './types';
+import type { LayoutConfig, LayoutResult, LayoutWarning, TrackInstrumentInfo, Vec3 } from './types';
 import { boundsOf, sizeOf } from './placement';
 import type { SongModel } from '../midi/types';
 import { coreError } from '../errors';
@@ -23,7 +23,9 @@ import {
   type BlockTable,
 } from '../palette/blockTable';
 import { secondsToTick } from '../tempo/tick';
-import type { TrackModel } from '../midi/types';
+import { chooseOctaveOffset } from '../palette/instrumentPitch';
+import { INSTRUMENTS, type NoteBlockInstrument } from '../palette/instruments';
+import type { TrackAssignment, TrackVoicing } from '../palette/assignment';
 import { buildForcedLayout } from './forced';
 
 export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
@@ -56,33 +58,76 @@ export interface LayoutOptions {
    * block overrides for a merged group come from its first original track.
    */
   mergeSameInstrument?: boolean;
-  /** Opt-in: one connected time spine per instrument; takes precedence over legacy merging. */
+  /** Opt-in: one connected time spine for the whole song; takes precedence over legacy merging. */
   forceMergeSameInstrument?: boolean;
+  /**
+   * Per-track voicing, from `assignTracks`. When omitted every track uses the
+   * five-slot piano palette, which keeps existing callers and tests unchanged.
+   */
+  assignments?: Record<number, TrackAssignment>;
 }
 
-/** Merge key: percussion is its own class, everything else groups by instrument name. */
-function instrumentKey(t: TrackModel): string {
-  return t.percussion ? 'percussion' : t.instrument;
+/**
+ * Merge key: the piano extension is one class, a fixed instrument is another, and
+ * channel-9 percussion never merges because its notes can carry different drums.
+ */
+function voicingKey(voicing: TrackVoicing, index: number): string {
+  if (voicing.kind === 'pitch') return 'piano';
+  if (voicing.kind === 'drums') return `drums:${index}`;
+  return `instrument:${voicing.instrument}`;
 }
 
-function mergeByInstrument<T extends { index: number; notes: TrackNote[]; key: string }>(inputs: T[]): T[] {
+interface LayoutInput {
+  index: number;
+  notes: TrackNote[];
+  key: string;
+  trackName: string;
+  voicing: TrackVoicing;
+  sourceIndices: number[];
+  native: NoteBlockInstrument | 'drums';
+  source: TrackAssignment['source'];
+  substituted: boolean;
+  /** False for callers that did not opt into the assignment table. */
+  assigned: boolean;
+  /** Whole-track octave shift, filled in after merging. */
+  octaveOffset: number;
+  outside: number;
+}
+
+function mergeByInstrument<T extends { notes: TrackNote[]; key: string; sourceIndices: number[] }>(
+  inputs: T[],
+): T[] {
   const groups = new Map<string, T>();
   for (const input of inputs) {
     const hit = groups.get(input.key);
-    if (hit) hit.notes.push(...input.notes);
-    else groups.set(input.key, { ...input, notes: [...input.notes] });
+    if (hit) {
+      hit.notes.push(...input.notes);
+      hit.sourceIndices.push(...input.sourceIndices);
+    } else {
+      groups.set(input.key, {
+        ...input,
+        notes: [...input.notes],
+        sourceIndices: [...input.sourceIndices],
+      });
+    }
   }
   return [...groups.values()];
 }
 
-/** Base blocks already differ per pitch region, so feed them to the resolver as region-level defaults. */
-function regionDefaults(regions: RegionTable): BlockDefaults {
+/** Base blocks differ per pitch region and per fixed instrument. */
+function blockDefaults(regions: RegionTable): BlockDefaults {
   // Only the slots this palette defines: the single-instrument palette has just one.
   const byRegion: Partial<Record<PitchRegion, Partial<BlockTable>>> = {};
   for (const [region, def] of Object.entries(regions)) {
     if (def) byRegion[region as PitchRegion] = { noteBase: def.baseBlock };
   }
-  return { global: DEFAULT_BLOCK_TABLE, regions: byRegion };
+
+  const byInstrument: Partial<Record<NoteBlockInstrument, Partial<BlockTable>>> = {};
+  for (const [id, def] of Object.entries(INSTRUMENTS)) {
+    byInstrument[id as NoteBlockInstrument] = { noteBase: def.baseBlock };
+  }
+
+  return { global: DEFAULT_BLOCK_TABLE, regions: byRegion, instruments: byInstrument };
 }
 
 /**
@@ -156,7 +201,35 @@ export function layoutResolver(
   regions: RegionTable = DEFAULT_REGIONS,
   overrides: BlockOverrides = {},
 ): BlockResolver {
-  return createBlockResolver(regionDefaults(regions), overrides);
+  return createBlockResolver(blockDefaults(regions), overrides);
+}
+
+/** One entry per source track, including the source tracks of a merged group. */
+function trackInstrumentsFor(
+  inputs: LayoutInput[],
+  assignments: Record<number, TrackAssignment>,
+): TrackInstrumentInfo[] {
+  const result: TrackInstrumentInfo[] = [];
+  for (const input of inputs) {
+    for (const trackIndex of input.sourceIndices) {
+      const assignment = assignments[trackIndex];
+      result.push({
+        trackIndex,
+        native: assignment?.native ?? input.native,
+        effective:
+          input.voicing.kind === 'pitch'
+            ? 'piano'
+            : input.voicing.kind === 'drums'
+              ? 'drums'
+              : input.voicing.instrument,
+        source: assignment?.source ?? input.source,
+        substituted: assignment?.substituted ?? input.substituted,
+        octaveOffset: input.octaveOffset,
+        outsideNotes: input.outside,
+      });
+    }
+  }
+  return result.sort((a, b) => a.trackIndex - b.trackIndex);
 }
 
 /** Top-level entry point: SongModel -> redstone layout. */
@@ -173,7 +246,8 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
 
   // Compute each track's note array once: the row pre-scan, the song-wide lead-in and
   // the main loop all reuse it.
-  const inputs: Array<{ index: number; notes: TrackNote[]; key: string }> = [];
+  const assignments = opts.assignments ?? {};
+  const inputs: LayoutInput[] = [];
   for (const t of song.tracks) {
     if (exclude.has(t.index) || t.notes.length === 0) continue;
     const notes: TrackNote[] = t.notes.map((n) => {
@@ -185,27 +259,101 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
       }
       return { tick, midi: n.midi };
     });
-    inputs.push({ index: t.index, notes, key: instrumentKey(t) });
+    const assignment = assignments[t.index];
+    const voicing: TrackVoicing = assignment?.voicing ?? { kind: 'pitch' };
+    inputs.push({
+      index: t.index,
+      notes,
+      // Without an assignment table, keep the historical merge key so existing
+      // callers still merge by MIDI instrument rather than folding everything
+      // into the piano class.
+      key: assignment ? voicingKey(voicing, t.index) : t.percussion ? 'percussion' : t.instrument,
+      trackName: t.name,
+      voicing,
+      sourceIndices: [t.index],
+      native: assignment?.native ?? 'harp',
+      source: assignment?.source ?? 'fallback',
+      substituted: assignment?.substituted ?? false,
+      assigned: assignment !== undefined,
+      octaveOffset: 0,
+      outside: 0,
+    });
   }
 
-  // Merging adds simultaneous notes, so merge first and only then work out the track
-  // spacing and the lead-in.
+  // Warnings that describe the assignment itself are reported once per source track;
+  // the octave shift is a property of the merged group, so it is computed after merging.
+  const assignmentWarnings: LayoutWarning[] = [];
+  for (const input of inputs) {
+    if (!input.assigned || input.voicing.kind === 'drums') continue;
+    if (input.source === 'fallback') {
+      assignmentWarnings.push({ code: 'INSTRUMENT_UNKNOWN', trackIndex: input.index });
+    }
+    if (input.substituted && input.native !== 'drums' && input.voicing.kind === 'instrument') {
+      assignmentWarnings.push({
+        code: 'INSTRUMENT_SUBSTITUTED',
+        trackIndex: input.index,
+        native: input.native,
+        effective: input.voicing.instrument,
+      });
+    }
+  }
+
+  // Legacy merging adds simultaneous notes, so merge first and only then work out the
+  // spacing and the whole-track octave shift. Forced merging is different: it builds one
+  // spine for the whole song, so it must keep every source track's own voicing separate.
+  const merged =
+    opts.mergeSameInstrument && !opts.forceMergeSameInstrument ? mergeByInstrument(inputs) : inputs;
+
+  const fitWarnings: LayoutWarning[] = [];
+  for (const input of merged) {
+    if (input.voicing.kind !== 'instrument') continue;
+    const fit = chooseOctaveOffset(input.notes, input.voicing.instrument);
+    input.octaveOffset = fit.offset;
+    input.outside = fit.outside;
+    if (fit.offset !== 0) {
+      fitWarnings.push({
+        code: 'INSTRUMENT_OCTAVE_SHIFT',
+        trackIndex: input.index,
+        instrument: input.voicing.instrument,
+        octaves: fit.offset,
+        notes: input.notes.length,
+      });
+    }
+    if (input.notes.length > 0) {
+      const midis = input.notes.map((note) => note.midi);
+      const span = Math.max(...midis) - Math.min(...midis);
+      if (span > 24) {
+        fitWarnings.push({
+          code: 'INSTRUMENT_RANGE_OVERFLOW',
+          trackIndex: input.index,
+          instrument: input.voicing.instrument,
+          span,
+          outside: fit.outside,
+        });
+      }
+    }
+  }
+  const instrumentWarnings = [...assignmentWarnings, ...fitWarnings];
+
   if (opts.forceMergeSameInstrument) {
-    return buildForcedLayout(mergeByInstrument(inputs), {
+    const forced = buildForcedLayout(inputs, {
       config,
       regions,
       resolve,
       transpose: opts.transpose,
       outOfRange: opts.outOfRange,
     });
+    return {
+      ...forced,
+      warnings: [...instrumentWarnings, ...forced.warnings],
+      trackInstruments: trackInstrumentsFor(inputs, assignments),
+    };
   }
-  const trackInputs = opts.mergeSameInstrument ? mergeByInstrument(inputs) : inputs;
+  const trackInputs = merged;
   const maxSideRows = Math.max(1, Math.min(14, Math.floor(config.dMax)));
   const maxChordNotes = chordCapacity(config.dMax);
-  let maxRows = 0;
   let minRt = Number.POSITIVE_INFINITY;
   for (const { notes } of trackInputs) {
-    maxRows = Math.max(maxRows, maxChordRows(notes, maxSideRows));
     for (const n of notes) minRt = Math.min(minRt, gameTickToRedstone(n.tick));
   }
 
@@ -228,9 +376,17 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   }
   const plan = buildXPlan(samples);
 
-  const pitch = config.trackPitch === 'auto' ? 2 * maxRows + 2 : config.trackPitch;
+  // Track Z spacing follows each track's own chord depth, not the song's widest chord.
+  // The previous global value reserved room for the widest track everywhere: two tracks
+  // that both used one row still sat `2 * maxRows + 2` apart, which put six or more empty
+  // rows between neighbours, far beyond what the redstone needs to stay separate.
+  const minCenterGap = config.trackPitch === 'auto' ? 0 : config.trackPitch;
+  // First free cell before the first track. A lane's upper band starts at `zCursor + 1`,
+  // so one empty row always remains between two neighbours.
+  let zCursor = -1;
+  let previousBase: number | null = null;
 
-  const warnings: LayoutWarning[] = [];
+  const warnings: LayoutWarning[] = [...instrumentWarnings];
   // One notice for the whole song. Every track is shifted by the same lead-in, so this
   // is not a per-note problem and must not be reported as one.
   if (base === 1) warnings.push({ code: 'STARTUP_LEAD_IN', ticks: GAME_TICKS_PER_REDSTONE_TICK });
@@ -238,16 +394,22 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   const placed: LayoutResult['placed'] = [];
   const rangeShiftTotal = { notes: 0, maxSemitones: 0 };
   let maxTick = 0;
-  let trackSlot = 0;
 
-  for (const { index, notes } of trackInputs) {
+  for (const input of trackInputs) {
+    const { index, notes } = input;
     // Groups past the column's chord capacity move to a new track (TRACK_SPLIT). Each
     // track has its own main line and column capacity, and they all start at the same
     // instant: the remaining notes are laid out again on the new track while their
     // trigger times stay unchanged.
     let pending = notes;
     for (let lane = 0; pending.length > 0; lane++) {
-      const zBase = maxRows + trackSlot * pitch;
+      const sides = chordSideRows(pending, maxSideRows);
+      // Reserve this lane's own branch rows plus exactly one empty row before the next
+      // lane. An explicit trackPitch is a minimum centre distance, never a collision.
+      let zBase = zCursor + 1 + sides.up;
+      if (previousBase !== null) zBase = Math.max(zBase, previousBase + minCenterGap);
+      zCursor = zBase + sides.down + 1;
+      previousBase = zBase;
       const {
         track,
         warnings: w,
@@ -263,6 +425,9 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
         resolve,
         transpose: opts.transpose?.[index] ?? 0,
         outOfRange: opts.outOfRange,
+        voicing: input.voicing,
+        octaveOffset: input.octaveOffset,
+        trackName: input.trackName,
         collectOverflow: true,
         // Only the first lane reports: the rest carry notes that were mapped and
         // reported already, and re-reporting them counted one source note several times.
@@ -276,7 +441,6 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
       rangeShiftTotal.maxSemitones = Math.max(rangeShiftTotal.maxSemitones, laneShift.maxSemitones);
       tracks.push(track);
       for (const p of pl) placed.push({ trackIndex: index, zBase, ...p });
-      trackSlot++;
 
       if (overflow.length === 0) break;
       pending = overflow.flatMap((o) => o.notes);
@@ -296,5 +460,14 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   const min: Vec3 = bounds ? bounds.min : { x: 0, y: 0, z: 0 };
   const size: Vec3 = bounds ? sizeOf(bounds.min, bounds.max) : { x: 1, y: config.circuitY + 1, z: 1 };
 
-  return { tracks, size, min, totalTicks: maxTick, warnings, placed, rangeShift: rangeShiftTotal };
+  return {
+    tracks,
+    size,
+    min,
+    totalTicks: maxTick,
+    warnings,
+    placed,
+    rangeShift: rangeShiftTotal,
+    trackInstruments: trackInstrumentsFor(trackInputs, assignments),
+  };
 }

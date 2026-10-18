@@ -1073,6 +1073,36 @@
         gap: 10px;
       }
 
+      /* What each source track became; reference, not a problem. */
+      .assignment-table {
+        grid-column: span 3;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        font-size: 12.5px;
+      }
+      .assignment-row {
+        display: grid;
+        grid-template-columns: 52px 1.2fr 56px 1.4fr;
+        gap: 8px;
+        align-items: baseline;
+        padding: 5px 0;
+        border-bottom: 1px solid rgba(20, 20, 19, 0.06);
+      }
+      .assignment-row.head {
+        font-weight: 700;
+        color: var(--ink-secondary);
+        border-bottom-color: rgba(20, 20, 19, 0.14);
+      }
+      .assignment-row span:last-child {
+        color: var(--ink-secondary);
+      }
+      .assignment-empty {
+        color: var(--ink-muted);
+        padding: 6px 0;
+      }
+
       /* Group heading; the actionable group is accented, the rest stay grey. */
       .issue-group {
         margin: 8px 0 -2px;
@@ -1705,8 +1735,8 @@
               <div class="fold-card" id="fold-pitch">
                 <button type="button" class="fold-trigger" data-fold="fold-pitch">
                   <div>
-                    <div class="fold-title">音域与复音</div>
-                    <div class="fold-val" id="sumPitch">全音域 F#1–F#7 · 最多 14 音同时</div>
+                    <div class="fold-title">乐器与复音</div>
+                    <div class="fold-val" id="sumPitch">扩展竖琴音域 · 钢琴 F#1–F#7 · 最多 14 音同时</div>
                   </div>
                   <svg
                     width="16"
@@ -1723,25 +1753,25 @@
                   <button
                     type="button"
                     class="opt-box selected"
-                    data-cfg-group="palette"
-                    data-cfg-val="full"
-                    data-cfg-label="全竖琴音域 F#1–F#7"
+                    data-cfg-group="instrument"
+                    data-cfg-val="extended"
+                    data-cfg-label="扩展竖琴音域"
                   >
-                    <span class="opt-title">全竖琴音域</span>
+                    <span class="opt-title">扩展竖琴音域</span>
                     <span class="opt-desc">
-                      用竖琴的音色替换其它音符盒方块的音频，换来 F#1–F#7 完整音域；需要配套资源包
+                      钢琴/未识别轨用五种音色拼出 F#1–F#7；其它乐器保持原版，被占用的音色换成相近音色
                     </span>
                   </button>
                   <button
                     type="button"
                     class="opt-box"
-                    data-cfg-group="palette"
-                    data-cfg-val="piano"
-                    data-cfg-label="不扩展音域"
+                    data-cfg-group="instrument"
+                    data-cfg-val="native"
+                    data-cfg-label="原版乐器"
                   >
-                    <span class="opt-title">不扩展音域</span>
+                    <span class="opt-title">原版乐器</span>
                     <span class="opt-desc">
-                      只用竖琴一种音色，F#3–F#5；不需要资源包，超出这个音域的音会按下面的策略处理
+                      每条轨跟随 MIDI 乐器，各两个八度；钢琴轨用竖琴 F#3–F#5，不占其它音色
                     </span>
                   </button>
                   <div
@@ -2043,7 +2073,7 @@
             </div>
 
             <!--
-              The optional resource pack. The wording is deliberate: the full range uses
+              The optional resource pack. The wording is deliberate: extended mode uses
               five vanilla instruments and plays without the pack; the pack only makes the
               five octave bands sound like one piano. Calling it required is exactly what
               this feature exists to correct.
@@ -2061,9 +2091,14 @@
               "
             >
               <div>
-                <div style="font-size: 14.5px; font-weight: 700">配套资源包（全音域建议安装）</div>
-                <div style="font-size: 12.5px; color: var(--ink-secondary); margin-top: 4px">
-                  全音域由五种原版基底音色拼成：bass、guitar、harp、flute、bell。旋律跨过八度边界时音色会跟着换，听起来不像同一架琴。
+                <div id="packTitle" style="font-size: 14.5px; font-weight: 700">
+                  配套资源包（扩展竖琴音域建议安装）
+                </div>
+                <div
+                  id="packDescription"
+                  style="font-size: 12.5px; color: var(--ink-secondary); margin-top: 4px"
+                >
+                  扩展竖琴音域的五种音色（bass、guitar、harp、flute、bell）各有一段钢琴采样；装包后它们听起来像同一架钢琴。原版乐器模式不需要它，装了反而会把原生这五种音色也换成钢琴。
                 </div>
               </div>
               <button type="button" id="btnSavePack" class="pill-tag" style="flex: none">
@@ -2087,6 +2122,32 @@
               <span class="step-index tnum">STEP 06 / 08</span>
               <h2 class="step-h1">检查结果</h2>
               <p id="checkSummary" class="step-sub">生成时发现的问题会列在这里。</p>
+            </div>
+
+            <!--
+            What each source track became. It is reference, not a problem, so it is a
+            fold rather than part of the issue list.
+          -->
+            <div class="fold-card" id="fold-assignments">
+              <button type="button" class="fold-trigger" data-fold="fold-assignments">
+                <div>
+                  <div class="fold-title">乐器分配</div>
+                  <div class="fold-val" id="sumAssignments">生成后显示每条轨的乐器</div>
+                </div>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+              <div class="fold-content">
+                <div id="assignmentTable" class="assignment-table"></div>
+              </div>
             </div>
 
             <!--
@@ -2227,6 +2288,9 @@
             </div>
 
             <div id="doneWarningBox" class="preset-notice" style="display: none"></div>
+
+            <!-- Same table as the check step, kept here so the result is self-contained. -->
+            <div id="doneAssignments" class="assignment-table" style="display: none"></div>
 
             <!-- Three steps to use it in game. -->
             <div class="grid-3">

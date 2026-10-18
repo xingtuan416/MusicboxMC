@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { INSTRUMENTS, type NoteBlockInstrument } from '../palette/instruments';
 import type { ScheduledEvent, Voice } from './schedule';
 
 /**
@@ -21,8 +22,10 @@ const EMPTY_FRAME_LIST_BYTES = 2;
  */
 const COMMAND_CHUNK_BUDGET_BYTES = 24000;
 
-/** The five note-block sound events, in the order the pitch regions use them. */
-export const NOTE_BLOCK_INSTRUMENTS = ['bass', 'guitar', 'harp', 'flute', 'bell'] as const;
+/** Every note-block instrument, in the order the instrument table defines them. */
+export const NOTE_BLOCK_INSTRUMENTS: readonly NoteBlockInstrument[] = Object.keys(
+  INSTRUMENTS,
+) as NoteBlockInstrument[];
 
 /**
  * Scoreboard namespace for a set of events.
@@ -107,13 +110,14 @@ export function buildBootstrap(objective: string, storage: string, frames: numbe
   ];
 }
 
-/** The Stop control: clear the flag, then silence the five note-block sounds. */
-export function buildStopCommands(objective: string): string[] {
+/** The Stop control: clear the flag, then silence the instruments actually used. */
+export function buildStopCommands(
+  objective: string,
+  instruments: readonly NoteBlockInstrument[] = NOTE_BLOCK_INSTRUMENTS,
+): string[] {
   return [
     `scoreboard players set #playing ${objective} 0`,
     '',
-    ...NOTE_BLOCK_INSTRUMENTS.map(
-      (instrument) => `stopsound @a record minecraft:block.note_block.${instrument}`,
-    ),
+    ...instruments.map((instrument) => `stopsound @a record minecraft:${INSTRUMENTS[instrument].soundEvent}`),
   ];
 }

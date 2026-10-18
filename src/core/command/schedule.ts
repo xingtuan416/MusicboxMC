@@ -1,5 +1,19 @@
 import type { SongModel } from '../midi/types';
-import { mapPitch, DEFAULT_REGIONS, type OutOfRangePolicy, type RegionTable } from '../palette/pitchMap';
+import type { TrackVoicing } from '../palette/assignment';
+import {
+  chooseOctaveOffset,
+  mapDrumNote,
+  mapPitchToInstrument,
+  type InstrumentPitch,
+} from '../palette/instrumentPitch';
+import { INSTRUMENTS, isDrumInstrument, type NoteBlockInstrument } from '../palette/instruments';
+import {
+  mapPitch,
+  DEFAULT_REGIONS,
+  type MappedPitch,
+  type OutOfRangePolicy,
+  type RegionTable,
+} from '../palette/pitchMap';
 import type { LayoutWarning } from '../layout/types';
 import { secondsToTick } from '../tempo/tick';
 import { coreError } from '../errors';
@@ -23,6 +37,8 @@ export interface ScheduledEvent {
   tick: number;
   sound: string;
   pitch: string;
+  /** The note-block instrument, kept so Stop can silence exactly what was used. */
+  instrument: NoteBlockInstrument;
 }
 
 /** A distinct (sound, pitch) pair, and the most copies of it that sound at once. */
@@ -47,6 +63,8 @@ export interface ScheduleOptions {
   regions?: RegionTable;
   excludeTracks?: number[];
   transpose?: Record<number, number>;
+  /** Per-track voicing; omitted means every track uses the five-slot piano palette. */
+  assignments?: Record<number, TrackVoicing>;
 }
 
 /**
@@ -75,9 +93,66 @@ export function collectEvents(
     if (excluded.has(track.index)) continue;
     const transpose = options.transpose?.[track.index] ?? 0;
     if (!Number.isFinite(transpose)) throw coreError('COMMAND_INVALID_TRANSPOSE');
+    const voicing: TrackVoicing = options.assignments?.[track.index] ?? { kind: 'pitch' };
 
+    let octaveOffset = 0;
+    if (voicing.kind === 'instrument') {
+      const fit = chooseOctaveOffset(track.notes, voicing.instrument);
+      octaveOffset = fit.offset;
+      if (fit.offset !== 0) {
+        warnings.push({
+          code: 'INSTRUMENT_OCTAVE_SHIFT',
+          trackIndex: track.index,
+          instrument: voicing.instrument,
+          octaves: fit.offset,
+          notes: track.notes.length,
+        });
+      }
+      const midis = track.notes.map((note) => note.midi);
+      if (midis.length > 0) {
+        const span = Math.max(...midis) - Math.min(...midis);
+        if (span > 24) {
+          warnings.push({
+            code: 'INSTRUMENT_RANGE_OVERFLOW',
+            trackIndex: track.index,
+            instrument: voicing.instrument,
+            span,
+            outside: fit.outside,
+          });
+        }
+      }
+    }
+
+    let droppedDrums = 0;
     for (const note of track.notes) {
-      const mapped = mapPitch(note.midi, options.regions ?? DEFAULT_REGIONS, options.outOfRange, transpose);
+      let mapped: MappedPitch | InstrumentPitch;
+      if (voicing.kind === 'pitch') {
+        mapped = mapPitch(note.midi, options.regions ?? DEFAULT_REGIONS, options.outOfRange, transpose);
+      } else if (voicing.kind === 'instrument') {
+        mapped = mapPitchToInstrument(
+          note.midi,
+          voicing.instrument,
+          options.outOfRange,
+          transpose,
+          octaveOffset,
+        );
+      } else {
+        const drum = mapDrumNote(note.midi, track.name);
+        if (drum === null) {
+          droppedDrums += 1;
+          continue;
+        }
+        mapped = drum;
+      }
+
+      let rangeFields: { instrument?: NoteBlockInstrument; low?: number; high?: number } = {};
+      if (voicing.kind === 'instrument') {
+        const range = INSTRUMENTS[voicing.instrument].range;
+        if (range !== null) {
+          rangeFields = { instrument: voicing.instrument, low: range[0], high: range[1] };
+        }
+      }
+
       // Resolved before the drop check so a warning can name the tick it is about.
       const tick = secondsToTick(note.timeSec, options.baseTps);
       if (mapped.dropped || (mapped.degraded && options.outOfRange !== 'octave')) {
@@ -87,6 +162,7 @@ export function collectEvents(
           action: mapped.dropped ? 'drop' : options.outOfRange,
           trackIndex: track.index,
           tick,
+          ...rangeFields,
         });
       }
       if (mapped.dropped) continue;
@@ -96,9 +172,15 @@ export function collectEvents(
       }
       events.push({
         tick,
-        sound: `minecraft:block.note_block.${mapped.instrument}`,
-        pitch: playbackPitch(mapped.note),
+        sound: `minecraft:${INSTRUMENTS[mapped.instrument].soundEvent}`,
+        // Fixed-pitch drums ignore the note value, so they always play at 1.0.
+        pitch: isDrumInstrument(mapped.instrument) ? '1' : playbackPitch(mapped.note),
+        instrument: mapped.instrument,
       });
+    }
+
+    if (droppedDrums > 0) {
+      warnings.push({ code: 'DRUM_NOTES_DROPPED', trackIndex: track.index, count: droppedDrums });
     }
   }
 

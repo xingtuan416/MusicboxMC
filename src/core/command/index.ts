@@ -1,4 +1,6 @@
 import type { SongModel } from '../midi/types';
+import type { TrackVoicing } from '../palette/assignment';
+import type { NoteBlockInstrument } from '../palette/instruments';
 import type { OutOfRangePolicy, RegionTable } from '../palette/pitchMap';
 import type { RegionData } from '../litematic/build';
 import type { LayoutWarning, Vec3 } from '../layout/types';
@@ -61,6 +63,8 @@ export interface CommandPlaybackOptions {
   regions?: RegionTable;
   excludeTracks?: number[];
   transpose?: Record<number, number>;
+  /** Per-track voicing; omitted means every track uses the five-slot piano palette. */
+  assignments?: Record<number, TrackVoicing>;
   commandChainBudget?: number;
 }
 
@@ -76,6 +80,8 @@ export interface CommandPlaybackInfo {
   distinctVoices: number;
   /** Maximum per-voice simultaneous multiplicities; every original note is preserved. */
   reusableSlots: number;
+  /** Instruments that actually appear in the schedule, for Stop and for reporting. */
+  instruments: NoteBlockInstrument[];
   start: Vec3;
   stop: Vec3;
   clock: Vec3;
@@ -114,8 +120,10 @@ export function buildCommandPlayback(
     regions: opts.regions,
     excludeTracks: opts.excludeTracks,
     transpose: opts.transpose,
+    assignments: opts.assignments,
   });
   const { events, voices, frames, peakNotes } = schedule;
+  const instruments = [...new Set(events.map((event) => event.instrument))];
 
   const objective = scoreboardNamespace(events);
   const storage = storageKey(objective);
@@ -138,7 +146,7 @@ export function buildCommandPlayback(
 
   const controls: Control[] = [
     { pos: start, label: 'Start / Restart', commands: bootstrap },
-    { pos: stop, label: 'Stop', commands: buildStopCommands(objective) },
+    { pos: stop, label: 'Stop', commands: buildStopCommands(objective, instruments) },
   ];
   const player = buildPlayer({ commands, controls, power });
 
@@ -174,6 +182,7 @@ export function buildCommandPlayback(
       scheduledEvents: frames.length,
       distinctVoices: voices.length,
       reusableSlots,
+      instruments,
       start,
       stop: player.stop,
       clock,

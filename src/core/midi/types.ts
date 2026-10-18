@@ -25,6 +25,14 @@ export interface TrackModel {
   index: number;
   name: string;
   channel: number;
+  /**
+   * General MIDI program number (0-127), when the file declares one.
+   *
+   * The instrument *name* is a human-readable label from the library and is not
+   * reliable enough to drive the note-block choice on its own; the program number
+   * is what the detection step consults first.
+   */
+  program?: number;
   instrument: string;
   percussion: boolean;
   notes: NoteEvent[];

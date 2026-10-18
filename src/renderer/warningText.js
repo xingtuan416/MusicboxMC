@@ -1,3 +1,4 @@
+import { instrumentName, instrumentRange } from './instruments.js';
 import { pitchName, pitchRangeLabel } from './pitch.js';
 
 /**
@@ -31,14 +32,43 @@ const WARN_TEXT = {
     `也需要一个中继器延迟才能驱动。曲内相对时序不变，不需要处理。`,
   OUT_OF_RANGE: (w, ctx) =>
     `${ctx.label(w.trackIndex)} · ${ctx.at(w.tick)} · MIDI ${w.midi}（${pitchName(w.midi)}）` +
-    `超出电路音域 ${pitchRangeLabel(ctx.range)}，处理方式：` +
+    `超出${rangeTextFor(w, ctx)}，处理方式：` +
     `${OUT_OF_RANGE_ACTION_TEXT[w.action] || w.action}`,
   TIMING_ADJUSTED: (w, ctx) =>
     `${ctx.label(w.trackIndex)} · z${w.z} 行 · ${ctx.at(w.tick)} 的音实际在 ` +
     `${ctx.at(w.actual)} 触发，偏移 ${w.actual - w.tick > 0 ? '+' : ''}${w.actual - w.tick} 游戏刻`,
   TRACK_SPLIT: (w) => `tick ${w.tick}：${w.notes} 个音密集放不下，已自动拆到新音轨`,
   SPATIAL_DRIFT: (w) => `tick ${w.tick}：该处空间偏差 ${w.drift} 格，超出多轨对齐容差`,
+  INSTRUMENT_UNKNOWN: (w, ctx) =>
+    `${ctx.label(w.trackIndex)} 没能从 GM 音色或轨道名识别出乐器，按竖琴处理。` +
+    `需要别的音色时，把轨道名改成乐器名即可。`,
+  INSTRUMENT_SUBSTITUTED: (w, ctx) =>
+    `${ctx.label(w.trackIndex)} 原生是${instrumentName(w.native)}；扩展竖琴音域占用了这个音色，` +
+    `改用${instrumentName(w.effective)}。`,
+  INSTRUMENT_OCTAVE_SHIFT: (w, ctx) =>
+    `${ctx.label(w.trackIndex)} 为放进${instrumentName(w.instrument)}的两个八度，` +
+    `整轨${w.octaves > 0 ? '升' : '降'} ${Math.abs(w.octaves)} 个八度（${w.notes} 个音）。`,
+  INSTRUMENT_RANGE_OVERFLOW: (w, ctx) =>
+    `${ctx.label(w.trackIndex)} 跨度 ${w.span} 个半音，超过${instrumentName(w.instrument)}的 24 个半音；` +
+    `${w.outside} 个音会单独移调。`,
+  DRUM_NOTES_DROPPED: (w, ctx) =>
+    `${ctx.label(w.trackIndex)} 有 ${w.count} 个打击乐音符无法对应到底鼓/军鼓/踩镲，已跳过。`,
 };
+
+/** "竖琴音域 F#3–F#5" or "电路音域 F#1–F#7", depending on the track. */
+function rangeTextFor(w, ctx) {
+  if (Number.isFinite(w.low) && Number.isFinite(w.high)) {
+    const name = w.instrument ? instrumentName(w.instrument) : '电路';
+    return `${name}音域 ${pitchRangeLabel({ low: w.low, high: w.high })}`;
+  }
+  const range = ctx.rangeFor(w);
+  const info = ctx.infoFor(w.trackIndex);
+  const label =
+    info && info.effective !== 'piano' && info.effective !== 'drums'
+      ? `${instrumentName(info.effective)}音域`
+      : '电路音域';
+  return range ? `${label} ${pitchRangeLabel(range)}` : label;
+}
 
 const OUT_OF_RANGE_ACTION_TEXT = {
   warn: '提示并八度移调',
@@ -56,10 +86,15 @@ const WARN_TITLE = {
   FORCE_MERGE_LEAD_IN: '合并音轨带来的统一延迟',
   FANOUT_EXPANDED: '和弦使用多级分支',
   STARTUP_LEAD_IN: '全曲统一延后',
-  OUT_OF_RANGE: '音符超出电路音域',
+  OUT_OF_RANGE: '音符超出乐器音域',
   TIMING_ADJUSTED: '触发时刻被调整',
   TRACK_SPLIT: '音轨被拆分',
   SPATIAL_DRIFT: '多轨对齐出现偏差',
+  INSTRUMENT_UNKNOWN: '乐器未能识别',
+  INSTRUMENT_SUBSTITUTED: '扩展模式下换了相近音色',
+  INSTRUMENT_OCTAVE_SHIFT: '整轨移到了别的八度',
+  INSTRUMENT_RANGE_OVERFLOW: '音域跨度超出两个八度',
+  DRUM_NOTES_DROPPED: '打击乐音符被跳过',
 };
 
 function warnSeverity(code) {
@@ -70,7 +105,9 @@ function warnSeverity(code) {
     code === 'SPATIAL_DRIFT' ||
     code === 'COMMAND_SOUND_PRESSURE' ||
     code === 'COMMAND_STRUCTURE_SIZE' ||
-    code === 'COMMAND_PLAYBACK_REQUIREMENTS'
+    code === 'COMMAND_PLAYBACK_REQUIREMENTS' ||
+    code === 'INSTRUMENT_RANGE_OVERFLOW' ||
+    code === 'DRUM_NOTES_DROPPED'
   ) {
     return 'warn';
   }
@@ -103,10 +140,31 @@ function trackLabel(result, index) {
   return track && track.name ? `轨${index}「${track.name}」` : `轨${index}`;
 }
 
-/** The context every warning text needs: the pitch range, a track name, a readable time. */
+/** The context every warning text needs: a range, a track name, a readable time. */
 function warningContext(result) {
+  const infoFor = (index) => (result?.trackInstruments || []).find((entry) => entry.trackIndex === index);
+
   return {
     range: result?.pitchRange,
+    infoFor,
+    /**
+     * The range a warning is about.
+     *
+     * A fixed-instrument note carries its own `instrument`/`low`/`high`. The
+     * five-slot piano extension uses the result's piano span; drums have no range.
+     */
+    rangeFor: (warning) => {
+      if (Number.isFinite(warning.low) && Number.isFinite(warning.high)) {
+        return { low: warning.low, high: warning.high };
+      }
+      const info = infoFor(warning.trackIndex);
+      if (info) {
+        if (info.effective === 'piano') return result?.pitchRange ?? null;
+        if (info.effective === 'drums') return null;
+        return instrumentRange(info.effective);
+      }
+      return result?.pitchRange ?? null;
+    },
     label: (index) => trackLabel(result, index),
     at: (tick) => `tick ${tick}（${(tick / 20).toFixed(2)} 秒）`,
   };

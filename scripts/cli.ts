@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { parseMidi } from '../src/core/midi/parse';
+import { detectTrack } from '../src/core/palette/instrumentMap';
 import { formatDuration, speedTable } from '../src/core/tempo/speed';
 import { MAX_QUANTIZE_ERROR_MS, secondsToTick } from '../src/core/tempo/tick';
 
@@ -32,8 +33,11 @@ for (const t of song.tempos) {
 
 console.log('\n== 音轨与音符事件 ==');
 for (const tr of song.tracks) {
+  const detection = detectTrack(tr);
   console.log(
-    `\n[轨 ${tr.index}] ${tr.name || '(无名)'}  乐器=${tr.instrument}  ch=${tr.channel}${tr.percussion ? ' (打击乐)' : ''}  音符数=${tr.notes.length}`,
+    `\n[轨 ${tr.index}] ${tr.name || '(无名)'}  乐器=${tr.instrument}  GM=${tr.program ?? '(无)'}  ` +
+      `ch=${tr.channel}${tr.percussion ? ' (打击乐)' : ''}  ` +
+      `识别=${detection.native}(${detection.source})  音符数=${tr.notes.length}`,
   );
   for (const n of tr.notes) {
     const tick = secondsToTick(n.timeSec);

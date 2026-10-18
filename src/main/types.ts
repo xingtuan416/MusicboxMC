@@ -1,5 +1,7 @@
 import type { BlockOverrides } from '../core/palette/blockTable';
-import type { LayoutResult, LayoutWarning } from '../core/layout/types';
+import type { InstrumentMode } from '../core/palette/assignment';
+import type { NoteBlockInstrument } from '../core/palette/instruments';
+import type { LayoutResult, LayoutWarning, TrackInstrumentInfo } from '../core/layout/types';
 import type { SpeedRow } from '../core/tempo/speed';
 import type { CommandPlaybackInfo } from '../core/command';
 
@@ -16,9 +18,15 @@ export interface GenerateOptions {
   dMax?: number;
   outOfRange?: 'warn' | 'clamp' | 'octave' | 'drop';
   /**
-   * Use all five note-block instruments to reach F#1-F#7 (the default), or the harp
-   * slot alone for F#3-F#5. Only the wide palette benefits from the companion
-   * resource pack; the narrow one never needs it.
+   * Instrument mode. `extended` (the default) keeps the five-slot piano range and
+   * plays the other instruments natively; `native` plays every track with its own
+   * instrument. `extendedRange` remains as a compatibility alias.
+   */
+  instrumentMode?: InstrumentMode;
+  /**
+   * Legacy alias: `false` means native mode, `true`/omitted means extended mode.
+   *
+   * @deprecated use `instrumentMode`
    */
   extendedRange?: boolean;
   excludeTracks?: number[];
@@ -27,7 +35,7 @@ export interface GenerateOptions {
   blocks?: BlockOverrides;
   /** Merge same-instrument tracks into one spine (percussion is its own class) */
   mergeSameInstrument?: boolean;
-  /** One connected spine per instrument, with song-wide branch-delay compensation. */
+  /** One connected spine for the whole song, with song-wide branch-delay compensation. */
   forceMergeSameInstrument?: boolean;
   /** Independent opt-in backend: all retained notes use per-player playsound commands. */
   commandPlayback?: boolean;
@@ -41,8 +49,13 @@ export interface TrackSummary {
   index: number;
   name: string;
   channel: number;
+  /** General MIDI program number, when the file declares one. */
+  program?: number;
   instrument: string;
   percussion: boolean;
+  /** Native instrument detection; `drums` for a mixed channel-9 track. */
+  detectedInstrument: NoteBlockInstrument | 'drums';
+  detectionSource: 'gm' | 'name' | 'drum' | 'fallback';
   noteCount: number;
   minTick: number;
   maxTick: number;
@@ -146,6 +159,8 @@ export interface GenerateResult extends AnalyzeResult {
    * deliberately silent, so a song whose notes were all shifted reported zero.
    */
   rangeShift: { notes: number; maxSemitones: number };
+  /** What each source track became after mode selection and detection. */
+  trackInstruments: TrackInstrumentInfo[];
   regions: RegionSummary[];
   preview: PreviewData;
 }
