@@ -176,6 +176,7 @@ npm run dist:dir   # 只出免安装目录，用于快速验证
 
 ## 文档
 
+- [文档索引](docs/README.md) —— 全部设计文档的入口
 - [架构](docs/architecture.md) —— 分层、数据流、该改哪里
 - [红石模型](docs/redstone-model.md) —— 拓扑、时序、对齐，以及**故意不做**的仿真
 - [命令方块播放](docs/command-playback.md) —— 时刻表、命令链、预算与游戏内要求

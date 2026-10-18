@@ -199,6 +199,7 @@ code lives, and the part worth reading if you want to change how a circuit is bu
 
 ## Documentation
 
+- [Documentation index](docs/README.md) — every design document in one place
 - [Architecture](docs/architecture.md) — layering, data flow, where to change what
 - [The redstone model](docs/redstone-model.md) — topology, timing, alignment, and
   what is deliberately not simulated

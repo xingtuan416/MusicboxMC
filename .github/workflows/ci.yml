@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   verify:
-    name: typecheck / test / build (node ${{ matrix.node }})
+    name: format / lint / typecheck / test / build (node ${{ matrix.node }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -31,14 +31,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint
-        run: npm run lint
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Test
-        run: npm test
-
-      - name: Build
-        run: npm run build
+      - name: Verify
+        run: npm run check

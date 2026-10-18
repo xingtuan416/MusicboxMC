@@ -31,14 +31,15 @@ npm run dist:dir   # unpacked directory only, much faster
 
 ## Before you open a pull request
 
-Run the same four checks CI runs:
+Run the same checks CI runs:
 
 ```bash
-npm run lint
-npm run typecheck
-npm test
-npm run build
+npm run check
 ```
+
+That runs `format:check`, `lint`, `typecheck`, `test` and `build` in order. To
+run one of them on its own, use `npm run format:check`, `npm run lint`,
+`npm run typecheck`, `npm test` or `npm run build`.
 
 ### Checking the interface
 
