@@ -44,6 +44,22 @@ export default tseslint.config(
   },
 
   {
+    // The verification scripts are CommonJS Node programs. Two of them also hand
+    // functions to Playwright's `page.evaluate`, and those run in the page, so the
+    // browser globals are declared here alongside Node's rather than splitting every
+    // file into a Node half and a page half.
+    files: ['scripts/**/*.cjs'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: { ...globals.node, ...globals.browser },
+    },
+    rules: {
+      // CommonJS is the format Electron's own tooling expects for these scripts.
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+
+  {
     rules: {
       // Full-width spaces (U+3000) are deliberate CJK typography inside UI strings.
       'no-irregular-whitespace': ['error', { skipStrings: true, skipTemplates: true, skipComments: true }],

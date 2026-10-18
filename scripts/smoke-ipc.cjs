@@ -17,7 +17,7 @@ const { join, resolve } = require('node:path');
  * `analyze`, `generate`, `saveResourcePack`, `windowControl` - runs exactly as the
  * interface runs it.
  *
- *   node out/smoke-ipc.cjs [song.mid]
+ *   node scripts/smoke-ipc.cjs [song.mid]
  */
 (async () => {
   const song = process.argv[2] ? resolve(process.argv[2]) : resolve('test/fixtures/delayed-tempo.mid');
@@ -26,7 +26,6 @@ const { join, resolve } = require('node:path');
   const work = join(tmpdir(), 'musicboxmc-smoke-' + Date.now());
   mkdirSync(work, { recursive: true });
   const output = join(work, 'smoke.litematic');
-  const pack = join(work, 'pack.zip');
 
   const problems = [];
   const check = (ok, message) => {
@@ -95,9 +94,9 @@ const { join, resolve } = require('node:path');
         ((generated?.stats?.noteBlockCount ?? 0) + (generated?.stats?.circuitBlocks ?? 0)),
     );
 
-    // 4. The four dialog-driven calls are deliberately not exercised here.
+    // 4. The three dialog-driven calls are deliberately not exercised here.
     //
-    // `chooseMidi`, `chooseOutput`, `chooseDirectory` and `saveResourcePack` each open a
+    // `chooseMidi`, `chooseDirectory` and `saveResourcePack` each open a
     // native modal that nothing can answer under automation; calling one takes the renderer
     // down with it, which is how the first version of this script failed. The work behind
     // the dialogs is the same code the non-dialog calls above already reach - a path in, a
