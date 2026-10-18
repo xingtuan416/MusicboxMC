@@ -18,8 +18,9 @@ command chain has to walk all 46,293 steps on every single game tick.
 Instead, `core/command/index.ts` stores the schedule as data and reuses a
 bounded number of commands:
 
-- **Voice** — a distinct `(sound, pitch)` pair. At most five note-block
-  instruments × 25 note values, so a few dozen in practice.
+- **Voice** — a distinct `(sound, pitch)` pair. At most sixteen note-block
+  instruments × 25 note values (the three drums carry one fixed pitch), so a few
+  dozen in practice.
 - **Frame** — one game tick on which anything happens, stored as
   `[tick, countForVoice0, countForVoice1, ...]`.
 - **Slot** — a command per `(voice, occurrence)`. A voice that can sound 5 times
@@ -69,8 +70,8 @@ Two controls are placed alongside:
 
 - **Start / Restart** — writes a redstone block next to the clock, running the
   bootstrap chain.
-- **Stop** — clears `#playing`, removes the power block, and stops the five
-  note-block sound events.
+- **Stop** — clears `#playing`, removes the power block, and stops the note-block
+  sound events the schedule actually used.
 
 ## Scoreboard namespace
 

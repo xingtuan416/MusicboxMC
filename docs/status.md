@@ -5,32 +5,38 @@
 
 ## 一句话
 
-0.2.1 已发布；工作区有一批未提交的界面、文档、注释与质量闸门修复，等用户测试后提交。
+0.2.2 已发布：多乐器支持（16 种乐器、两种模式）、紧凑和弦行与多轨间距修复，本地闸门全绿。
 
 ## 位置
 
 | 项       | 值                                                                                           |
 | -------- | -------------------------------------------------------------------------------------------- |
-| 版本     | `0.2.1`（`package.json`、tag、Release 一致）                                                 |
+| 版本     | `0.2.2`（`package.json`、tag、Release 一致）                                                 |
 | 分支     | `main`，与远端同步                                                                           |
-| 最新发布 | `v0.2.1`：安装包 79.7 MB、免安装 109.3 MB、资源包 51 KB                                      |
+| 最新发布 | `v0.2.2`：安装包 79.7 MB、免安装 109.3 MB、资源包 51 KB                                      |
 | 备份     | 分支 `backup/before-ui-integration`、标签 `backup-before-ui-integration`、`v0.1.0` —— 不要删 |
 
 ## 质量闸门（最近一次实测，2026-10-18）
 
-| 项                     | 结果                                                          |
-| ---------------------- | ------------------------------------------------------------- |
-| `npm test`             | 27 文件 / 212 用例通过                                        |
-| `npm run lint`         | 无输出（`scripts/**/*.cjs` 已按 CommonJS 配置）               |
-| `npm run typecheck`    | 无输出                                                        |
-| `npm run build`        | 通过                                                          |
-| `npm run smoke`        | 10 项通过（真 IPC、真写盘、真窗口，bridge 暴露 11 个方法）    |
-| `npm run verify:ui`    | 通过，无 console 错误、无横向溢出                             |
-| `npm run verify:about` | 通过（版本 0.2.1、许可 GPL-3.0、标题栏图标 1063×1063 已解码） |
-| CI                     | 绿：run #31（`11b3280`），Node 20 / 22 各 11/11 步通过        |
+| 项                     | 结果                                                              |
+| ---------------------- | ----------------------------------------------------------------- |
+| `npm test`             | 33 文件 / 270 用例通过                                            |
+| `npm run lint`         | 无输出（`scripts/**/*.cjs` 已按 CommonJS 配置）                   |
+| `npm run typecheck`    | 无输出                                                            |
+| `npm run build`        | 通过                                                              |
+| `npm run smoke`        | 10 项通过（16 轨夹具走真 IPC：346 音、16 轨、约 2.6 KB 写盘一致） |
+| `npm run verify:ui`    | 通过，无 console 错误、无横向溢出；覆盖模式切换与分配表           |
+| `npm run verify:about` | 通过（版本 0.2.2、许可 GPL-3.0、标题栏图标 1063×1063 已解码）     |
+| `npm run format:check` | 通过                                                              |
+| CI                     | 本轮未推送；上一次绿是 run #31（`11b3280`），不代表当前工作区     |
 
 ## 已完成（按时间倒序，只留结论）
 
+- **0.2.2 发布**：多乐器支持、紧凑和弦行、多轨间距与强制合并修复；安装包/免安装/资源包已上传 GitHub Releases，tag `v0.2.2`。
+- **配置摘要联动**：第 4 步「其它」折叠下的小字现在随合并模式、作者、基准 TPS 更新；之前一直停在初始文案。`verify:ui` 增加了对应检查。
+- **和弦行相邻**：强制合并的紧凑路径改成普通和弦列——≤3 音只给内联音一个中继器、两侧靠单跳；≥4 音每行一个同延迟中继器，音符行**相邻不留空**；超过 27 音的极端和弦才退回 staged 两行总线。新增 `test/chordSpacing.test.ts`（3/4/20 音）。
+- **间距与强制合并修复**：普通模式的 Z 间距改为按每条轨自己的和弦上下行数计算，相邻轨之间固定留一格空行（16 轨夹具从每轨间 5–6 格缩到 1 格）；「强制合并」改为全曲合成一条主线（之前是每种乐器一条，16 轨仍有 12 条），每个音仍按自己源轨的乐器/八度映射，`forcedValidation` 校验整条主线；预览初始定位到音符最多的主行，不再开在空白上支。
+- **多乐器支持（0.2.2）**：16 种经典音符盒乐器（13 有音高 + 3 固定鼓）；识别顺序 GM 音色 → 通道 9 鼓 → 轨道名 → 竖琴；两种模式——「原版乐器」与默认的「扩展竖琴音域」（五槽钢琴保留，其余乐器原版，被占用的 bass/guitar/flute/bell 用 didgeridoo/banjo/bit/chime 替代）；整轨先选八度、个别音再兜底；红石与命令后端、界面、预览颜色、警告文案、文档全部接入。16 轨夹具 `test/fixtures/happy-birthday-16.mid` 入库，新增 58 个测试。
 - **注释统一**：`index.html` 的 33 条 CSS/HTML 注释与 `scripts/fresh-dist.cjs` 的 JSDoc 全部改为英文；顺手修正 CSS 里过时的步骤编号（生成进度是第 7 步、问题清单是第 6 步）和 `265px`→`240px` 的高度下限。代码注释现在只有 `textEncoding.ts` 的乱码示例保留中文（`AGENTS.md` 的既定例外）。
 - **`index.html` 标签核对**：源文件 `<div>` 与 `</div>` 各 142 个，标签栈无未闭合/多余项，lxml 解析与 Chromium DOM 也都是 142 个——原「多一个 `</div>`」的记录不成立，已从已知问题删除。
 - **质量闸门修复**：`npm run lint` 从 109 个错误恢复到无输出。原因是 eslint 只给 `**/*.ts` 和 `scripts/**/*.mjs` 配了 Node globals，收进仓库的 `*.cjs` 验证脚本全部报 `no-undef` / `no-require-imports`；现在 `scripts/**/*.cjs` 按 CommonJS 配置并同时声明 Node 与浏览器 globals（`verify-ui` / `verify-about` 会把函数交给 `page.evaluate` 在页面里跑），另删掉 smoke 里未使用的 `pack`。
@@ -43,31 +49,21 @@
 - **界面**：八步流程、红石布线预览、检查结果分组分页、资源包入口、无边框窗口、音效。
 - **核心修复**：Modified UTF-8、SMPTE 不再死循环、首个 tempo 偏晚、补齐不再饿死分支、最小八度位移、±75ms 量化界、`app://` 目录边界。
 
-### 工作区未提交的改动（等用户测试）
+### 0.2.2 发布资产
 
-| 文件                                                            | 内容                                                                             |
-| --------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `README.md` / `README.en.md`                                    | 版本兼容说明；本次的流程、页面名、下载名与资源包位置对齐                         |
-| `src/renderer/app.js`                                           | 检查结果每页 4 条；拖动 rAF 节流；滚动提示；删死状态                             |
-| `src/renderer/index.html`                                       | 音域两项改名；滚动条与滚动提示；删死元素；补 favicon；注释英文化                 |
-| `test/midiTextEncoding.test.ts`                                 | 注释英文化（GBK 样例字节与断言不变）                                             |
-| `src/renderer/preview.js` / `state.js` / `dom.js` / `blocks.js` | 删掉无人调用的缩放/适配与死导出                                                  |
-| `src/main/index.ts` / `src/preload/index.ts`                    | `shell:open` 走 `openExternal`；删掉无人调用的 `chooseOutput`                    |
-| `scripts/`                                                      | 验证脚本收进仓库；eslint 的 CommonJS 配置；注释英文化；verify:about 自建截图目录 |
-| `package.json` / `.github/workflows/ci.yml`                     | 加 `verify:ui` / `verify:about`；CI 加 `lint` 步骤                               |
-| `AGENTS.md` / `docs/status.md`                                  | 给代理读的上下文文件；本文件                                                     |
+- `release/MusicboxMC-Setup-0.2.2-win-x64.exe`（79.7 MB）
+- `release/MusicboxMC-0.2.2-win-x64.zip`（109.3 MB）
+- `release/MusicboxMC-piano-pack-1.20.4.zip`（51 KB）
+- GitHub Release：`v0.2.2`，tag 与 `package.json` 版本一致。
 
 ## 已知问题（诚实清单）
 
 1. **画布拖动仍不跟手** —— 用户实测反馈。已改 rAF 节流并累积增量，但手感仍未达标；可能需要在 `preview.js` 里改成「只重绘可见区域」或复用离屏画布。
-2. **多乐器未支持** —— MIDI 的乐器信息目前被忽略，全部按音高映射到固定音色表；鼓、电子琴等尚未接入，且「全竖琴音域下音色被占掉要报严重错误」未实现。
-3. **`docs/` 的散文断言只核了数字** —— 10 个可机核数字全部一致，段落里的因果论断未逐条验证。
-4. **CI 不跑 `verify:ui` / `verify:about` / `smoke`** —— 它们需要显示环境与真实 Electron，目前只能本地跑。
-5. **本机 `ELECTRON_RUN_AS_NODE=1` 是设着的** —— 跑 `_electron` / Electron 前必须删掉，否则 `require('electron')` 返回字符串。
-6. **`out/` 是本地目录，不入库** —— 中间文件一律放这里，不要放 `/tmp`（Git Bash 与原生 node 解析不同）。
+2. **`docs/` 的散文断言只核了数字** —— 10 个可机核数字全部一致，段落里的因果论断未逐条验证。
+3. **CI 不跑 `verify:ui` / `verify:about` / `smoke`** —— 它们需要显示环境与真实 Electron，目前只能本地跑。
+4. **本机 `ELECTRON_RUN_AS_NODE=1` 是设着的** —— 跑 `_electron` / Electron 前必须删掉，否则 `require('electron')` 返回字符串。
+5. **`out/` 是本地目录，不入库** —— 中间文件一律放这里，不要放 `/tmp`（Git Bash 与原生 node 解析不同）。
 
 ## 待用户决定
 
-1. 多乐器支持是否单开一轮？
-2. 拖动不跟手的可接受程度（要不要现在深挖）。
-3. 这批未提交改动是否提交；若提交，按 `fix:`（lint 闸门）/ `docs:`（文档对齐）/ `refactor:`（死代码与注释）拆成几个 commit？
+1. 拖动不跟手的可接受程度（要不要现在深挖）。

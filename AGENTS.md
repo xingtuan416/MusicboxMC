@@ -60,6 +60,7 @@ CI 跑 `npm ci` → `lint` → `typecheck` → `test` → `build`（`.github/wor
 
 - 测试只放 `test/**/*.test.ts`；`vitest.config.ts` 已排除 `dist`、`release`、`out`。
 - 夹具放 `test/fixtures/`，**必须入库**。`*.mid`、`*.litematic` 在 `.gitignore` 里被忽略，靠 `!test/fixtures/*.mid`、`!test/fixtures/*.litematic` 例外放行；新增夹具要同时确认例外覆盖。
+- 多乐器回归夹具是 `test/fixtures/happy-birthday-16.mid`：16 轨正好覆盖 13 种有音高乐器 + 3 种鼓，另有通道 9 上的 Cow Bell。`test/multiInstrument.test.ts` 依赖它，删掉会让测试少一大块。
 - 修 bug 必须附一条**修复前会失败**的测试。
 - 格式类断言不能只靠自己读写往返：`test/fixtures/VerifyLitematic.java` 是按规范独立实现的校验器，`litematic` 的结构与位打包以它的输出为准。
 
@@ -96,17 +97,20 @@ CI 跑 `npm ci` → `lint` → `typecheck` → `test` → `build`（`.github/wor
 3. **CRITICAL** 渲染层无法越过自己的目录取文件。`app://` 处理器把任何离开 `src/renderer/` 的路径当作越界并拒绝，界面需要的资源必须由 `scripts/copy-assets.mjs` 拷进去。
 4. **NEVER** 把 URL 交给 `shell.openPath`，它只打开文件；外部链接走 `shell.openExternal`（否则点击毫无反应）。
 5. **MUST** 高频事件里不要直接 `renderPreview`。重绘整张电路在长曲子上远超一帧，要累积增量并用 `requestAnimationFrame` 节流，否则拖动会跟不上光标。
+6. **MUST** 走多乐器路径时把 `assignments` 传给 `layout()` / `buildCommandPlayback()`。不传就走旧的五槽钢琴模式，16 轨文件会全部变成竖琴且不报错。识别优先级固定为 **GM 音色 → 通道 9 鼓 → 轨道名 → 竖琴**；16 种乐器的锚点、底块和替代表见 `docs/multi-instrument.md`。`TrackModel.program` 一旦在 `parseMidi` 里丢掉，GM 优先就静默失效。
+7. **NEVER** 在同时发声的音符行之间留空行，或把和弦音符按两行间隔排。和弦行必须**相邻**：≤3 个音只给内联音符一个中继器，两侧靠音符盒单跳点亮；≥4 个音每行一个同延迟中继器。Minecraft 不会因为相邻音符盒同时被邻格点亮就响两次。强制合并的紧凑路径也用同一拓扑；只有超过单列容量（27 音）的极端和弦才退回 staged 两行总线。这条曾被改错成"每音隔一格"，既浪费空间又把相邻轨推出 48 格听距。
 
 ## 常见故障
 
-| 现象                                                     | 原因与处理                                                          |
-| -------------------------------------------------------- | ------------------------------------------------------------------- |
-| `require('electron')` 返回一个字符串，`app` 是 undefined | 环境里有 `ELECTRON_RUN_AS_NODE=1`，跑 Electron 前删掉它             |
-| `npm run smoke` 报找不到 `dist/src/main/index.js`        | 先 `npm run build`                                                  |
-| 精确文本替换突然匹配不到                                 | 刚跑过 `npm run format`，Prettier 重排了；重新读文件再改            |
-| 全新 clone 上测试数量比本地少                            | 某个夹具被 gitignore 了，检查 `!test/fixtures/...` 例外             |
-| 界面某个按钮点了没反应，控制台无报错                     | 驱动它的 `state` 字段可能只在已删除的模块里赋值；检查赋值点是否可达 |
-| 界面检查脚本报 404 `/icon.png`                           | 图标只在构建产物里，脚本服务的是源码目录；用构建后的目录回退        |
+| 现象                                                     | 原因与处理                                                                                                       |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `require('electron')` 返回一个字符串，`app` 是 undefined | 环境里有 `ELECTRON_RUN_AS_NODE=1`，跑 Electron 前删掉它                                                          |
+| `npm run smoke` 报找不到 `dist/src/main/index.js`        | 先 `npm run build`                                                                                               |
+| 精确文本替换突然匹配不到                                 | 刚跑过 `npm run format`，Prettier 重排了；重新读文件再改                                                         |
+| 全新 clone 上测试数量比本地少                            | 某个夹具被 gitignore 了，检查 `!test/fixtures/...` 例外                                                          |
+| 界面某个按钮点了没反应，控制台无报错                     | 驱动它的 `state` 字段可能只在已删除的模块里赋值；检查赋值点是否可达                                              |
+| 界面检查脚本报 404 `/icon.png`                           | 图标只在构建产物里，脚本服务的是源码目录；用构建后的目录回退                                                     |
+| 多乐器文件所有轨都像竖琴                                 | 调用没传 `assignments`，或 `TrackModel.program` 丢了；检查 `generate()` 的 assignments 与 `parseMidi` 的 program |
 
 ## 维护说明
 

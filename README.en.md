@@ -38,8 +38,8 @@ Windows x64. Grab either file from the
 
 | File                                 | What it is                                                                   |
 | ------------------------------------ | ---------------------------------------------------------------------------- |
-| `MusicboxMC-Setup-0.2.1-win-x64.exe` | Installer. Choose a directory, get Start menu and desktop shortcuts.         |
-| `MusicboxMC-0.2.1-win-x64.zip`       | Portable. Unzip and run `MusicboxMC.exe`; writes nothing outside its folder. |
+| `MusicboxMC-Setup-0.2.2-win-x64.exe` | Installer. Choose a directory, get Start menu and desktop shortcuts.         |
+| `MusicboxMC-0.2.2-win-x64.zip`       | Portable. Unzip and run `MusicboxMC.exe`; writes nothing outside its folder. |
 
 Supported Minecraft Java Edition versions: **1.17.1 – 26.3 (latest)**. **1.16.5 and below will not work.** You also need
 [Litematica](https://masa.dy.fi/mcmods/client_mods/?mod=litematica) mod to paste
@@ -90,10 +90,10 @@ song stops sounding like one performance. Every track follows a shared time-to-X
 reference line, padded forward with dust, which never changes when a note fires.
 
 **Merging, if you want it.** Tracks that share an instrument can be merged onto one
-line. There is also a stricter mode that builds one connected spine per instrument,
-audits the block graph it actually produced — reachability, exact trigger ticks,
-repeater locking, support blocks — and refuses to write a file when the result would
-not work.
+line. There is also a stricter mode that builds **one** connected spine for the whole
+song (different instruments can share that line), audits the block graph it actually
+produced — reachability, exact trigger ticks, repeater locking, support blocks — and
+refuses to write a file when the result would not work.
 
 ## Two playback backends
 
@@ -117,27 +117,36 @@ Requirements and limitations are in
 [docs/command-playback.md](docs/command-playback.md); read it before planning
 anything long.
 
-## Range, and what the resource pack is for
+## Instruments, range, and what the resource pack is for
 
-A note block has two octaves on its own. Between them, the five note-block
-instruments — bass, guitar, harp, flute and bell — cover **F#1 to F#7** (MIDI 30 to
-102), and that is the span this generator uses.
+A note block has two octaves on its own. Vanilla has **16 classic note-block
+instruments** — 13 pitched and 3 fixed-pitch drums — each starting at its own F#
+anchor. The full table, GM map and detection rules are in
+[the multi-instrument design](docs/multi-instrument.md).
 
-**All five are vanilla instruments, so a generated schematic plays correctly with no
-resource pack at all.** The five octave bands simply have different timbres, which
-is audible on a melody that crosses them.
+**Minecraft has no piano instrument.** Dirt and most other blocks play the **harp**
+sample, which is the closest thing and is what tutorials usually call piano. This
+project's "piano" is the harp sample plus the companion pack's five-slot replacement.
 
-The **full harp range** option, selected by default, is what controls this. Choose
-**no range extension** and the generator uses the harp slot alone: **F#3 to F#5**, with
-no resource pack ever needed, and everything outside that span falls to the out-of-range
-setting.
+The interface has two modes:
 
-A companion resource pack replaces those five sound events with piano samples, so the
-whole range sounds like a single piano. **It is optional**: nothing in the generator
-requires it, and the schematic is identical either way.
+- **Extended harp range** (default): piano and unidentified tracks use bass, guitar,
+  harp, flute and bell to reach **F#1–F#7**; other instruments stay native; tracks
+  natively using one of those five are replaced with the closest free timbre
+  (bass→didgeridoo, guitar→banjo, flute→bit, bell→chime).
+- **Native instruments**: every track follows its MIDI instrument across its own two
+  octaves; a piano track uses harp, **F#3–F#5**.
+
+Detection order is GM program → drum channel → track name → harp, and the track step
+shows what each track was detected as.
+
+A companion resource pack replaces the five extended-mode sound events with piano
+samples, so the whole range sounds like a single piano. **It is optional**, and the
+schematic is identical either way. **It is not recommended in native mode**, where it
+would also replace native bass, guitar, flute and bell.
 
 The pack **ships inside the application**. A _Save (about 50 KB)_ button sits on the
-export step, and the first full-range export offers it once. Put the file in
+export step, and the first extended-mode export offers it once. Put the file in
 `.minecraft/resourcepacks/` and enable it in game. It is also on the
 [release page](https://github.com/xingtuan416/MusicboxMC/releases/latest/download/MusicboxMC-piano-pack-1.20.4.zip)
 if you would rather download it directly.

@@ -11,7 +11,7 @@ src/
 ├── core/         pure logic, no Electron and no DOM
 │   ├── midi/         MIDI bytes  -> SongModel
 │   ├── tempo/        seconds <-> game ticks, speed conversion table
-│   ├── palette/      MIDI pitch -> note block state, block material choices
+│   ├── palette/      MIDI track -> instrument, pitch -> note value, block choices
 │   ├── layout/       SongModel   -> redstone circuit (placements)
 │   ├── command/      SongModel   -> command-block player (alternative backend)
 │   ├── nbt/          NBT tag model, big-endian reader/writer
@@ -42,7 +42,7 @@ SongModel                       { tracks: TrackModel[], tempos, ppq, ... }
   │
   ├─ core/layout/index.ts  ──►  LayoutResult  { tracks: TrackSkeleton[], size, min, warnings }
   │     │  core/layout/track.ts     one track: main line, chord branches, taps
-  │     └─ core/layout/forced.ts    one spine per instrument (opt-in)
+  │     └─ core/layout/forced.ts    one spine for the whole song (opt-in)
   │
   └─ core/command/index.ts  ──►  CommandPlaybackResult { region, info, warnings }
         (independent backend; does not go through layout/)
@@ -69,24 +69,31 @@ thrown, so the GUI can display them without a try/catch around every call.
 
 ## Module responsibilities
 
-| module           | responsible for                                             | not responsible for            |
-| ---------------- | ----------------------------------------------------------- | ------------------------------ |
-| `core/midi`      | decoding the MIDI container, normalising notes to seconds   | quantisation, pitch mapping    |
-| `core/tempo`     | the game-tick grid and the speed table                      | reading tempo events from MIDI |
-| `core/palette`   | which note block state and which base block a pitch becomes | where that block goes          |
-| `core/layout`    | circuit topology, timing, spatial alignment, warnings       | NBT or file formats            |
-| `core/command`   | the command-block player, its schedule and its geometry     | redstone topology              |
-| `core/nbt`       | the tag model and binary encoding                           | what the tags mean             |
-| `core/litematic` | region packing, bit arrays, the `.litematic` schema         | circuit design                 |
-| `main`           | dialogs, IPC, orchestration, writing files                  | any generation logic           |
-| `renderer`       | presentation and parameter collection                       | any generation logic           |
+| module           | responsible for                                                             | not responsible for            |
+| ---------------- | --------------------------------------------------------------------------- | ------------------------------ |
+| `core/midi`      | decoding the MIDI container, normalising notes to seconds                   | quantisation, pitch mapping    |
+| `core/tempo`     | the game-tick grid and the speed table                                      | reading tempo events from MIDI |
+| `core/palette`   | which instrument a track becomes, and which note/base block a pitch becomes | where that block goes          |
+| `core/layout`    | circuit topology, timing, spatial alignment, warnings                       | NBT or file formats            |
+| `core/command`   | the command-block player, its schedule and its geometry                     | redstone topology              |
+| `core/nbt`       | the tag model and binary encoding                                           | what the tags mean             |
+| `core/litematic` | region packing, bit arrays, the `.litematic` schema                         | circuit design                 |
+| `main`           | dialogs, IPC, orchestration, writing files                                  | any generation logic           |
+| `renderer`       | presentation and parameter collection                                       | any generation logic           |
 
 ## Where to change what
 
-- **Note block pitch mapping or base blocks** → `core/palette/pitchMap.ts`
-  (regions and instruments) and `core/palette/blockTable.ts` (material overrides).
+- **Note block pitch mapping or base blocks** → `core/palette/instruments.ts`
+  (the sixteen anchors), `core/palette/instrumentMap.ts` (GM / drum / name
+  detection), `core/palette/instrumentPitch.ts` (octave fit and per-note mapping),
+  `core/palette/pitchMap.ts` (the five-slot piano palette) and
+  `core/palette/blockTable.ts` (material overrides). The rules are in
+  [multi-instrument.md](multi-instrument.md).
 - **Circuit topology or timing** → `core/layout/track.ts`. The file starts with a
   description of the topology and the time model; read that first.
+- **Track Z spacing** → `core/layout/index.ts`: each lane reserves only its own chord
+  rows plus one empty row, so two one-row tracks sit two cells apart rather than the
+  old song-wide maximum apart.
 - **The opt-in single-spine layout** → `core/layout/forced.ts`, plus
   `core/layout/forcedValidation.ts`, which audits the produced block graph and
   refuses to export when it is unsafe.

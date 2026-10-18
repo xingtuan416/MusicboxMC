@@ -74,6 +74,14 @@ every row in the column is powered at the same instant; each extra note then get
 its own row with its own repeater, set to the same delay as the main line's
 final repeater. All notes in the group therefore fire on the same redstone tick.
 
+**Rows are adjacent — never leave a blank row between simultaneous notes.** A note
+block that is also lit by its neighbour does not sound twice, so a gap buys nothing.
+The earlier forced layout put one empty row between every chord note; it doubled the
+height of a fan-out and pushed the next track beyond the 48-block hearing radius. The
+same adjacency rule applies to the forced single spine: up to three notes use the
+inline note's single hop, four or more give every row one repeater, and only the
+staged fallback for chords wider than 27 notes uses two-row spacing.
+
 ## Timing
 
 For a group arriving at redstone tick `rt`, with `prevRt` the previous group:
@@ -113,14 +121,49 @@ forward_ with dust — never compress, never re-time, never cross-connect.
 - If the deficit cannot be closed, the residual is reported as `SPATIAL_DRIFT`.
   The timing is never changed to make the geometry work.
 
+**Z spacing follows each track, not the song.** A lane reserves its own chord rows
+plus exactly one empty row before the next lane. The previous version used the widest
+chord in the whole song for every gap, so two one-row tracks could still sit six or
+more cells apart; the next track then fell outside the 48-block hearing radius. The
+only exception is an explicit `trackPitch`, which acts as a minimum centre distance
+and is still widened when a chord needs the room.
+
 ## Pitch, and the note-block palette
 
 One note block covers two octaves: its `note` property runs 0 to 24, **one semitone
-per value**, above the pitch its base block sounds at. A single instrument
-therefore cannot hold a piano piece.
+per value**, above the F# its base block sounds at.
 
-Between them, the five note-block instruments reach **F#1 to F#7** (MIDI 30 to 102),
-because each starts at its own F# anchor:
+Minecraft has **no piano instrument**. Dirt, and most other non-instrument blocks,
+plays the **harp** sample: it is the closest thing to a piano and is what tutorials
+usually call "piano". The companion resource pack is what replaces five sound events
+with piano samples; the vanilla game has no piano.
+
+There are sixteen classic note-block instruments: thirteen pitched, each starting at
+its own F# anchor, and three fixed-pitch drums:
+
+| Instrument                           | Base block                       | Range   |
+| ------------------------------------ | -------------------------------- | ------- |
+| harp                                 | dirt                             | F#3–F#5 |
+| bass / didgeridoo                    | wood / pumpkin                   | F#1–F#3 |
+| guitar                               | wool                             | F#2–F#4 |
+| flute / cow bell                     | clay / soul sand                 | F#4–F#6 |
+| bell / chime / xylophone             | gold / packed ice / bone block   | F#5–F#7 |
+| iron xylophone / bit / banjo / pling | iron / emerald / hay / glowstone | F#3–F#5 |
+| basedrum / snare / hat               | stone / sand / glass             | fixed   |
+
+The full table, the GM map and the detection rules are in
+[multi-instrument.md](multi-instrument.md).
+
+The interface has two modes:
+
+- **Native instruments** — every track plays the instrument it was written for, each
+  limited to its own two octaves.
+- **Extended harp range** (default) — piano and unidentified tracks use the five slots
+  below to reach F#1–F#7, the other instruments stay native, and the five occupied
+  instruments are replaced by the closest free timbre: bass→didgeridoo,
+  guitar→banjo, flute→bit, bell→chime.
+
+The five-slot piano extension:
 
 | Slot | Base block | Instrument | Starts at     |
 | ---- | ---------- | ---------- | ------------- |
@@ -139,18 +182,15 @@ mid-run.
 **All five are vanilla instruments.** A generated schematic plays correctly with no
 resource pack at all; the five octave bands simply sound different from one another.
 The companion resource pack replaces those five sound events with piano samples so
-the whole span sounds like one piano. It changes no block and no timing — the same
-schematic comes out either way.
+the whole span sounds like one piano. It changes no block and no timing. In native
+mode the same pack would also replace the native bass, guitar, flute and bell, so it
+is not recommended there.
 
-The **full range** switch in the interface decides which slots the generator may use:
-
-- **On (the default)** — all five slots, covering F#1–F#7.
-- **Off** — the harp slot alone, covering F#3–F#5. No resource pack is ever needed,
-  at the cost of everything outside those two octaves.
-
-Pitches outside the selected span go through the out-of-range policy — `warn`,
-`octave`, `clamp` or `drop` — and are reported as `OUT_OF_RANGE` warnings. Neither
-mode drops a note silently.
+Pitches outside a track's instrument go through the out-of-range policy — `warn`,
+`octave`, `clamp` or `drop` — and are reported as `OUT_OF_RANGE`. Before that, the
+whole track is moved by one octave when that lets it fit, so a melody keeps its
+contour (`INSTRUMENT_OCTAVE_SHIFT`). Neither mode drops a note silently. Drums ignore
+the note value, so they are always written at note 0.
 
 ## What this model does not cover
 
@@ -169,11 +209,11 @@ valid `.litematic`, and the relative timing of `placed` events. It does not
 simulate redstone propagation, because a simplified propagation model would give
 false confidence rather than real coverage.
 
-The forced layout is the exception: `core/layout/forcedValidation.ts` does walk
-the produced block graph, checking reachability, exact trigger ticks, repeater
-locking and support blocks, and refuses to export when the geometry is unsafe.
-That is a rising-edge graph check, not a full game simulation, and it says so in
-its own documentation.
+The forced layout is the exception: it combines the whole song onto one connected
+spine, and `core/layout/forcedValidation.ts` walks the produced block graph,
+checking reachability, exact trigger ticks, repeater locking and support blocks,
+and refuses to export when the geometry is unsafe. That is a rising-edge graph
+check, not a full game simulation, and it says so in its own documentation.
 
 ## See also
 
