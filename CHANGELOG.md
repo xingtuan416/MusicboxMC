@@ -7,6 +7,38 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-19
+
+### Fixed
+
+- Step 2 could not accept a dropped MIDI file. Electron 32 removed `File.path`, so the
+  renderer had no way to turn the dropped `File` into a path and only the click dialog
+  worked. The preload already exposed `pathForFile`; the missing piece was the drop
+  handler. The whole step is now a drop target, rejects non-MIDI files with a visible
+  message, highlights while dragging, and prevents Chromium from navigating away when a
+  file is dropped outside it.
+- The About repository link accepted any `http(s)` URL from the renderer and handed it
+  to `shell.openExternal`. It is now allowlisted to this repository on GitHub; other
+  hosts, other repositories and plain `http` are ignored.
+- Excluded tracks still appeared in command-backend assignment warnings and the
+  assignment table, and could keep a piano span alive after the last piano track was
+  excluded. Both backends now derive warnings, summaries and `pitchRange` from the
+  filtered assignment list.
+- The whole-track octave fit ignored the per-track transpose, so a transposed track could
+  choose a suboptimal offset and report a net shift that did not match what was played.
+  The fit now includes the transpose, and the warning and assignment table report the
+  net octave shift.
+- The command backend used `Math.max(...midis)` on the whole track, which can exceed the
+  engine argument limit on the long songs this project supports. It now scans once with
+  a loop; the per-track range fields are also built once instead of per note.
+
+### Changed
+
+- `npm run check` is the single local/CI gate: format check, lint, typecheck, tests and
+  build. CI now runs that command, and `docs/README.md` is the documentation index.
+- The GitHub About text is Chinese and the repository has a curated 19-topic set that
+  describes the current instrument, redstone and desktop-app scope.
+
 ## [0.2.2] - 2026-10-18
 
 ### Fixed
@@ -114,6 +146,7 @@ First release. Windows x64, Electron 33.
 - Pure TypeScript NBT codec and Litematica bit packing; output is a Java 1.20.4
   `.litematic` that Litematica loads directly.
 
-[Unreleased]: https://github.com/xingtuan416/MusicboxMC/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/xingtuan416/MusicboxMC/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.3
 [0.2.2]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.2
 [0.1.0]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.1.0

@@ -1,37 +1,38 @@
 # 项目状态
 
 > 每次有实质进展就更新这个文件。**写法见 `AGENTS.md` 的「状态文档」一节。**
-> 最后更新：2026-10-18
+> 最后更新：2026-10-19
 
 ## 一句话
 
-0.2.2 已发布：多乐器支持（16 种乐器、两种模式）、紧凑和弦行与多轨间距修复，本地闸门全绿。
+0.2.3 已发布：修复第 2 步拖拽、收口 0.2.2 代码审查发现，并统一本地/CI 检查流程。
 
 ## 位置
 
 | 项       | 值                                                                                           |
 | -------- | -------------------------------------------------------------------------------------------- |
-| 版本     | `0.2.2`（`package.json`、tag、Release 一致）                                                 |
+| 版本     | `0.2.3`（`package.json`、tag、Release 一致）                                                 |
 | 分支     | `main`，与远端同步                                                                           |
-| 最新发布 | `v0.2.2`：安装包 79.7 MB、免安装 109.3 MB、资源包 51 KB                                      |
+| 最新发布 | `v0.2.3`：安装包 79.7 MB、免安装 109.3 MB、资源包 51 KB                                      |
 | 备份     | 分支 `backup/before-ui-integration`、标签 `backup-before-ui-integration`、`v0.1.0` —— 不要删 |
 
-## 质量闸门（最近一次实测，2026-10-18）
+## 质量闸门（最近一次实测，2026-10-19）
 
 | 项                     | 结果                                                              |
 | ---------------------- | ----------------------------------------------------------------- |
-| `npm test`             | 33 文件 / 270 用例通过                                            |
+| `npm test`             | 34 文件 / 274 用例通过                                            |
 | `npm run lint`         | 无输出（`scripts/**/*.cjs` 已按 CommonJS 配置）                   |
 | `npm run typecheck`    | 无输出                                                            |
 | `npm run build`        | 通过                                                              |
 | `npm run smoke`        | 10 项通过（16 轨夹具走真 IPC：346 音、16 轨、约 2.6 KB 写盘一致） |
 | `npm run verify:ui`    | 通过，无 console 错误、无横向溢出；覆盖模式切换与分配表           |
-| `npm run verify:about` | 通过（版本 0.2.2、许可 GPL-3.0、标题栏图标 1063×1063 已解码）     |
+| `npm run verify:about` | 通过（版本 0.2.3、许可 GPL-3.0、标题栏图标 1063×1063 已解码）     |
 | `npm run format:check` | 通过                                                              |
 | CI                     | 绿：run #33（`a53d07e`），Node 20 / 22 各 11/11 步通过            |
 
 ## 已完成（按时间倒序，只留结论）
 
+- **0.2.3 发布**：第 2 步拖拽恢复（Electron 32 移除 `File.path`，改走 preload `pathForFile` + 整步 drop target）；修复 0.2.2 审查发现（外链白名单、排除轨不再进入警告/分配表/`pitchRange`、八度拟合计入 transpose、去掉大轨 `Math.max(...)` 展开）；新增 `npm run check` 作为本地/CI 单一闸门；GitHub About 改中文并整理 19 个 topics。
 - **0.2.2 发布**：多乐器支持、紧凑和弦行、多轨间距与强制合并修复；安装包/免安装/资源包已上传 [GitHub Releases](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.2)，tag `v0.2.2`。
 - **配置摘要联动**：第 4 步「其它」折叠下的小字现在随合并模式、作者、基准 TPS 更新；之前一直停在初始文案。`verify:ui` 增加了对应检查。
 - **和弦行相邻**：强制合并的紧凑路径改成普通和弦列——≤3 音只给内联音一个中继器、两侧靠单跳；≥4 音每行一个同延迟中继器，音符行**相邻不留空**；超过 27 音的极端和弦才退回 staged 两行总线。新增 `test/chordSpacing.test.ts`（3/4/20 音）。
@@ -49,12 +50,12 @@
 - **界面**：八步流程、红石布线预览、检查结果分组分页、资源包入口、无边框窗口、音效。
 - **核心修复**：Modified UTF-8、SMPTE 不再死循环、首个 tempo 偏晚、补齐不再饿死分支、最小八度位移、±75ms 量化界、`app://` 目录边界。
 
-### 0.2.2 发布资产
+### 0.2.3 发布资产
 
-- `release/MusicboxMC-Setup-0.2.2-win-x64.exe`（79.7 MB）
-- `release/MusicboxMC-0.2.2-win-x64.zip`（109.3 MB）
+- `release/MusicboxMC-Setup-0.2.3-win-x64.exe`（79.7 MB）
+- `release/MusicboxMC-0.2.3-win-x64.zip`（109.3 MB）
 - `release/MusicboxMC-piano-pack-1.20.4.zip`（51 KB）
-- GitHub Release：[v0.2.2](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.2)，tag 与 `package.json` 版本一致；三个资产均为 `uploaded`。
+- GitHub Release：[v0.2.3](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.3)，tag 与 `package.json` 版本一致；三个资产均为 `uploaded`。
 
 ## 已知问题（诚实清单）
 
@@ -63,6 +64,7 @@
 3. **CI 不跑 `verify:ui` / `verify:about` / `smoke`** —— 它们需要显示环境与真实 Electron，目前只能本地跑。
 4. **本机 `ELECTRON_RUN_AS_NODE=1` 是设着的** —— 跑 `_electron` / Electron 前必须删掉，否则 `require('electron')` 返回字符串。
 5. **`out/` 是本地目录，不入库** —— 中间文件一律放这里，不要放 `/tmp`（Git Bash 与原生 node 解析不同）。
+6. **OpenCodeReview 只完成了一部分** —— 0.2.2 范围审查 48 个文件里 40 个分组因本地模型网关 503 失败，产出 7 条发现；已修 6 条（外链白名单、排除轨、transpose 八度拟合、大轨展开、rangeFields、外链测试），`summarizeAssignments` 重复计算八度拟合的低优先级建议保留。网关恢复后应重跑 `ocr review --from v0.2.1 --to v0.2.3`。
 
 ## 待用户决定
 

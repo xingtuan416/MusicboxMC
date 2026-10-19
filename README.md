@@ -35,8 +35,8 @@ Windows x64。两个文件任选其一，均来自
 
 | 文件                                 | 说明                                                            |
 | ------------------------------------ | --------------------------------------------------------------- |
-| `MusicboxMC-Setup-0.2.2-win-x64.exe` | 安装包。可选安装目录，创建开始菜单与桌面快捷方式。              |
-| `MusicboxMC-0.2.2-win-x64.zip`       | 便携版。解压后直接运行 `MusicboxMC.exe`，不在目录外写任何东西。 |
+| `MusicboxMC-Setup-0.2.3-win-x64.exe` | 安装包。可选安装目录，创建开始菜单与桌面快捷方式。              |
+| `MusicboxMC-0.2.3-win-x64.zip`       | 便携版。解压后直接运行 `MusicboxMC.exe`，不在目录外写任何东西。 |
 
 支持的 Minecraft Java 版：**1.17.1 – 26.3（最新）**。**1.16.5 及以下不可用**。另外需要
 [Litematica](https://masa.dy.fi/mcmods/client_mods/?mod=litematica) 模组来粘贴生成的投影。
