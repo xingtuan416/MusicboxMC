@@ -19,6 +19,7 @@ import { buildCommandPlayback } from '../core/command';
 import { analyze } from './analyze';
 import { describeCoreError } from './messages';
 import { buildPreview, toRegionData, EMPTY_PREVIEW } from './preview';
+import { sanitizeGenerateOptions } from './options';
 import type { AnalyzeResult, GenerateOptions, GenerateResult } from './types';
 
 /**
@@ -35,7 +36,8 @@ const PALETTE_REGIONS: RegionTable = DEFAULT_REGIONS;
 
 /** New API first; the old `extendedRange` boolean stays as a compatibility alias. */
 function resolveMode(options: GenerateOptions): InstrumentMode {
-  if (options.instrumentMode) return options.instrumentMode;
+  const mode = options.instrumentMode;
+  if (mode === 'native' || mode === 'extended') return mode;
   return options.extendedRange === false ? 'native' : 'extended';
 }
 
@@ -247,8 +249,9 @@ function failure(ctx: FailureContext): GenerateResult {
  */
 export function generate(
   path: string,
-  options: GenerateOptions = {},
+  rawOptions: GenerateOptions = {},
 ): { result: GenerateResult; buffer: Buffer | null } {
+  const options = sanitizeGenerateOptions(rawOptions);
   const start = Date.now();
   const presets = options.speedPresets ?? DEFAULT_PRESETS;
   const baseTps = options.baseTps ?? DEFAULT_LAYOUT_CONFIG.baseTps;

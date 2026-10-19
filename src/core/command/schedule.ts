@@ -99,13 +99,15 @@ export function collectEvents(
     if (voicing.kind === 'instrument') {
       const fit = chooseOctaveOffset(track.notes, voicing.instrument, transpose);
       octaveOffset = fit.offset;
-      const netOffset = fit.offset + transpose;
-      if (netOffset !== 0) {
+      // The warning describes the automatic range fit, not the user's own transpose.
+      // Reporting the net value would claim a fit that did not happen (transpose +1,
+      // offset 0) and hide a real fit that the transpose cancelled (offset -1, +1).
+      if (fit.offset !== 0) {
         warnings.push({
           code: 'INSTRUMENT_OCTAVE_SHIFT',
           trackIndex: track.index,
           instrument: voicing.instrument,
-          octaves: netOffset,
+          octaves: fit.offset,
           notes: track.notes.length,
         });
       }

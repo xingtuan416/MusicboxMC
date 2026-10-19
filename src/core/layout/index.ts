@@ -311,13 +311,14 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
     const fit = chooseOctaveOffset(input.notes, input.voicing.instrument, opts.transpose?.[input.index] ?? 0);
     input.octaveOffset = fit.offset;
     input.outside = fit.outside;
-    const netOffset = fit.offset + (opts.transpose?.[input.index] ?? 0);
-    if (netOffset !== 0) {
+    // The warning is about the automatic fit; the user's transpose is separate and
+    // already visible in the table.
+    if (fit.offset !== 0) {
       fitWarnings.push({
         code: 'INSTRUMENT_OCTAVE_SHIFT',
         trackIndex: input.index,
         instrument: input.voicing.instrument,
-        octaves: netOffset,
+        octaves: fit.offset,
         notes: input.notes.length,
       });
     }

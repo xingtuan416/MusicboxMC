@@ -58,10 +58,11 @@ run one of them on its own, use `npm run format:check`, `npm run lint`,
   the main process works rather than that the interface renders. It needs Electron but no
   browser, so it runs anywhere the application does.
 
-They need `playwright-core` and a Chromium-based browser on the machine, and they use the
-system browser channel, so they are not portable as they stand. That is deliberate: the
-project takes no dependency it cannot justify, and adding one that only works on the
-author's machine would be worse than saying so here.
+`verify:ui` and `verify:about` need `playwright-core` plus a system Chromium channel.
+`smoke` also uses `playwright-core`, but it launches the built Electron application and
+needs a prior `npm run build`; it does not use a browser channel. The split is deliberate:
+the project takes no dependency it cannot justify, and adding a browser only for the
+author's machine would be worse than stating the requirement here.
 
 `npm run format` applies Prettier. Everything is already formatted, so it should
 be a no-op unless you added something.

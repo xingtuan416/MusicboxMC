@@ -20,7 +20,7 @@
 
 | 项                     | 结果                                                              |
 | ---------------------- | ----------------------------------------------------------------- |
-| `npm test`             | 34 文件 / 274 用例通过                                            |
+| `npm test`             | 35 文件 / 276 用例通过                                            |
 | `npm run lint`         | 无输出（`scripts/**/*.cjs` 已按 CommonJS 配置）                   |
 | `npm run typecheck`    | 无输出                                                            |
 | `npm run build`        | 通过                                                              |
@@ -64,7 +64,7 @@
 3. **CI 不跑 `verify:ui` / `verify:about` / `smoke`** —— 它们需要显示环境与真实 Electron，目前只能本地跑。
 4. **本机 `ELECTRON_RUN_AS_NODE=1` 是设着的** —— 跑 `_electron` / Electron 前必须删掉，否则 `require('electron')` 返回字符串。
 5. **`out/` 是本地目录，不入库** —— 中间文件一律放这里，不要放 `/tmp`（Git Bash 与原生 node 解析不同）。
-6. **OpenCodeReview 只完成了一部分** —— 0.2.2 范围审查 48 个文件里 40 个分组因本地模型网关 503 失败，产出 7 条发现；已修 6 条（外链白名单、排除轨、transpose 八度拟合、大轨展开、rangeFields、外链测试），`summarizeAssignments` 重复计算八度拟合的低优先级建议保留。网关恢复后应重跑 `ocr review --from v0.2.1 --to v0.2.3`。
+6. **OpenCodeReview 仍只完成了一部分** —— 0.2.3 小范围 15 个文件里 6 个分组失败，产出 3 条发现（外链前缀边界、拖拽高亮落在隐藏元素、点击导入无测试），已全部修复。随后用 Kimi K3 跑全量 `v0.2.1..HEAD`：49 个文件、9 条发现，但 37/49 个分组仍因本地网关 503 失败。已修 6 条（README 版本钉死、八度警告混淆 transpose、CONTRIBUTING 浏览器说明、`GenerateOptions` 未校验、`shell:open` 本地路径过宽），剩余 3 条低优先级建议保留（`NOTE_BLOCK_INSTRUMENTS` 依赖对象键序、`summarizeAssignments` 重复拟合、span 与 outside 的统计帧）。这些是 0.2.3 发布后的修复，尚未进入 0.2.3 的安装包；是否发 0.2.4 待定。
 
 ## 待用户决定
 

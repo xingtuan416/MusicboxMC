@@ -38,8 +38,10 @@ Windows x64. Grab either file from the
 
 | File                                 | What it is                                                                   |
 | ------------------------------------ | ---------------------------------------------------------------------------- |
-| `MusicboxMC-Setup-0.2.3-win-x64.exe` | Installer. Choose a directory, get Start menu and desktop shortcuts.         |
-| `MusicboxMC-0.2.3-win-x64.zip`       | Portable. Unzip and run `MusicboxMC.exe`; writes nothing outside its folder. |
+| `MusicboxMC-Setup-<version>-win-x64.exe` | Installer. Choose a directory, get Start menu and desktop shortcuts.         |
+| `MusicboxMC-<version>-win-x64.zip`       | Portable. Unzip and run `MusicboxMC.exe`; writes nothing outside its folder. |
+
+`<version>` is the latest release; the exact filenames are on the Releases page.
 
 Supported Minecraft Java Edition versions: **1.17.1 – 26.3 (latest)**. **1.16.5 and below will not work.** You also need
 [Litematica](https://masa.dy.fi/mcmods/client_mods/?mod=litematica) mod to paste

@@ -127,13 +127,14 @@ function registerIpc(): void {
     }
   });
 
-  ipcMain.handle('song:generate', (_e, path: unknown, options: GenerateOptions, outputPath: unknown) => {
+  ipcMain.handle('song:generate', (_e, path: unknown, options: unknown, outputPath: unknown) => {
     try {
       const file = assertFile(path);
+      const safeOptions = (options ?? {}) as GenerateOptions;
       if (typeof outputPath === 'string' && outputPath.length > 0) {
-        return generateToFile(file, outputPath, options ?? {});
+        return generateToFile(file, outputPath, safeOptions);
       }
-      return generate(file, options ?? {}).result;
+      return generate(file, safeOptions).result;
     } catch (e) {
       throw new Error(`生成失败：${describeCoreError(e)}`, { cause: e });
     }
@@ -216,7 +217,9 @@ function registerIpc(): void {
       if (target) await shell.openExternal(target);
       return;
     }
-    if (!existsSync(path)) return;
+    // The renderer only needs to open generated schematics. Do not turn an arbitrary
+    // renderer-supplied path into "run this with the system handler".
+    if (!path.toLowerCase().endsWith('.litematic') || !existsSync(path)) return;
     const err = await shell.openPath(path);
     if (err) throw new Error(err);
   });
