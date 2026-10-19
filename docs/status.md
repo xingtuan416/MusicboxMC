@@ -28,11 +28,11 @@
 | `npm run verify:ui`    | 通过，无 console 错误、无横向溢出；覆盖模式切换与分配表           |
 | `npm run verify:about` | 通过（版本 0.2.3、许可 GPL-3.0、标题栏图标 1063×1063 已解码）     |
 | `npm run format:check` | 通过                                                              |
-| CI                     | 绿：run #33（`a53d07e`），Node 20 / 22 各 11/11 步通过            |
+| CI                     | 绿：run #36（`180f3a6`），Node 20 / 22 各 11/11 步通过            |
 
 ## 已完成（按时间倒序，只留结论）
 
-- **0.2.3 发布**：第 2 步拖拽恢复（Electron 32 移除 `File.path`，改走 preload `pathForFile` + 整步 drop target）；修复 0.2.2 审查发现（外链白名单、排除轨不再进入警告/分配表/`pitchRange`、八度拟合计入 transpose、去掉大轨 `Math.max(...)` 展开）；新增 `npm run check` 作为本地/CI 单一闸门；GitHub About 改中文并整理 19 个 topics。
+- **0.2.3 发布**：第 2 步拖拽恢复（Electron 32 移除 `File.path`，改走 preload `pathForFile` + 整步 drop target）；修复 0.2.2 审查发现（外链白名单、排除轨不再进入警告/分配表/`pitchRange`、八度拟合计入 transpose、去掉大轨 `Math.max(...)` 展开）；新增 `npm run check` 作为本地/CI 单一闸门；GitHub About 改中文并整理 19 个 topics。资产已上传 [GitHub Releases](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.3)。
 - **0.2.2 发布**：多乐器支持、紧凑和弦行、多轨间距与强制合并修复；安装包/免安装/资源包已上传 [GitHub Releases](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.2)，tag `v0.2.2`。
 - **配置摘要联动**：第 4 步「其它」折叠下的小字现在随合并模式、作者、基准 TPS 更新；之前一直停在初始文案。`verify:ui` 增加了对应检查。
 - **和弦行相邻**：强制合并的紧凑路径改成普通和弦列——≤3 音只给内联音一个中继器、两侧靠单跳；≥4 音每行一个同延迟中继器，音符行**相邻不留空**；超过 27 音的极端和弦才退回 staged 两行总线。新增 `test/chordSpacing.test.ts`（3/4/20 音）。
