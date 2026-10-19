@@ -28,10 +28,11 @@
 | `npm run verify:ui`    | 通过，无 console 错误、无横向溢出；覆盖模式切换与分配表           |
 | `npm run verify:about` | 通过（版本 0.2.3、许可 GPL-3.0、标题栏图标 1063×1063 已解码）     |
 | `npm run format:check` | 通过                                                              |
-| CI                     | 绿：run #36（`180f3a6`），Node 20 / 22 各 11/11 步通过            |
+| CI                     | 绿：run #39（`24c3945`），Node 20 / 22 各 11/11 步通过            |
 
 ## 已完成（按时间倒序，只留结论）
 
+- **0.2.3 后续审查修复**：Kimi K3 全量审查后修复 6 条（README 版本钉死、八度警告混淆 transpose、CONTRIBUTING 浏览器说明、`GenerateOptions` IPC 校验、`shell:open` 本地路径限制、外链前缀边界），拖拽高亮和点击导入测试也补上；剩余 3 条低优先级建议见已知问题。CI run #39 绿。
 - **0.2.3 发布**：第 2 步拖拽恢复（Electron 32 移除 `File.path`，改走 preload `pathForFile` + 整步 drop target）；修复 0.2.2 审查发现（外链白名单、排除轨不再进入警告/分配表/`pitchRange`、八度拟合计入 transpose、去掉大轨 `Math.max(...)` 展开）；新增 `npm run check` 作为本地/CI 单一闸门；GitHub About 改中文并整理 19 个 topics。资产已上传 [GitHub Releases](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.3)。
 - **0.2.2 发布**：多乐器支持、紧凑和弦行、多轨间距与强制合并修复；安装包/免安装/资源包已上传 [GitHub Releases](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.2)，tag `v0.2.2`。
 - **配置摘要联动**：第 4 步「其它」折叠下的小字现在随合并模式、作者、基准 TPS 更新；之前一直停在初始文案。`verify:ui` 增加了对应检查。
