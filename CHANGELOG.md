@@ -7,6 +7,30 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-10-20
+
+### Fixed
+
+- `shell:open` allowed any existing local path from the renderer and handed it to
+  the system handler. It now only opens existing `.litematic` files.
+- `song:generate` trusted the renderer's options object. A bad `instrumentMode`
+  silently fell through to extended mode, and malformed arrays could fail deep in
+  the layout. The option surface is now sanitised at the IPC boundary.
+- `INSTRUMENT_OCTAVE_SHIFT` reported the net of the automatic octave fit and the
+  user's transpose. It now reports only the automatic fit, matching its wording.
+- The external-link allowlist used `startsWith`, so `/xingtuan416/MusicboxMCevil`
+  passed. It now requires an exact path or a `/` boundary.
+- Dragging a replacement file while a song was loaded highlighted the hidden empty
+  box instead of the visible step. The step itself now highlights, and `verify:ui`
+  covers both drag-drop and click-to-choose.
+
+### Changed
+
+- README download tables use `<version>` placeholders instead of pinning 0.2.3,
+  so a release no longer requires a manual README edit.
+- CONTRIBUTING distinguishes `verify:ui` / `verify:about` (system Chromium) from
+  `smoke` (built Electron, no browser).
+
 ## [0.2.3] - 2026-10-19
 
 ### Fixed
@@ -146,7 +170,8 @@ First release. Windows x64, Electron 33.
 - Pure TypeScript NBT codec and Litematica bit packing; output is a Java 1.20.4
   `.litematic` that Litematica loads directly.
 
-[Unreleased]: https://github.com/xingtuan416/MusicboxMC/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/xingtuan416/MusicboxMC/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.4
 [0.2.3]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.3
 [0.2.2]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.2
 [0.1.0]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.1.0

@@ -1,19 +1,19 @@
 # 项目状态
 
 > 每次有实质进展就更新这个文件。**写法见 `AGENTS.md` 的「状态文档」一节。**
-> 最后更新：2026-10-19
+> 最后更新：2026-10-20
 
 ## 一句话
 
-0.2.3 已发布：修复第 2 步拖拽、收口 0.2.2 代码审查发现，并统一本地/CI 检查流程。
+0.2.4 已发布：把 tag 之后的审查修复（IPC 校验、shell 路径限制、外链边界、拖拽高亮）打进安装包。
 
 ## 位置
 
 | 项       | 值                                                                                           |
 | -------- | -------------------------------------------------------------------------------------------- |
-| 版本     | `0.2.3`（`package.json`、tag、Release 一致）                                                 |
+| 版本     | `0.2.4`（`package.json`、tag、Release 一致）                                                 |
 | 分支     | `main`，与远端同步                                                                           |
-| 最新发布 | `v0.2.3`：安装包 79.7 MB、免安装 109.3 MB、资源包 51 KB                                      |
+| 最新发布 | `v0.2.4`：安装包 79.7 MB、免安装 109.3 MB、资源包 51 KB                                      |
 | 备份     | 分支 `backup/before-ui-integration`、标签 `backup-before-ui-integration`、`v0.1.0` —— 不要删 |
 
 ## 质量闸门（最近一次实测，2026-10-19）
@@ -26,12 +26,13 @@
 | `npm run build`        | 通过                                                              |
 | `npm run smoke`        | 10 项通过（16 轨夹具走真 IPC：346 音、16 轨、约 2.6 KB 写盘一致） |
 | `npm run verify:ui`    | 通过，无 console 错误、无横向溢出；覆盖模式切换与分配表           |
-| `npm run verify:about` | 通过（版本 0.2.3、许可 GPL-3.0、标题栏图标 1063×1063 已解码）     |
+| `npm run verify:about` | 通过（版本 0.2.4、许可 GPL-3.0、标题栏图标 1063×1063 已解码）     |
 | `npm run format:check` | 通过                                                              |
 | CI                     | 绿：run #39（`24c3945`），Node 20 / 22 各 11/11 步通过            |
 
 ## 已完成（按时间倒序，只留结论）
 
+- **0.2.4 发布**：把 0.2.3 tag 之后的审查修复打进安装包——IPC `GenerateOptions` 校验、`shell:open` 只允许 `.litematic`、外链前缀边界、拖拽已加载页面高亮、八度警告只报自动拟合、README 版本占位、CONTRIBUTING 浏览器说明；新增 `test/generateOptions.test.ts` 与拖拽/点击双路径 UI 测试。
 - **0.2.3 后续审查修复**：Kimi K3 全量审查后修复 6 条（README 版本钉死、八度警告混淆 transpose、CONTRIBUTING 浏览器说明、`GenerateOptions` IPC 校验、`shell:open` 本地路径限制、外链前缀边界），拖拽高亮和点击导入测试也补上；剩余 3 条低优先级建议见已知问题。CI run #39 绿。
 - **0.2.3 发布**：第 2 步拖拽恢复（Electron 32 移除 `File.path`，改走 preload `pathForFile` + 整步 drop target）；修复 0.2.2 审查发现（外链白名单、排除轨不再进入警告/分配表/`pitchRange`、八度拟合计入 transpose、去掉大轨 `Math.max(...)` 展开）；新增 `npm run check` 作为本地/CI 单一闸门；GitHub About 改中文并整理 19 个 topics。资产已上传 [GitHub Releases](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.3)。
 - **0.2.2 发布**：多乐器支持、紧凑和弦行、多轨间距与强制合并修复；安装包/免安装/资源包已上传 [GitHub Releases](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.2)，tag `v0.2.2`。
@@ -51,12 +52,12 @@
 - **界面**：八步流程、红石布线预览、检查结果分组分页、资源包入口、无边框窗口、音效。
 - **核心修复**：Modified UTF-8、SMPTE 不再死循环、首个 tempo 偏晚、补齐不再饿死分支、最小八度位移、±75ms 量化界、`app://` 目录边界。
 
-### 0.2.3 发布资产
+### 0.2.4 发布资产
 
-- `release/MusicboxMC-Setup-0.2.3-win-x64.exe`（79.7 MB）
-- `release/MusicboxMC-0.2.3-win-x64.zip`（109.3 MB）
+- `release/MusicboxMC-Setup-0.2.4-win-x64.exe`（79.7 MB）
+- `release/MusicboxMC-0.2.4-win-x64.zip`（109.3 MB）
 - `release/MusicboxMC-piano-pack-1.20.4.zip`（51 KB）
-- GitHub Release：[v0.2.3](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.3)，tag 与 `package.json` 版本一致；三个资产均为 `uploaded`。
+- GitHub Release：[v0.2.4](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.4)，tag 与 `package.json` 版本一致；三个资产均为 `uploaded`。
 
 ## 已知问题（诚实清单）
 
@@ -65,7 +66,7 @@
 3. **CI 不跑 `verify:ui` / `verify:about` / `smoke`** —— 它们需要显示环境与真实 Electron，目前只能本地跑。
 4. **本机 `ELECTRON_RUN_AS_NODE=1` 是设着的** —— 跑 `_electron` / Electron 前必须删掉，否则 `require('electron')` 返回字符串。
 5. **`out/` 是本地目录，不入库** —— 中间文件一律放这里，不要放 `/tmp`（Git Bash 与原生 node 解析不同）。
-6. **OpenCodeReview 仍只完成了一部分** —— 0.2.3 小范围 15 个文件里 6 个分组失败，产出 3 条发现（外链前缀边界、拖拽高亮落在隐藏元素、点击导入无测试），已全部修复。随后用 Kimi K3 跑全量 `v0.2.1..HEAD`：49 个文件、9 条发现，但 37/49 个分组仍因本地网关 503 失败。已修 6 条（README 版本钉死、八度警告混淆 transpose、CONTRIBUTING 浏览器说明、`GenerateOptions` 未校验、`shell:open` 本地路径过宽），剩余 3 条低优先级建议保留（`NOTE_BLOCK_INSTRUMENTS` 依赖对象键序、`summarizeAssignments` 重复拟合、span 与 outside 的统计帧）。这些是 0.2.3 发布后的修复，尚未进入 0.2.3 的安装包；是否发 0.2.4 待定。
+6. **OpenCodeReview 仍只完成了一部分** —— 0.2.3 小范围 15 个文件里 6 个分组失败，产出 3 条发现（外链前缀边界、拖拽高亮落在隐藏元素、点击导入无测试），已全部修复。随后用 Kimi K3 跑全量 `v0.2.1..HEAD`：49 个文件、9 条发现，但 37/49 个分组仍因本地网关 503 失败。已修 6 条（README 版本钉死、八度警告混淆 transpose、CONTRIBUTING 浏览器说明、`GenerateOptions` 未校验、`shell:open` 本地路径过宽），剩余 3 条低优先级建议保留（`NOTE_BLOCK_INSTRUMENTS` 依赖对象键序、`summarizeAssignments` 重复拟合、span 与 outside 的统计帧）。这些是 0.2.3 发布后的修复，已进入 0.2.4 安装包；剩余 3 条低优先级建议留待后续。
 
 ## 待用户决定
 
