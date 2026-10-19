@@ -36,8 +36,8 @@ of a song.
 Windows x64. Grab either file from the
 [latest release](https://github.com/xingtuan416/MusicboxMC/releases/latest).
 
-| File                                 | What it is                                                                   |
-| ------------------------------------ | ---------------------------------------------------------------------------- |
+| File                                     | What it is                                                                   |
+| ---------------------------------------- | ---------------------------------------------------------------------------- |
 | `MusicboxMC-Setup-<version>-win-x64.exe` | Installer. Choose a directory, get Start menu and desktop shortcuts.         |
 | `MusicboxMC-<version>-win-x64.zip`       | Portable. Unzip and run `MusicboxMC.exe`; writes nothing outside its folder. |
 
