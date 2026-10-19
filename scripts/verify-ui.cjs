@@ -135,13 +135,42 @@ function buildSource(directory) {
       data.items.add(
         new File([new Uint8Array([0x4d, 0x54, 0x68, 0x64])], 'dropped.mid', { type: 'audio/midi' }),
       );
+      window.__dropData = data;
       const step = document.getElementById('step-2');
-      for (const type of ['dragenter', 'dragover', 'drop']) {
+      for (const type of ['dragenter', 'dragover']) {
         step.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: data }));
       }
     });
+    const highlighted = await page.locator('#step-2').evaluate((step) => step.classList.contains('dragover'));
+    if (!highlighted) problems.push('step 2 does not highlight while a file is dragged over it');
+    await page.evaluate(() => {
+      const step = document.getElementById('step-2');
+      step.dispatchEvent(
+        new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: window.__dropData }),
+      );
+      delete window.__dropData;
+    });
     await page.waitForFunction(() => document.getElementById('importLoaded').style.display === 'flex');
+    const stillHighlighted = await page
+      .locator('#step-2')
+      .evaluate((step) => step.classList.contains('dragover'));
+    if (stillHighlighted) problems.push('step 2 still highlights after the drop');
     await shot('2-import-loaded');
+
+    // Keep the click fallback covered too. A non-MIDI drop first proves the visible
+    // error path, then "重新选择" returns to the empty view and the dialog stub loads
+    // the same fixture again.
+    await page.evaluate(() => {
+      const data = new DataTransfer();
+      data.items.add(new File([new Uint8Array([0])], 'not-midi.txt', { type: 'text/plain' }));
+      document
+        .getElementById('step-2')
+        .dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: data }));
+    });
+    await page.waitForFunction(() => document.getElementById('importError').style.display === 'flex');
+    await page.locator('#btnResetImport').click();
+    await page.locator('#importEmpty').click();
+    await page.waitForFunction(() => document.getElementById('importLoaded').style.display === 'flex');
 
     const shown = await page.evaluate(() => ({
       title: document.getElementById('midiFileTitle').textContent,

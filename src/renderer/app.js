@@ -591,6 +591,9 @@ function carriesFiles(event) {
 }
 
 function setDragHighlight(on) {
+  // The empty box is hidden once a song is loaded; the step itself is always visible,
+  // so the replacement-drop path gets feedback too.
+  dropStep.classList.toggle('dragover', on);
   dropArea.classList.toggle('dragover', on);
 }
 

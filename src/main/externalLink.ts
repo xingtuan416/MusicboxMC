@@ -16,6 +16,8 @@ export function allowedExternalUrl(raw: string): string | null {
   }
   if (url.protocol !== 'https:') return null;
   if (url.hostname !== 'github.com' && url.hostname !== 'www.github.com') return null;
-  if (!url.pathname.startsWith(REPOSITORY_PREFIX)) return null;
+  if (url.pathname !== REPOSITORY_PREFIX && !url.pathname.startsWith(`${REPOSITORY_PREFIX}/`)) {
+    return null;
+  }
   return url.toString();
 }
