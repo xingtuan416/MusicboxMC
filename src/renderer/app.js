@@ -575,6 +575,73 @@ $('realFileInput').addEventListener('change', (event) => {
 });
 
 $('importEmpty').addEventListener('click', () => void chooseMidiFile());
+
+/* ── Step 2: drag and drop ───────────────────────────────────────────────────
+ * Electron 32 removed `File.path`, so the renderer cannot read the dropped file
+ * itself; the preload turns the File into an absolute path with
+ * `webUtils.getPathForFile`. The whole step is a target, not only the empty box,
+ * so dropping a replacement while a song is loaded still works.
+ */
+const dropStep = $('step-2');
+const dropArea = $('importEmpty');
+let dragDepth = 0;
+
+function carriesFiles(event) {
+  return Array.from(event.dataTransfer?.types ?? []).includes('Files');
+}
+
+function setDragHighlight(on) {
+  dropArea.classList.toggle('dragover', on);
+}
+
+dropStep.addEventListener('dragenter', (event) => {
+  if (!carriesFiles(event)) return;
+  event.preventDefault();
+  dragDepth += 1;
+  setDragHighlight(true);
+});
+
+dropStep.addEventListener('dragover', (event) => {
+  if (!carriesFiles(event)) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'copy';
+});
+
+dropStep.addEventListener('dragleave', () => {
+  if (dragDepth === 0) return;
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (dragDepth === 0) setDragHighlight(false);
+});
+
+dropStep.addEventListener('drop', (event) => {
+  if (!carriesFiles(event)) return;
+  event.preventDefault();
+  dragDepth = 0;
+  setDragHighlight(false);
+  const file = event.dataTransfer.files?.[0];
+  if (!file) return;
+  if (!/\.(mid|midi)$/i.test(file.name)) {
+    showImportError('请拖入 .mid 或 .midi 文件。');
+    return;
+  }
+  try {
+    const path = api.pathForFile(file);
+    if (!path) {
+      showImportError('无法读取拖入文件的路径，请改用点击选择。');
+      return;
+    }
+    void loadMidi(path);
+  } catch {
+    showImportError('无法读取拖入文件的路径，请改用点击选择。');
+  }
+});
+
+// Without these, Chromium treats a drop outside the target as a navigation and
+// replaces the app window with the dropped file.
+window.addEventListener('dragover', (event) => {
+  if (carriesFiles(event)) event.preventDefault();
+});
+window.addEventListener('drop', (event) => event.preventDefault());
 $('btnChangeFile').addEventListener('click', () => void chooseMidiFile());
 $('btnResetImport').addEventListener('click', () => setImportView('empty'));
 

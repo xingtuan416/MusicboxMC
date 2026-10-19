@@ -39,6 +39,13 @@ describe('whole-track octave fit', () => {
     expect(fit.outside).toBeGreaterThan(0);
   });
 
+  it('fits the transposed track, not the raw pitches', () => {
+    // Without the +1 octave override the fit would choose -1; with it, -2 is the only
+    // offset that brings the whole track into the harp's two octaves.
+    expect(chooseOctaveOffset(notes(80, 84, 88), 'harp')).toEqual({ offset: -1, outside: 0 });
+    expect(chooseOctaveOffset(notes(80, 84, 88), 'harp', 1)).toEqual({ offset: -2, outside: 0 });
+  });
+
   it('does not shift fixed-pitch drums', () => {
     expect(chooseOctaveOffset(notes(36, 38, 42), 'basedrum')).toEqual({ offset: 0, outside: 0 });
   });

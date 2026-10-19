@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, dialog, ipcMain, net, protocol, shell } from 
 import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { copyFileSync, existsSync, readFileSync } from 'node:fs';
+import { allowedExternalUrl } from './externalLink';
 import { analyzeFile, generate, generateToFile, type GenerateOptions } from './service';
 import { describeCoreError } from './messages';
 import { resolveRendererPath } from './rendererPath';
@@ -211,7 +212,8 @@ function registerIpc(): void {
     // A URL is not a path: `openPath` would refuse it and the click would do nothing, which
     // is exactly what the repository link in the About section did.
     if (/^https?:\/\//i.test(path)) {
-      await shell.openExternal(path);
+      const target = allowedExternalUrl(path);
+      if (target) await shell.openExternal(target);
       return;
     }
     if (!existsSync(path)) return;

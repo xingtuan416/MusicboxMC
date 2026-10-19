@@ -97,20 +97,27 @@ export function collectEvents(
 
     let octaveOffset = 0;
     if (voicing.kind === 'instrument') {
-      const fit = chooseOctaveOffset(track.notes, voicing.instrument);
+      const fit = chooseOctaveOffset(track.notes, voicing.instrument, transpose);
       octaveOffset = fit.offset;
-      if (fit.offset !== 0) {
+      const netOffset = fit.offset + transpose;
+      if (netOffset !== 0) {
         warnings.push({
           code: 'INSTRUMENT_OCTAVE_SHIFT',
           trackIndex: track.index,
           instrument: voicing.instrument,
-          octaves: fit.offset,
+          octaves: netOffset,
           notes: track.notes.length,
         });
       }
-      const midis = track.notes.map((note) => note.midi);
-      if (midis.length > 0) {
-        const span = Math.max(...midis) - Math.min(...midis);
+      if (track.notes.length > 0) {
+        let low = Number.POSITIVE_INFINITY;
+        let high = Number.NEGATIVE_INFINITY;
+        for (const note of track.notes) {
+          const midi = note.midi + 12 * transpose;
+          low = Math.min(low, midi);
+          high = Math.max(high, midi);
+        }
+        const span = high - low;
         if (span > 24) {
           warnings.push({
             code: 'INSTRUMENT_RANGE_OVERFLOW',
@@ -120,6 +127,15 @@ export function collectEvents(
             outside: fit.outside,
           });
         }
+      }
+    }
+
+    // Depends only on the track-level voicing, so it belongs outside the note loop.
+    let rangeFields: { instrument?: NoteBlockInstrument; low?: number; high?: number } = {};
+    if (voicing.kind === 'instrument') {
+      const range = INSTRUMENTS[voicing.instrument].range;
+      if (range !== null) {
+        rangeFields = { instrument: voicing.instrument, low: range[0], high: range[1] };
       }
     }
 
@@ -143,14 +159,6 @@ export function collectEvents(
           continue;
         }
         mapped = drum;
-      }
-
-      let rangeFields: { instrument?: NoteBlockInstrument; low?: number; high?: number } = {};
-      if (voicing.kind === 'instrument') {
-        const range = INSTRUMENTS[voicing.instrument].range;
-        if (range !== null) {
-          rangeFields = { instrument: voicing.instrument, low: range[0], high: range[1] };
-        }
       }
 
       // Resolved before the drop check so a warning can name the tick it is about.

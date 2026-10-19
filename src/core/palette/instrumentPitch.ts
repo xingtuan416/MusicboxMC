@@ -41,6 +41,7 @@ export interface OctaveFit {
 export function chooseOctaveOffset(
   notes: ReadonlyArray<{ midi: number }>,
   instrument: NoteBlockInstrument,
+  transpose = 0,
 ): OctaveFit {
   const range = INSTRUMENTS[instrument].range;
   if (range === null) return { offset: 0, outside: 0 };
@@ -50,7 +51,9 @@ export function chooseOctaveOffset(
   for (let offset = -2; offset <= 2; offset++) {
     let outside = 0;
     for (const note of notes) {
-      const sounding = note.midi + 12 * offset;
+      // `transpose` is the user's per-track octave override and is applied before the
+      // automatic fit, exactly as `mapPitchToInstrument` will apply it later.
+      const sounding = note.midi + 12 * (offset + transpose);
       if (sounding < low || sounding > high) outside += 1;
     }
     if (outside < best.outside || (outside === best.outside && Math.abs(offset) < Math.abs(best.offset))) {

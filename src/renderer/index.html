@@ -601,9 +601,16 @@
         transition: all 0.25s var(--ease-out);
       }
 
-      .drop-area:hover {
+      .drop-area:hover,
+      .drop-area.dragover {
         background: rgba(255, 255, 255, 0.68);
         border-color: var(--accent);
+      }
+
+      .drop-area.dragover {
+        border-style: solid;
+        box-shadow: 0 10px 30px rgba(20, 20, 19, 0.08);
+        transform: translateY(-1px);
       }
 
       .drop-title {

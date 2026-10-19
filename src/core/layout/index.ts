@@ -208,6 +208,7 @@ export function layoutResolver(
 function trackInstrumentsFor(
   inputs: LayoutInput[],
   assignments: Record<number, TrackAssignment>,
+  transpose?: Record<number, number>,
 ): TrackInstrumentInfo[] {
   const result: TrackInstrumentInfo[] = [];
   for (const input of inputs) {
@@ -224,7 +225,7 @@ function trackInstrumentsFor(
               : input.voicing.instrument,
         source: assignment?.source ?? input.source,
         substituted: assignment?.substituted ?? input.substituted,
-        octaveOffset: input.octaveOffset,
+        octaveOffset: input.octaveOffset + (transpose?.[trackIndex] ?? 0),
         outsideNotes: input.outside,
       });
     }
@@ -307,15 +308,16 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   const fitWarnings: LayoutWarning[] = [];
   for (const input of merged) {
     if (input.voicing.kind !== 'instrument') continue;
-    const fit = chooseOctaveOffset(input.notes, input.voicing.instrument);
+    const fit = chooseOctaveOffset(input.notes, input.voicing.instrument, opts.transpose?.[input.index] ?? 0);
     input.octaveOffset = fit.offset;
     input.outside = fit.outside;
-    if (fit.offset !== 0) {
+    const netOffset = fit.offset + (opts.transpose?.[input.index] ?? 0);
+    if (netOffset !== 0) {
       fitWarnings.push({
         code: 'INSTRUMENT_OCTAVE_SHIFT',
         trackIndex: input.index,
         instrument: input.voicing.instrument,
-        octaves: fit.offset,
+        octaves: netOffset,
         notes: input.notes.length,
       });
     }
@@ -346,7 +348,7 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
     return {
       ...forced,
       warnings: [...instrumentWarnings, ...forced.warnings],
-      trackInstruments: trackInstrumentsFor(inputs, assignments),
+      trackInstruments: trackInstrumentsFor(inputs, assignments, opts.transpose),
     };
   }
   const trackInputs = merged;
@@ -468,6 +470,6 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
     warnings,
     placed,
     rangeShift: rangeShiftTotal,
-    trackInstruments: trackInstrumentsFor(trackInputs, assignments),
+    trackInstruments: trackInstrumentsFor(trackInputs, assignments, opts.transpose),
   };
 }

@@ -228,6 +228,47 @@ describe('command playback', () => {
   });
 });
 
+describe('excluded tracks', () => {
+  it('disappear from assignment warnings, summaries and the piano span', () => {
+    const assignments = assignmentsFor('extended');
+    const substituted = assignments.find((assignment) => assignment.substituted);
+    expect(substituted).toBeDefined();
+    const excluded = substituted!.trackIndex;
+
+    for (const commandPlayback of [false, true]) {
+      const generated = generate(FIXTURE, {
+        instrumentMode: 'extended',
+        excludeTracks: [excluded],
+        commandPlayback,
+      });
+      expect(generated.result.success).toBe(true);
+      expect(generated.result.trackInstruments.some((track) => track.trackIndex === excluded)).toBe(false);
+      expect(
+        generated.result.warnings.some(
+          (warning) =>
+            'trackIndex' in warning &&
+            warning.trackIndex === excluded &&
+            (warning.code === 'INSTRUMENT_SUBSTITUTED' || warning.code === 'INSTRUMENT_UNKNOWN'),
+        ),
+      ).toBe(false);
+    }
+
+    const pitchTracks = assignments
+      .filter((assignment) => assignment.voicing.kind === 'pitch')
+      .map((assignment) => assignment.trackIndex);
+    expect(pitchTracks.length).toBeGreaterThan(0);
+    for (const commandPlayback of [false, true]) {
+      const generated = generate(FIXTURE, {
+        instrumentMode: 'native',
+        excludeTracks: pitchTracks,
+        commandPlayback,
+      });
+      expect(generated.result.success).toBe(true);
+      expect(generated.result.pitchRange).toBeUndefined();
+    }
+  });
+});
+
 describe('forced single-spine merge on the 16-track fixture', () => {
   const song = parseMidi(readFileSync(FIXTURE));
   const assignments = assignmentsFor('native');

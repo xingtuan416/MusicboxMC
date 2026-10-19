@@ -70,14 +70,16 @@ function assignmentWarnings(assignments: readonly TrackAssignment[]): LayoutWarn
 function summarizeAssignments(
   song: SongModel,
   assignments: readonly TrackAssignment[],
+  transpose: Record<number, number> | undefined,
 ): TrackInstrumentInfo[] {
   return assignments.map((assignment) => {
     const track = song.tracks.find((entry) => entry.index === assignment.trackIndex);
     let octaveOffset = 0;
     let outsideNotes = 0;
     if (assignment.voicing.kind === 'instrument' && track) {
-      const fit = chooseOctaveOffset(track.notes, assignment.voicing.instrument);
-      octaveOffset = fit.offset;
+      const trackTranspose = transpose?.[assignment.trackIndex] ?? 0;
+      const fit = chooseOctaveOffset(track.notes, assignment.voicing.instrument, trackTranspose);
+      octaveOffset = fit.offset + trackTranspose;
       outsideNotes = fit.outside;
     }
     return {
@@ -159,7 +161,7 @@ function generateCommands(
         placed: [],
         // Its own mapping is not counted here yet; see the review note in docs.
         rangeShift: { notes: 0, maxSemitones: 0 },
-        trackInstruments: summarizeAssignments(song, assignments),
+        trackInstruments: summarizeAssignments(song, assignments, options.transpose),
         regions: [
           {
             name: 'region_0',
@@ -254,16 +256,18 @@ export function generate(
   const song = parseMidi(readFileSync(path));
   const base = analyze(song, path);
   const assignments = assignTracks(song, resolveMode(options));
+  // Excluded tracks must disappear from every derived view, not just from the notes:
+  // warnings, the assignment table and the piano span all follow this filtered list.
+  const excluded = new Set(options.excludeTracks ?? []);
+  const activeAssignments = assignments.filter((assignment) => !excluded.has(assignment.trackIndex));
   const byTrack: Record<number, TrackAssignment> = {};
-  for (const assignment of assignments) byTrack[assignment.trackIndex] = assignment;
+  for (const assignment of activeAssignments) byTrack[assignment.trackIndex] = assignment;
 
   if (options.commandPlayback) {
-    return generateCommands(song, base, options, start, assignments);
+    return generateCommands(song, base, options, start, activeAssignments);
   }
 
-  const included = song.tracks.filter(
-    (t) => t.notes.length > 0 && !(options.excludeTracks ?? []).includes(t.index),
-  );
+  const included = song.tracks.filter((t) => t.notes.length > 0 && !excluded.has(t.index));
   if (included.length === 0) {
     return {
       result: failure({
@@ -340,7 +344,7 @@ export function generate(
       playbackMode: 'redstone',
       bytes: buffer.length,
       outOfRangeNotes,
-      pitchRange: pitchRangeFor(assignments),
+      pitchRange: pitchRangeFor(activeAssignments),
       stats: {
         tickCount: result.totalTicks,
         noteBlockCount,

@@ -126,9 +126,20 @@ function buildSource(directory) {
 
     await shot('1-start');
 
-    // Step 1 -> 2, then pick a file through the dialog the renderer asks for.
+    // Step 1 -> 2, then drop a file on the step. This is the path Electron 32 broke:
+    // `File.path` no longer exists, so the preload must resolve the path and the
+    // renderer must listen for drop itself.
     await page.locator('#step-1 [data-goto="2"]').click();
-    await page.locator('#importEmpty').click();
+    await page.evaluate(() => {
+      const data = new DataTransfer();
+      data.items.add(
+        new File([new Uint8Array([0x4d, 0x54, 0x68, 0x64])], 'dropped.mid', { type: 'audio/midi' }),
+      );
+      const step = document.getElementById('step-2');
+      for (const type of ['dragenter', 'dragover', 'drop']) {
+        step.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: data }));
+      }
+    });
     await page.waitForFunction(() => document.getElementById('importLoaded').style.display === 'flex');
     await shot('2-import-loaded');
 
