@@ -34,6 +34,25 @@ const MIN_CANVAS_HEIGHT = 200;
 /** One colour per region, used for the track stripe in the gutter. */
 const REGION_COLORS = ['#c97962', '#c29a65', '#879b79', '#ad8971', '#c58f9c', '#7d9690', '#aa9161'];
 
+/**
+ * Non-empty cell counts, cached per preview result.
+ *
+ * Dragging calls renderPreview every frame. Re-scanning every cell of a 2000 x 800 preview
+ * on each frame costs more than drawing the visible viewport, and the counts never change.
+ */
+const previewCountCache = new WeakMap();
+
+function previewCounts(preview) {
+  let counts = previewCountCache.get(preview);
+  if (counts) return counts;
+  counts = { wire: 0, base: 0, notes: 0 };
+  for (const cell of preview.wireCells) if (cell) counts.wire += 1;
+  for (const cell of preview.baseCells) if (cell) counts.base += 1;
+  for (const cell of preview.noteCells) if (cell) counts.notes += 1;
+  previewCountCache.set(preview, counts);
+  return counts;
+}
+
 /** Which region a Z row belongs to (regions share the preview's coordinate space). */
 function regionOfRow(res, z) {
   for (let i = 0; i < res.regions.length; i++) {
@@ -179,8 +198,14 @@ function renderPreview(res) {
   const gridX0 = GUTTER;
   const gridY0 = RULER;
 
-  canvas.width = w * dpr;
-  canvas.height = h * dpr;
+  // Assigning width/height reallocates and clears the backing buffer. During a drag the
+  // viewport size is unchanged; only clearRect is needed.
+  const pixelWidth = Math.round(w * dpr);
+  const pixelHeight = Math.round(h * dpr);
+  if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+    canvas.width = pixelWidth;
+    canvas.height = pixelHeight;
+  }
   canvas.style.width = `${w}px`;
   canvas.style.height = `${h}px`;
 
@@ -536,10 +561,8 @@ function renderPreview(res) {
     }
   }
 
-  const nonEmpty =
-    preview.wireCells.filter(Boolean).length +
-    preview.baseCells.filter(Boolean).length +
-    (showNotes ? preview.noteCells.filter(Boolean).length : 0);
+  const counts = previewCounts(preview);
+  const nonEmpty = counts.wire + counts.base + (showNotes ? counts.notes : 0);
   const trackCount = res.stats?.outputTrackCount ?? (res.tracks || []).filter((t) => t.noteCount > 0).length;
   $('previewSize').textContent = `${x} × ${z}`;
   $('previewRegions').textContent = String((res.regions || []).length);
