@@ -34,7 +34,7 @@
 | KI-05  | P2   | 待确认   | 强制合并会被单个超宽和弦切换成全曲 staged 布局  |
 | KI-06  | P2   | 已修复   | 主进程吞掉未捕获异常后继续运行                  |
 | OPS-01 | P1   | 已修复   | `engines >=20` 与实际在 Node 24 下打包失败矛盾  |
-| OPS-02 | P2   | 部分完成 | Electron、Vitest、TypeScript 和 Node 长期未升级 |
+| OPS-02 | P2   | 已修复   | Electron、Vitest、TypeScript 和 Node 长期未升级 |
 | OPS-04 | P3   | 已修复   | 支持范围应按 Litematica v6/DataFixer 能力表述   |
 | OPS-09 | P3   | 已修复   | 旧 release 产物清理与本地忽略规则               |
 | OPS-10 | P3   | 已修复   | OpenCodeReview 覆盖不完整，仍有 3 条建议未处理  |
@@ -167,20 +167,17 @@
 ### OPS-02：运行时和工具链长期停留在旧主版本
 
 **级别**：P2  
-**状态**：部分完成（0.3.0；TypeScript 7 上游阻塞）
+**状态**：已修复（0.3.0）
 
 **0.3.0 结果**：
 
 - Node 升级到 24，CI 不再运行已停止维护的 Node 20。
 - Electron 从 `33.4.11` 升到 `45.3.2`；electron-builder 升到 `26.18.0`。
 - Vitest 升到 `5.1.0`，Vite 升到 `8.3.8`，ESLint 升到 `10.15.0`。
-- TypeScript 从 `5.9.3` 升到 `6.0.3`，并把 `tsconfig` 从已弃用的 `moduleResolution: node` 迁移到 `node16`。
+- TypeScript 7.0.2 已采用，并保留 `@typescript/typescript6` 作为 `typescript` 别名供 ESLint 使用；构建与类型检查显式调用 `typescript7/bin/tsc`。
+- `tsconfig` 从已弃用的 `moduleResolution: node` 迁移到 `node16`。
 - 仓库加入 Dependabot 周更分组。
 - `@tonejs/midi 2.0.28` 仍是 npm 最新版，无需升级。
-
-**剩余阻塞**：TypeScript `7.0.2` 暂时不能采用。最新 `typescript-eslint 8.72.2`（包括 canary）仍声明 peer `typescript >=4.8.4 <6.1.0`；用 `--force` 安装会让类型感知 lint 失效。等上游放宽后单独升级。
-
-**影响**：Electron 旧主版本会积累 Chromium 安全修复缺口；Node 20 已不再获得安全更新。本次已经消除这条债务，只剩一个由上游明确阻塞的主版本。
 
 ### OPS-03：补丁发布掩盖了维护债务
 
@@ -390,6 +387,5 @@
 ## 后续处理建议
 
 1. **发布决定**：`0.3.0` 已通过用户重点实测，等待是否提交、推送和发布的指令。
-2. **TypeScript 7**：等 `typescript-eslint` 的 peer 范围放宽到支持 7 后单独升级，不使用 `--force`。
-3. **`KI-05`**：等用户决定是否只加“全曲 staged 布局”提示，还是接受逐音群混合的复杂改造。
-4. **Release body**：发布时使用 `npm run release:notes`，再追加下载表、大小和校验和，避免手工复制变更日志与限制。
+2. **`KI-05`**：等用户决定是否只加“全曲 staged 布局”提示，还是接受逐音群混合的复杂改造。
+3. **Release body**：发布时使用 `npm run release:notes`，再追加下载表、大小和校验和，避免手工复制变更日志与限制。

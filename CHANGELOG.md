@@ -12,9 +12,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Changed
 
 - The development runtime is now Node 24, with Electron 45, electron-builder
-  26.18, Vitest 5, Vite 8, TypeScript 6.0 and the current ESLint stack. TypeScript 7
-  is not adopted yet because the supported `typescript-eslint` release still declares
-  `<6.1.0`; forcing it would disable type-aware linting.
+  26.18, Vitest 5, Vite 8 and TypeScript 7.0.2. TypeScript 7 ships without the API
+  ESLint needs, so `typescript` remains aliased to `@typescript/typescript6` for
+  `typescript-eslint`, while `typescript7` supplies the compiler used by build and
+  typecheck.
 - CI now runs a Windows job (`check` + `dist:dir`, and full packaging on tags/manual
   runs), the independent Java litematic reader, and Dependabot for grouped updates.
 - The preview keeps a per-result cell-count cache and only reallocates the canvas when

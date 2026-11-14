@@ -2,7 +2,7 @@
 
 ## 项目概览
 
-把 MIDI 文件转成 Minecraft 红石音乐 `.litematic` 投影的桌面应用。Electron 45 + TypeScript 6.0（`strict`、`noUncheckedIndexedAccess`），渲染层是**无打包器、无框架的 ES 模块**。包管理器 **npm**（以 `package-lock.json` 为准），Node **>= 24**。
+把 MIDI 文件转成 Minecraft 红石音乐 `.litematic` 投影的桌面应用。Electron 45 + TypeScript 7.0（`strict`、`noUncheckedIndexedAccess`，ESLint 用并排安装的 TS 6 API），渲染层是**无打包器、无框架的 ES 模块**。包管理器 **npm**（以 `package-lock.json` 为准），Node **>= 24**。
 
 数据流：`MIDI → SongModel → LayoutResult → RegionData[] → .litematic`。
 
@@ -56,6 +56,7 @@ CI 在 Node 24 上跑 `npm run check` 与 `verify:litematic`，另有一个 Wind
 - Prettier：`printWidth 110`、单引号、分号、尾逗号、LF。
 - ESLint：`eqeqeq: smart`、`prefer-const`、`no-fallthrough`；未使用变量报错（`_` 开头豁免）；全角空格在字符串与模板里允许。
 - TS：`strict`、`noUncheckedIndexedAccess`、`noUnusedLocals`、`noUnusedParameters`、`noImplicitReturns`。
+- TypeScript 7 的 `tsc` 在 `typescript7` 别名中；`typescript` 别名是 `@typescript/typescript6`，只供 `typescript-eslint` 使用。构建与 typecheck 必须走 `node node_modules/typescript7/bin/tsc`，不要直接依赖 `npx tsc`。
 - EditorConfig：2 空格、LF、文件末尾换行。
 - **代码注释写英文；界面文案写中文**（配置里没有这条，但全仓库一致；唯一例外是 `textEncoding.ts` 里的乱码示例数据）。
 

@@ -22,7 +22,7 @@
 | -------------------------- | --------------------------------------------------------- |
 | `npm test`                 | 38 文件 / 286 用例通过                                    |
 | `npm run lint`             | 无输出                                                    |
-| `npm run typecheck`        | 无输出（TypeScript 6.0.3）                                |
+| `npm run typecheck`        | 无输出（tsc 7.0.2；ESLint 使用并排 TS 6 API）             |
 | `npm run build`            | 通过（Node 24）                                           |
 | `npm run smoke`            | 12 项通过（Electron 45；目录授权与越界拒绝已覆盖）        |
 | `npm run verify:ui`        | 通过，无 console 错误、无横向溢出                         |
@@ -36,7 +36,7 @@
 ## 已完成（按时间倒序，只留结论）
 
 - **0.3.0 用户实测通过**：重点流程无问题，包括目录选择与生成、长曲预览拖动、关于页和安装包启动。重启后清掉了旧 `win-unpacked` 文件锁，只保留 `release-0.3.0-final/` 候选产物。
-- **0.3.0 本地候选**：Node 24 / Electron 45 / electron-builder 26.18 / Vitest 5 / Vite 8 / TypeScript 6.0.3 全量升级；TypeScript 7 因 `typescript-eslint` peer `<6.1.0` 暂缓。修复超长轨栈溢出、目录 token、块配置白名单、`SPATIAL_DRIFT` 定位、致命异常退出、许可证与模板；增加 Windows CI、Java 校验、Dependabot、Release 说明生成器和预览性能优化。286 用例、IPC 冒烟、界面、关于页、Java 校验和 Windows 打包全部通过。
+- **0.3.0 本地候选**：Node 24 / Electron 45 / electron-builder 26.18 / Vitest 5 / Vite 8 / TypeScript 7.0.2 全量升级；TypeScript 7 用 `@typescript/typescript6` 并排满足 ESLint 的 TS 6 API 依赖。修复超长轨栈溢出、目录 token、块配置白名单、`SPATIAL_DRIFT` 定位、致命异常退出、许可证与模板；增加 Windows CI、Java 校验、Dependabot、Release 说明生成器和预览性能优化。286 用例、IPC 冒烟、界面、关于页、Java 校验和 Windows 打包全部通过。
 - **问题清单整理**：新建 `docs/known-issues.md` 作为统一入口，按 `KI`（代码）、`REL`（产品限制）、`OPS`（版本与流程）编号；本文不再重复长清单。
 - **0.2.5 发布**：普通多轨共享 X 参考线改为从实际补齐位置递推，修复长曲同时音无警告拉开；用户 27 轨《鸟之诗》最大间距 179→5 格，277 用例、界面、关于页、IPC 冒烟和 Windows 打包全部通过。安装包、便携版与资源包已上传 [GitHub Releases](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.5)。
 - **普通多轨对齐修复**：共享 X 参考线改为从各轨实际补齐后的位置递推，并使用与布线一致的尘埃容量；不再因丢弃历史补齐而让领先轨无警告超前。新增一个修复前为 X=62 对 X=55 的回归用例。用户提供的 27 轨《鸟之诗》同时发声最大 X 间距从 179 格降到 5 格，4604 个音群的实际中继器累计时序全部不变；完整生成 25066 字节、27 区域成功。`Rush E` 压力案例从 177 格降到 43 格，仍有容量警告，不宣称完全对齐。
@@ -88,8 +88,7 @@
 仍未关闭：
 
 1. `KI-05`：强制合并的全曲 compact/staged 切换，等用户决定。
-2. `OPS-02`：TypeScript 7 被 `typescript-eslint` 上游 peer 阻塞，当前用 6.0.3。
-3. `REL-01`：预览性能已优化且用户实测通过，保留为后续性能回归观察项。
+2. `REL-01`：预览性能已优化且用户实测通过，保留为后续性能回归观察项。
 
 本地前提：
 
