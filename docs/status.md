@@ -5,37 +5,37 @@
 
 ## 一句话
 
-`0.3.0` 已完成修复、工具链升级和用户实测；**未提交、未打 tag、未发布**，等待发布决定。
+`0.3.0` 已发布：完成运行时升级、稳定性和 IPC 边界修复，并已通过用户实测。
 
 ## 位置
 
 | 项       | 值                                                                                           |
 | -------- | -------------------------------------------------------------------------------------------- |
-| 版本     | `0.3.0`（仅 `package.json`；tag 与 Release 仍是 `v0.2.5`）                                   |
-| 分支     | `main`；工作区有未提交的 `0.3.0` 改动                                                        |
-| 最新发布 | `v0.2.5`：安装包 79.7 MB、免安装 109.3 MB、资源包 51 KB                                      |
+| 版本     | `0.3.0`（`package.json`、tag、Release 一致）                                                 |
+| 分支     | `main`                                                                                       |
+| 最新发布 | `v0.3.0`：安装包 119.0 MB、免安装 149.4 MB、资源包 51 KB                                     |
 | 备份     | 分支 `backup/before-ui-integration`、标签 `backup-before-ui-integration`、`v0.1.0` —— 不要删 |
 
 ## 质量闸门（最近一次实测，2026-11-14）
 
-| 项                         | 结果                                                      |
-| -------------------------- | --------------------------------------------------------- |
-| `npm test`                 | 38 文件 / 286 用例通过                                    |
-| `npm run lint`             | 无输出                                                    |
-| `npm run typecheck`        | 无输出（tsc 7.0.2；ESLint 使用并排 TS 6 API）             |
-| `npm run build`            | 通过（Node 24）                                           |
-| `npm run smoke`            | 12 项通过（Electron 45；目录授权与越界拒绝已覆盖）        |
-| `npm run verify:ui`        | 通过，无 console 错误、无横向溢出                         |
-| `npm run verify:about`     | 通过（版本 0.3.0、许可 GPL-3.0-only、标题栏图标已解码）   |
-| `npm run verify:litematic` | 通过（独立 Java 读取器接受当前写入器）                    |
-| `npm run format:check`     | 通过                                                      |
-| Node 24 完整打包           | 通过，安装包与便携版在 `release-0.3.0-final/`             |
-| 用户实测                   | 通过（目录选择/生成、长曲拖动、关于页、安装包启动）       |
-| CI                         | 未推送；新增 Linux + Windows 工作流，等待 GitHub 实际运行 |
+| 项                         | 结果                                                           |
+| -------------------------- | -------------------------------------------------------------- |
+| `npm test`                 | 38 文件 / 286 用例通过                                         |
+| `npm run lint`             | 无输出                                                         |
+| `npm run typecheck`        | 无输出（tsc 7.0.2；ESLint 使用并排 TS 6 API）                  |
+| `npm run build`            | 通过（Node 24）                                                |
+| `npm run smoke`            | 12 项通过（Electron 45；目录授权与越界拒绝已覆盖）             |
+| `npm run verify:ui`        | 通过，无 console 错误、无横向溢出                              |
+| `npm run verify:about`     | 通过（版本 0.3.0、许可 GPL-3.0-only、标题栏图标已解码）        |
+| `npm run verify:litematic` | 通过（独立 Java 读取器接受当前写入器）                         |
+| `npm run format:check`     | 通过                                                           |
+| Node 24 完整打包           | 通过，安装包与便携版在 `release-0.3.0-final/`                  |
+| 用户实测                   | 通过（目录选择/生成、长曲拖动、关于页、安装包启动）            |
+| CI                         | 绿：tag run `43602988168`；Linux、Windows 打包与 Java 校验通过 |
 
 ## 已完成（按时间倒序，只留结论）
 
-- **0.3.0 用户实测通过**：重点流程无问题，包括目录选择与生成、长曲预览拖动、关于页和安装包启动。重启后清掉了旧 `win-unpacked` 文件锁，只保留 `release-0.3.0-final/` 候选产物。
+- **0.3.0 发布**：Node 24 / Electron 45 / TypeScript 7 运行时升级，超长轨、目录 token、块配置白名单、警告定位、致命异常和预览性能修复；Windows CI、Java 校验、Dependabot 和 Release 说明生成器接入。用户重点实测通过，CI tag run 全绿，三个资产已上传 [GitHub Releases](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.3.0)。
 - **0.3.0 本地候选**：Node 24 / Electron 45 / electron-builder 26.18 / Vitest 5 / Vite 8 / TypeScript 7.0.2 全量升级；TypeScript 7 用 `@typescript/typescript6` 并排满足 ESLint 的 TS 6 API 依赖。修复超长轨栈溢出、目录 token、块配置白名单、`SPATIAL_DRIFT` 定位、致命异常退出、许可证与模板；增加 Windows CI、Java 校验、Dependabot、Release 说明生成器和预览性能优化。286 用例、IPC 冒烟、界面、关于页、Java 校验和 Windows 打包全部通过。
 - **问题清单整理**：新建 `docs/known-issues.md` 作为统一入口，按 `KI`（代码）、`REL`（产品限制）、`OPS`（版本与流程）编号；本文不再重复长清单。
 - **0.2.5 发布**：普通多轨共享 X 参考线改为从实际补齐位置递推，修复长曲同时音无警告拉开；用户 27 轨《鸟之诗》最大间距 179→5 格，277 用例、界面、关于页、IPC 冒烟和 Windows 打包全部通过。安装包、便携版与资源包已上传 [GitHub Releases](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.5)。
@@ -60,12 +60,12 @@
 - **界面**：八步流程、红石布线预览、检查结果分组分页、资源包入口、无边框窗口、音效。
 - **核心修复**：Modified UTF-8、SMPTE 不再死循环、首个 tempo 偏晚、补齐不再饿死分支、最小八度位移、±75ms 量化界、`app://` 目录边界。
 
-### 0.3.0 本地候选资产（未发布）
+### 0.3.0 发布资产
 
-- `release-0.3.0-final/MusicboxMC-Setup-0.3.0-win-x64.exe`（124,741,139 字节，SHA-256 `0310fec44f28808d96be5d885aa60f22c6d87314208a1117fc4ddfdbcfd800d0`）
-- `release-0.3.0-final/MusicboxMC-0.3.0-win-x64.zip`（156,705,655 字节，SHA-256 `e741a4bcb7784d6fe698bf71146313ccaa5d115678291c14552e9c6bf9ad1e18`）
-- `release-0.3.0-final/MusicboxMC-piano-pack-1.20.4.zip`（51,562 字节）
-- 这三个文件只用于本地实测，没有上传，也没有对应 tag。
+- `MusicboxMC-Setup-0.3.0-win-x64.exe`（124,741,278 字节，SHA-256 `190cad19229b95544232c6c2e37b3af96ede3a31c91b4a3f91b53e8d8649e05c`）
+- `MusicboxMC-0.3.0-win-x64.zip`（156,705,779 字节，SHA-256 `cece763b54e6a08655dc2fbf67c64ce1c9d5c4b6b4afeafae92de9a4e700713c`）
+- `MusicboxMC-piano-pack-1.20.4.zip`（51,562 字节，SHA-256 `1d8eabede44f447164b918e68e0978d77e016451d3bcf8d2545a11468d512513`）
+- GitHub Release：[v0.3.0](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.3.0)，三个资产状态均为 `uploaded`，远端摘要与 CI 构建一致。
 
 ### 0.2.5 发布资产
 
@@ -98,5 +98,4 @@
 
 ## 待用户决定
 
-1. 是否提交、推送并发布 `0.3.0`。
-2. `KI-05` 是否保留现状并增加提示。
+1. `KI-05` 是否保留现状并增加提示。
