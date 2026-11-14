@@ -43,7 +43,11 @@ Windows x64. Grab either file from the
 
 `<version>` is the latest release; the exact filenames are on the Releases page.
 
-Supported Minecraft Java Edition versions: **1.17.1 – 26.3 (latest)**. **1.16.5 and below will not work.** You also need
+Output is Litematica **litematic v6** (`MinecraftDataVersion` 3700, for 1.20.4).
+Whether it loads depends on the Litematica build supporting v6 reads and upgrading the
+older data version through DataFixer. It has been checked in game with the matching
+Litematica builds for Minecraft Java **1.17.1 – 26.3**. **1.16.5 and below will not
+work.** You also need the
 [Litematica](https://masa.dy.fi/mcmods/client_mods/?mod=litematica) mod to paste
 what it generates.
 
@@ -175,7 +179,7 @@ arranging step.
 
 ## Building from source
 
-Node.js 20 or newer.
+Node.js 24 or newer.
 
 ```bash
 git clone https://github.com/xingtuan416/MusicboxMC.git

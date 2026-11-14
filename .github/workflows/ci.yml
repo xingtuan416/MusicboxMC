@@ -3,33 +3,78 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   verify:
-    name: format / lint / typecheck / test / build (node ${{ matrix.node }})
+    name: format / lint / typecheck / test / build
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        node: [20, 22]
     env:
-      # CI only runs tsc and vitest; the Electron runtime is not needed and
-      # downloading it would add ~100MB to every job.
+      # CI only runs tsc, vitest and the Java format check. The Electron runtime is not
+      # needed on Linux; the Windows job below downloads and packages it.
       ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: ${{ matrix.node }}
+          node-version: 24
           cache: npm
-
+      - uses: actions/setup-java@v6.3.0
+        with:
+          distribution: temurin
+          java-version: '21'
       - name: Install dependencies
         run: npm ci
-
       - name: Verify
         run: npm run check
+      - name: Verify the litematic writer with the independent Java reader
+        run: npm run verify:litematic
+
+  windows-verify:
+    name: Windows check and unpacked package
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Verify
+        run: npm run check
+      - name: Package unpacked application
+        run: npm run dist:dir
+
+  windows-release-build:
+    name: Windows release assets
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Verify
+        run: npm run check
+      - name: Build installer and portable zip
+        run: npm run dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: musicboxmc-windows
+          path: |
+            release/MusicboxMC-Setup-*-win-x64.exe
+            release/MusicboxMC-*-win-x64.zip
+            assets/musicboxmc-piano-pack-1.20.4.zip
+          if-no-files-found: error

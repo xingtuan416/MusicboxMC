@@ -1,6 +1,6 @@
 {
   "name": "musicboxmc",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "private": true,
   "description": "MIDI → Minecraft 红石音乐 .litematic 投影生成器",
   "license": "GPL-3.0-only",
@@ -14,7 +14,7 @@
   },
   "homepage": "https://github.com/xingtuan416/MusicboxMC#readme",
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "main": "dist/src/main/index.js",
   "scripts": {
@@ -32,6 +32,8 @@
     "dist": "npm run build && electron-builder --win --x64",
     "dist:dir": "npm run build && electron-builder --win --x64 --dir",
     "smoke": "node scripts/smoke-ipc.cjs",
+    "verify:litematic": "tsx scripts/verify-litematic-java.ts",
+    "release:notes": "node scripts/release-notes.mjs",
     "verify:ui": "node scripts/verify-ui.cjs",
     "verify:about": "node scripts/verify-about.cjs"
   },
@@ -39,26 +41,27 @@
     "@tonejs/midi": "^2.0.28"
   },
   "optionalDependencies": {
-    "@rollup/rollup-darwin-arm64": "4.64.0",
-    "@rollup/rollup-darwin-x64": "4.64.0",
-    "@rollup/rollup-linux-arm64-gnu": "4.64.0",
-    "@rollup/rollup-linux-x64-gnu": "4.64.0",
-    "@rollup/rollup-win32-x64-msvc": "4.64.0"
+    "@rollup/rollup-darwin-arm64": "^4.68.3",
+    "@rollup/rollup-darwin-x64": "^4.68.3",
+    "@rollup/rollup-linux-arm64-gnu": "^4.68.3",
+    "@rollup/rollup-linux-x64-gnu": "^4.68.3",
+    "@rollup/rollup-win32-x64-msvc": "^4.68.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^22.10.2",
-    "electron": "^33.3.1",
-    "electron-builder": "^26.15.3",
-    "eslint": "^10.12.0",
+    "@types/node": "^24.19.2",
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0",
+    "eslint": "^10.15.0",
     "eslint-config-prettier": "^10.1.8",
-    "globals": "^17.13.0",
-    "playwright-core": "^1.64.0",
-    "prettier": "^3.9.10",
+    "globals": "^17.14.0",
+    "playwright-core": "^1.65.1",
+    "prettier": "^3.10.1",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2",
-    "typescript-eslint": "^8.71.1",
-    "vitest": "^2.1.8"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
   },
   "build": {
     "appId": "com.musicboxmc.app",

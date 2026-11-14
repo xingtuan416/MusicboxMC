@@ -16,7 +16,7 @@ body:
     attributes:
       label: MusicboxMC version
       description: Shown in the installer or zip filename.
-      placeholder: '0.1.0'
+      placeholder: '<version>'
     validations:
       required: true
 

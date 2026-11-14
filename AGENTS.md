@@ -2,7 +2,7 @@
 
 ## 项目概览
 
-把 MIDI 文件转成 Minecraft 红石音乐 `.litematic` 投影的桌面应用。Electron 33 + TypeScript 5.7（`strict`、`noUncheckedIndexedAccess`），渲染层是**无打包器、无框架的 ES 模块**。包管理器 **npm**（以 `package-lock.json` 为准），Node **>= 20**（CI 同时跑 20 与 22）。
+把 MIDI 文件转成 Minecraft 红石音乐 `.litematic` 投影的桌面应用。Electron 45 + TypeScript 6.0（`strict`、`noUncheckedIndexedAccess`），渲染层是**无打包器、无框架的 ES 模块**。包管理器 **npm**（以 `package-lock.json` 为准），Node **>= 24**。
 
 数据流：`MIDI → SongModel → LayoutResult → RegionData[] → .litematic`。
 
@@ -21,30 +21,32 @@
 | 格式化                               | `npm run format` / `npm run format:check`             |
 | 不开界面直接生成                     | `npm run cli -- "song.mid"`                           |
 | 校验资源包                           | `npm run resourcepack:check`                          |
+| 独立 Java 校验 litematic 写入器      | `npm run verify:litematic`（需要 JDK）                |
+| 从 CHANGELOG + 已知限制生成发布草稿  | `npm run release:notes`                               |
 | IPC 端到端冒烟（需先 build）         | `npm run smoke -- "song.mid"`                         |
 | 打包 Windows 安装版                  | `npm run dist`（产物在 `release/`）                   |
 | 界面全流程验证（需先 build）         | `npm run verify:ui`（截图到 `out/ui-shots/`）         |
 | 关于页真机验证                       | `npm run verify:about`                                |
 | 外部代码审查                         | `ocr review --from <ref> --to <ref> --audience agent` |
 
-CI 跑 `npm ci` → `lint` → `typecheck` → `test` → `build`（`.github/workflows/ci.yml`，Node 20 与 22）。`verify:ui`、`verify:about`、`smoke` 需要显示环境，只能本地跑。
+CI 在 Node 24 上跑 `npm run check` 与 `verify:litematic`，另有一个 Windows job 跑 `check` + `dist:dir`（tag/手动触发时跑完整 `dist`）。`verify:ui`、`verify:about`、`smoke` 需要显示环境，只能本地跑。
 
 代码审查用阿里 OpenCodeReview（`ocr`，全局安装；配置在 `~/.opencodereview/config.json`，不在仓库里）。按路径的审查规则在 `.opencodereview/rule.json`，新发现的"会静默出错"的不变量应加进去。委托模式 `ocr delegate preview|rule` 不需要 API key。
 
 ## 目录地图
 
-| 路径               | 说明                                                                                                                            |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| `src/core/`        | 纯逻辑，不依赖 Electron：`midi` `layout` `palette` `litematic` `nbt` `tempo` `command`                                          |
-| `src/main/`        | 主进程：`service`（编排）、`generate`、`analyze`、`messages`（错误码→中文）、`index`（窗口与 IPC）                              |
-| `src/preload/`     | `contextBridge`，渲染层唯一入口                                                                                                 |
-| `src/renderer/`    | 界面：`app.js`（全部行为）、`preview.js`（画布）、`warningText.js`、`resourcepack.js`、`index.html`                             |
-| `scripts/`         | `copy-assets.mjs`、`cli.ts`、`check-piano-pack.mjs`、`smoke-ipc.cjs`、`verify-ui.cjs`、`verify-about.cjs`、`serve-renderer.cjs` |
-| `test/`            | vitest；`fixtures/` 有 `.mid`、`.litematic` 与 Java 校验器                                                                      |
-| `docs/`            | 架构、红石模型、litematic 格式、命令播放；**`status.md` 是当前项目状态，开工前先读**                                            |
-| `.opencodereview/` | 按路径的代码审查规则（`ocr review` 使用）                                                                                       |
-| `dist/` `release/` | **生成物，勿手改**                                                                                                              |
-| `out/`             | 本地工作目录，已 gitignore，**勿提交**                                                                                          |
+| 路径               | 说明                                                                                                                                                        |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/core/`        | 纯逻辑，不依赖 Electron：`midi` `layout` `palette` `litematic` `nbt` `tempo` `command`                                                                      |
+| `src/main/`        | 主进程：`service`（编排）、`generate`、`analyze`、`messages`（错误码→中文）、`index`（窗口与 IPC）                                                          |
+| `src/preload/`     | `contextBridge`，渲染层唯一入口                                                                                                                             |
+| `src/renderer/`    | 界面：`app.js`（全部行为）、`preview.js`（画布）、`warningText.js`、`resourcepack.js`、`index.html`                                                         |
+| `scripts/`         | `copy-assets.mjs`、`cli.ts`、`check-piano-pack.mjs`、`smoke-ipc.cjs`、`verify-ui.cjs`、`verify-about.cjs`、`verify-litematic-java.ts`、`serve-renderer.cjs` |
+| `test/`            | vitest；`fixtures/` 有 `.mid`、`.litematic` 与 Java 校验器                                                                                                  |
+| `docs/`            | 架构、红石模型、litematic 格式、命令播放；**`status.md` 是当前项目状态，`known-issues.md` 是统一问题清单，开工前先读**                                      |
+| `.opencodereview/` | 按路径的代码审查规则（`ocr review` 使用）                                                                                                                   |
+| `dist/` `release/` | **生成物，勿手改**                                                                                                                                          |
+| `out/`             | 本地工作目录，已 gitignore，**勿提交**                                                                                                                      |
 
 ## 代码约定
 
@@ -58,7 +60,7 @@ CI 跑 `npm ci` → `lint` → `typecheck` → `test` → `build`（`.github/wor
 
 ## 测试要求
 
-- 测试只放 `test/**/*.test.ts`；`vitest.config.ts` 已排除 `dist`、`release`、`out`。
+- 测试只放 `test/**/*.test.ts`；`vitest.config.mts` 已排除 `dist`、`release`、`out`。
 - 夹具放 `test/fixtures/`，**必须入库**。`*.mid`、`*.litematic` 在 `.gitignore` 里被忽略，靠 `!test/fixtures/*.mid`、`!test/fixtures/*.litematic` 例外放行；新增夹具要同时确认例外覆盖。
 - 多乐器回归夹具是 `test/fixtures/happy-birthday-16.mid`：16 轨正好覆盖 13 种有音高乐器 + 3 种鼓，另有通道 9 上的 Cow Bell。`test/multiInstrument.test.ts` 依赖它，删掉会让测试少一大块。
 - 修 bug 必须附一条**修复前会失败**的测试。

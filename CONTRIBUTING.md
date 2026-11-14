@@ -5,7 +5,7 @@ obvious from the code.
 
 ## Getting set up
 
-You need **Node.js 20 or newer**. There is no build step for the renderer and no
+You need **Node.js 24 or newer**. There is no build step for the renderer and no
 bundler anywhere, so `npm ci` and `npm test` are all it takes to get going.
 
 ```bash
@@ -39,7 +39,8 @@ npm run check
 
 That runs `format:check`, `lint`, `typecheck`, `test` and `build` in order. To
 run one of them on its own, use `npm run format:check`, `npm run lint`,
-`npm run typecheck`, `npm test` or `npm run build`.
+`npm run typecheck`, `npm test` or `npm run build`. The independent Java writer
+check is `npm run verify:litematic`; CI installs a JDK for it.
 
 ### Checking the interface
 
@@ -63,6 +64,10 @@ run one of them on its own, use `npm run format:check`, `npm run lint`,
 needs a prior `npm run build`; it does not use a browser channel. The split is deliberate:
 the project takes no dependency it cannot justify, and adding a browser only for the
 author's machine would be worse than stating the requirement here.
+
+CI runs the core checks on Linux, the independent Java reader, and a Windows job that
+also builds the unpacked application. The UI scripts remain local because they need a
+real desktop session.
 
 `npm run format` applies Prettier. Everything is already formatted, so it should
 be a no-op unless you added something.

@@ -21,3 +21,6 @@ net26.2源码/
 !test/fixtures/*.mid
 # ...except the litematic the format test asserts against, for the same reason
 !test/fixtures/*.litematic
+
+# IntelliJ project file (not part of the application)
+*.iml

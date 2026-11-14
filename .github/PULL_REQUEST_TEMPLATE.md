@@ -13,10 +13,7 @@ Say what you actually ran. "npm test passes" is a starting point, not an answer
 for anything that changes generated output.
 -->
 
-- [ ] `npm run lint`
-- [ ] `npm run typecheck`
-- [ ] `npm test`
-- [ ] `npm run build`
+- [ ] `npm run check` (format, lint, typecheck, test, build)
 
 ## Checklist
 

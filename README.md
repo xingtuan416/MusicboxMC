@@ -40,7 +40,10 @@ Windows x64。两个文件任选其一，均来自
 
 `<version>` 是最新发布版本；实际文件名以 Releases 页面为准。
 
-支持的 Minecraft Java 版：**1.17.1 – 26.3（最新）**。**1.16.5 及以下不可用**。另外需要
+生成的是 Litematica **litematic v6**（`MinecraftDataVersion` 3700，对应 1.20.4）。
+能否加载取决于所用 Litematica 是否支持读取 v6，并由 DataFixer 升级旧数据版本；
+已在 Minecraft Java **1.17.1 – 26.3** 的对应 Litematica 组合中实机验证。
+**1.16.5 及以下不可用。** 需要
 [Litematica](https://masa.dy.fi/mcmods/client_mods/?mod=litematica) 模组来粘贴生成的投影。
 
 ## 快速上手
@@ -144,7 +147,7 @@ bass/guitar/flute/bell 也会被换成钢琴。
 
 ## 从源码构建
 
-需要 Node.js 20 或更高版本。
+需要 Node.js 24 或更高版本。
 
 ```bash
 git clone https://github.com/xingtuan416/MusicboxMC.git
