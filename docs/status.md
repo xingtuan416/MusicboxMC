@@ -1,37 +1,39 @@
 # 项目状态
 
 > 每次有实质进展就更新这个文件。**写法见 `AGENTS.md` 的「状态文档」一节。**
-> 最后更新：2026-10-20
+> 最后更新：2026-11-14
 
 ## 一句话
 
-0.2.4 已发布：把 tag 之后的审查修复（IPC 校验、shell 路径限制、外链边界、拖拽高亮）打进安装包。
+0.2.5 已发布：修复普通多轨布局丢失历史补齐位置、导致长曲同时音符在空间上拉开的问题。
 
 ## 位置
 
 | 项       | 值                                                                                           |
 | -------- | -------------------------------------------------------------------------------------------- |
-| 版本     | `0.2.4`（`package.json`、tag、Release 一致）                                                 |
-| 分支     | `main`，与远端同步                                                                           |
-| 最新发布 | `v0.2.4`：安装包 79.7 MB、免安装 109.3 MB、资源包 51 KB                                      |
+| 版本     | `0.2.5`（`package.json`、tag、Release 一致）                                                 |
+| 分支     | `main`                                                                                       |
+| 最新发布 | `v0.2.5`：安装包 79.7 MB、免安装 109.3 MB、资源包 51 KB                                      |
 | 备份     | 分支 `backup/before-ui-integration`、标签 `backup-before-ui-integration`、`v0.1.0` —— 不要删 |
 
-## 质量闸门（最近一次实测，2026-10-19）
+## 质量闸门（最近一次实测，2026-11-14）
 
 | 项                     | 结果                                                              |
 | ---------------------- | ----------------------------------------------------------------- |
-| `npm test`             | 35 文件 / 276 用例通过                                            |
+| `npm test`             | 35 文件 / 277 用例通过                                            |
 | `npm run lint`         | 无输出（`scripts/**/*.cjs` 已按 CommonJS 配置）                   |
 | `npm run typecheck`    | 无输出                                                            |
 | `npm run build`        | 通过                                                              |
-| `npm run smoke`        | 10 项通过（16 轨夹具走真 IPC：346 音、16 轨、约 2.6 KB 写盘一致） |
-| `npm run verify:ui`    | 通过，无 console 错误、无横向溢出；覆盖模式切换与分配表           |
-| `npm run verify:about` | 通过（版本 0.2.4、许可 GPL-3.0、标题栏图标 1063×1063 已解码）     |
+| `npm run smoke`        | 10 项通过（16 轨夹具走真 IPC：346 音、16 轨、约 2.8 KB 写盘一致） |
+| `npm run verify:ui`    | 2026-11-14 通过，无 console 错误、无横向溢出                      |
+| `npm run verify:about` | 2026-11-14 通过（版本 0.2.5、许可 GPL-3.0、标题栏图标已解码）     |
 | `npm run format:check` | 通过                                                              |
-| CI                     | 绿：run #39（`24c3945`），Node 20 / 22 各 11/11 步通过            |
+| CI                     | 上次 `24c3945` 为绿；本次 `0.2.5` 推送后以 Actions 结果为准       |
 
 ## 已完成（按时间倒序，只留结论）
 
+- **0.2.5 发布**：普通多轨共享 X 参考线改为从实际补齐位置递推，修复长曲同时音无警告拉开；用户 27 轨《鸟之诗》最大间距 179→5 格，277 用例、界面、关于页、IPC 冒烟和 Windows 打包全部通过。安装包、便携版与资源包已上传 [GitHub Releases](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.5)。
+- **普通多轨对齐修复**：共享 X 参考线改为从各轨实际补齐后的位置递推，并使用与布线一致的尘埃容量；不再因丢弃历史补齐而让领先轨无警告超前。新增一个修复前为 X=62 对 X=55 的回归用例。用户提供的 27 轨《鸟之诗》同时发声最大 X 间距从 179 格降到 5 格，4604 个音群的实际中继器累计时序全部不变；完整生成 25066 字节、27 区域成功。`Rush E` 压力案例从 177 格降到 43 格，仍有容量警告，不宣称完全对齐。
 - **0.2.4 发布**：把 0.2.3 tag 之后的审查修复打进安装包——IPC `GenerateOptions` 校验、`shell:open` 只允许 `.litematic`、外链前缀边界、拖拽已加载页面高亮、八度警告只报自动拟合、README 版本占位、CONTRIBUTING 浏览器说明；新增 `test/generateOptions.test.ts` 与拖拽/点击双路径 UI 测试。
 - **0.2.3 后续审查修复**：Kimi K3 全量审查后修复 6 条（README 版本钉死、八度警告混淆 transpose、CONTRIBUTING 浏览器说明、`GenerateOptions` IPC 校验、`shell:open` 本地路径限制、外链前缀边界），拖拽高亮和点击导入测试也补上；剩余 3 条低优先级建议见已知问题。CI run #39 绿。
 - **0.2.3 发布**：第 2 步拖拽恢复（Electron 32 移除 `File.path`，改走 preload `pathForFile` + 整步 drop target）；修复 0.2.2 审查发现（外链白名单、排除轨不再进入警告/分配表/`pitchRange`、八度拟合计入 transpose、去掉大轨 `Math.max(...)` 展开）；新增 `npm run check` 作为本地/CI 单一闸门；GitHub About 改中文并整理 19 个 topics。资产已上传 [GitHub Releases](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.3)。
@@ -51,6 +53,13 @@
 - **端到端冒烟**：`npm run smoke` 走真 preload + 真 IPC，核到「磁盘上的文件字节数 === 返回值」。
 - **界面**：八步流程、红石布线预览、检查结果分组分页、资源包入口、无边框窗口、音效。
 - **核心修复**：Modified UTF-8、SMPTE 不再死循环、首个 tempo 偏晚、补齐不再饿死分支、最小八度位移、±75ms 量化界、`app://` 目录边界。
+
+### 0.2.5 发布资产
+
+- `release-0.2.5/MusicboxMC-Setup-0.2.5-win-x64.exe`（83,557,915 字节）
+- `release-0.2.5/MusicboxMC-0.2.5-win-x64.zip`（114,629,586 字节）
+- `release-0.2.5/MusicboxMC-piano-pack-1.20.4.zip`（51,562 字节）
+- GitHub Release：[v0.2.5](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.5)，tag 与 `package.json` 版本一致。
 
 ### 0.2.4 发布资产
 

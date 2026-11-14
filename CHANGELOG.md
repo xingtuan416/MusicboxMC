@@ -7,6 +7,18 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-11-14
+
+### Fixed
+
+- Multi-track spatial alignment discarded the dust added to earlier groups when it
+  built the shared time-to-X line. A sparse track that was padded and later became the
+  naturally leading track could therefore run ahead without any `SPATIAL_DRIFT`
+  warning, and simultaneous notes drifted apart in long, ordinary multi-track songs.
+  The line now advances from each track's actual padded position using the same dust
+  budget as the circuit. On a 27-track user song the largest simultaneous X gap fell
+  from 179 cells to 5, while every repeater delay and trigger tick stayed unchanged.
+
 ## [0.2.4] - 2026-10-20
 
 ### Fixed
