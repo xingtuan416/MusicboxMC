@@ -5,36 +5,37 @@
 
 ## 一句话
 
-`0.3.0` 已发布：完成运行时升级、稳定性和 IPC 边界修复，并已通过用户实测。
+`0.3.0` 已发布；`main` 的开发基线已升级到 Node 26 LTS，应用产物没有变化，因此没有新 Release。
 
 ## 位置
 
 | 项       | 值                                                                                           |
 | -------- | -------------------------------------------------------------------------------------------- |
-| 版本     | `0.3.0`（`package.json`、tag、Release 一致）                                                 |
+| 版本     | `0.3.0`（tag 与 Release）；`main` 多一个 Node 26 开发基线提交                                |
 | 分支     | `main`                                                                                       |
 | 最新发布 | `v0.3.0`：安装包 119.0 MB、免安装 149.4 MB、资源包 51 KB                                     |
 | 备份     | 分支 `backup/before-ui-integration`、标签 `backup-before-ui-integration`、`v0.1.0` —— 不要删 |
 
 ## 质量闸门（最近一次实测，2026-11-14）
 
-| 项                         | 结果                                                           |
-| -------------------------- | -------------------------------------------------------------- |
-| `npm test`                 | 38 文件 / 286 用例通过                                         |
-| `npm run lint`             | 无输出                                                         |
-| `npm run typecheck`        | 无输出（tsc 7.0.2；ESLint 使用并排 TS 6 API）                  |
-| `npm run build`            | 通过（Node 24）                                                |
-| `npm run smoke`            | 12 项通过（Electron 45；目录授权与越界拒绝已覆盖）             |
-| `npm run verify:ui`        | 通过，无 console 错误、无横向溢出                              |
-| `npm run verify:about`     | 通过（版本 0.3.0、许可 GPL-3.0-only、标题栏图标已解码）        |
-| `npm run verify:litematic` | 通过（独立 Java 读取器接受当前写入器）                         |
-| `npm run format:check`     | 通过                                                           |
-| Node 24 完整打包           | 通过，安装包与便携版在 `release-0.3.0-final/`                  |
-| 用户实测                   | 通过（目录选择/生成、长曲拖动、关于页、安装包启动）            |
-| CI                         | 绿：tag run `43602988168`；Linux、Windows 打包与 Java 校验通过 |
+| 项                         | 结果                                                         |
+| -------------------------- | ------------------------------------------------------------ |
+| `npm test`                 | 38 文件 / 286 用例通过                                       |
+| `npm run lint`             | 无输出                                                       |
+| `npm run typecheck`        | 无输出（Node 26.13.1；tsc 7.0.2，ESLint 用并排 TS 6 API）    |
+| `npm run build`            | 通过（Node 26.13.1）                                         |
+| `npm run smoke`            | 12 项通过（Electron 45；目录授权与越界拒绝已覆盖）           |
+| `npm run verify:ui`        | 通过，无 console 错误、无横向溢出                            |
+| `npm run verify:about`     | 通过（版本 0.3.0、许可 GPL-3.0-only、标题栏图标已解码）      |
+| `npm run verify:litematic` | 通过（独立 Java 读取器接受当前写入器）                       |
+| `npm run format:check`     | 通过                                                         |
+| Node 26 Windows 打包       | 通过（`npm run dist:dir`，Electron 45.3.2）                  |
+| 用户实测                   | 通过（0.3.0 目录选择/生成、长曲拖动、关于页、安装包启动）    |
+| CI                         | 绿：Node 26 run `43604563631`；Linux、Windows、Java 校验通过 |
 
 ## 已完成（按时间倒序，只留结论）
 
+- **Node 26 LTS 开发基线**：`engines >=26`、CI/Windows job、`@types/node 26.6.6`、`.nvmrc` 全部升级；Node 26.13.1 下 `npm run check`、`dist:dir`、Electron IPC 冒烟、关于页和界面验证通过。该变化只影响开发与构建环境，应用产物未变。
 - **0.3.0 发布**：Node 24 / Electron 45 / TypeScript 7 运行时升级，超长轨、目录 token、块配置白名单、警告定位、致命异常和预览性能修复；Windows CI、Java 校验、Dependabot 和 Release 说明生成器接入。用户重点实测通过，CI tag run 全绿，三个资产已上传 [GitHub Releases](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.3.0)。
 - **0.3.0 本地候选**：Node 24 / Electron 45 / electron-builder 26.18 / Vitest 5 / Vite 8 / TypeScript 7.0.2 全量升级；TypeScript 7 用 `@typescript/typescript6` 并排满足 ESLint 的 TS 6 API 依赖。修复超长轨栈溢出、目录 token、块配置白名单、`SPATIAL_DRIFT` 定位、致命异常退出、许可证与模板；增加 Windows CI、Java 校验、Dependabot、Release 说明生成器和预览性能优化。286 用例、IPC 冒烟、界面、关于页、Java 校验和 Windows 打包全部通过。
 - **问题清单整理**：新建 `docs/known-issues.md` 作为统一入口，按 `KI`（代码）、`REL`（产品限制）、`OPS`（版本与流程）编号；本文不再重复长清单。
@@ -90,6 +91,8 @@
 1. `KI-05`：强制合并的全曲 compact/staged 切换，等用户决定。
 2. `REL-01`：预览性能已优化且用户实测通过，保留为后续性能回归观察项。
 
+Node 26 是开发/构建要求；打包后的 Electron 应用仍自带自己的 Node 运行时，用户不需要安装 Node。
+
 本地前提：
 
 - CI 不跑 `verify:ui` / `verify:about` / `smoke`，它们需要显示环境与真实 Electron。
@@ -99,3 +102,4 @@
 ## 待用户决定
 
 1. `KI-05` 是否保留现状并增加提示。
+2. 下一次功能或修复版本是否顺带发布 Node 26 开发基线（用户产物无变化，也可以不单独发布）。
