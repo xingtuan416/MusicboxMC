@@ -162,7 +162,7 @@
 
 **影响**：按 `engines` 安装 Node 24 的贡献者会遇到一个与业务代码无关的打包失败，错误信息也无法指向版本约束。
 
-**0.3.0 结果**：electron-builder 升到 `26.18.0` 后，Node `24.22.2` 已成功生成 NSIS 安装包和便携 zip；`engines` 改为 `>=24`。首次构建时图标包下载曾因网络中断失败，重试后通过，不再是 WASM 分配错误。
+**结果**：electron-builder 升到 `26.18.0` 后，Node 24 已成功生成 NSIS 安装包和便携 zip；随后开发基线继续升级到 Node 26 LTS，`engines` 改为 `>=26`，Node 26.13.1 下的 typecheck、测试、Windows 解包打包、IPC 冒烟和界面验证均通过。首次构建时图标包下载曾因网络中断失败，重试后通过，不再是 WASM 分配错误。
 
 ### OPS-02：运行时和工具链长期停留在旧主版本
 
@@ -171,7 +171,7 @@
 
 **0.3.0 结果**：
 
-- Node 升级到 24，CI 不再运行已停止维护的 Node 20。
+- Node 升级到 26 LTS，CI 不再运行已停止维护的 Node 20；`@types/node` 同步为 26.6.6。
 - Electron 从 `33.4.11` 升到 `45.3.2`；electron-builder 升到 `26.18.0`。
 - Vitest 升到 `5.1.0`，Vite 升到 `8.3.8`，ESLint 升到 `10.15.0`。
 - TypeScript 7.0.2 已采用，并保留 `@typescript/typescript6` 作为 `typescript` 别名供 ESLint 使用；构建与类型检查显式调用 `typescript7/bin/tsc`。

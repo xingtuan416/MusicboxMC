@@ -147,7 +147,7 @@ bass/guitar/flute/bell 也会被换成钢琴。
 
 ## 从源码构建
 
-需要 Node.js 24 或更高版本。
+需要 Node.js 26 或更高版本。
 
 ```bash
 git clone https://github.com/xingtuan416/MusicboxMC.git

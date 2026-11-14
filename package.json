@@ -14,7 +14,7 @@
   },
   "homepage": "https://github.com/xingtuan416/MusicboxMC#readme",
   "engines": {
-    "node": ">=24"
+    "node": ">=26"
   },
   "main": "dist/src/main/index.js",
   "scripts": {

@@ -179,7 +179,7 @@ arranging step.
 
 ## Building from source
 
-Node.js 24 or newer.
+Node.js 26 or newer.
 
 ```bash
 git clone https://github.com/xingtuan416/MusicboxMC.git

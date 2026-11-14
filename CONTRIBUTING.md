@@ -5,7 +5,7 @@ obvious from the code.
 
 ## Getting set up
 
-You need **Node.js 24 or newer**. There is no build step for the renderer and no
+You need **Node.js 26 or newer**. There is no build step for the renderer and no
 bundler anywhere, so `npm ci` and `npm test` are all it takes to get going.
 
 ```bash

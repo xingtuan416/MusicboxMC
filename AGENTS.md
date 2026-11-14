@@ -2,7 +2,7 @@
 
 ## 项目概览
 
-把 MIDI 文件转成 Minecraft 红石音乐 `.litematic` 投影的桌面应用。Electron 45 + TypeScript 7.0（`strict`、`noUncheckedIndexedAccess`，ESLint 用并排安装的 TS 6 API），渲染层是**无打包器、无框架的 ES 模块**。包管理器 **npm**（以 `package-lock.json` 为准），Node **>= 24**。
+把 MIDI 文件转成 Minecraft 红石音乐 `.litematic` 投影的桌面应用。Electron 45 + TypeScript 7.0（`strict`、`noUncheckedIndexedAccess`，ESLint 用并排安装的 TS 6 API），渲染层是**无打包器、无框架的 ES 模块**。包管理器 **npm**（以 `package-lock.json` 为准），Node **>= 26**。
 
 数据流：`MIDI → SongModel → LayoutResult → RegionData[] → .litematic`。
 
@@ -30,7 +30,7 @@
 | 关于页真机验证                       | `npm run verify:about`                                |
 | 外部代码审查                         | `ocr review --from <ref> --to <ref> --audience agent` |
 
-CI 在 Node 24 上跑 `npm run check` 与 `verify:litematic`，另有一个 Windows job 跑 `check` + `dist:dir`（tag/手动触发时跑完整 `dist`）。`verify:ui`、`verify:about`、`smoke` 需要显示环境，只能本地跑。
+CI 在 Node 26 上跑 `npm run check` 与 `verify:litematic`，另有一个 Windows job 跑 `check` + `dist:dir`（tag/手动触发时跑完整 `dist`）。`verify:ui`、`verify:about`、`smoke` 需要显示环境，只能本地跑。
 
 代码审查用阿里 OpenCodeReview（`ocr`，全局安装；配置在 `~/.opencodereview/config.json`，不在仓库里）。按路径的审查规则在 `.opencodereview/rule.json`，新发现的"会静默出错"的不变量应加进去。委托模式 `ocr delegate preview|rule` 不需要 API key。
 

@@ -7,6 +7,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- Development moves to Node 26 LTS, with CI and the Windows packaging jobs on the
+  same runtime. `@types/node` follows the runtime at 26.6.6.
+
 ## [0.3.0] - 2026-11-14
 
 ### Changed
