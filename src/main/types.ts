@@ -12,6 +12,18 @@ import type { CommandPlaybackInfo } from '../core/command';
  * functions, nothing that would not survive structured cloning.
  */
 
+/** A directory the user chose in the main process, and the token that authorizes it. */
+export interface DirectoryGrant {
+  path: string;
+  token: string;
+}
+
+/** The renderer can name a file, but only inside a directory the main process granted. */
+export interface OutputTarget {
+  token: string;
+  fileName: string;
+}
+
 /** Options the renderer process may submit; only existing core capabilities, no new semantics. */
 export interface GenerateOptions {
   baseTps?: number;

@@ -1,5 +1,5 @@
 const { chromium } = require('playwright-core');
-const { mkdirSync, writeFileSync, rmSync } = require('node:fs');
+const { mkdirSync, readFileSync, writeFileSync, rmSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 const { Midi } = require('@tonejs/midi');
@@ -61,6 +61,7 @@ function buildSource(directory) {
     path: source,
     outputPath: join(directory, 'ui-check.litematic'),
     outputDir: directory,
+    appVersion: JSON.parse(readFileSync(resolve('package.json'), 'utf8')).version,
   };
   console.log(
     `fixture: ${result.song.noteCount} notes, ${result.tracks.length} tracks, ` +
@@ -91,15 +92,15 @@ function buildSource(directory) {
         chooseMidi: async () => fixture.path,
         analyze: async () => fixture,
         generate: async () => fixture,
-        chooseDirectory: async () => fixture.outputDir,
+        chooseDirectory: async () => ({ path: fixture.outputDir, token: 'ui-verification-token' }),
         saveResourcePack: async () => {
           window.__calls.push('saveResourcePack');
           return 'C:/tmp/musicboxmc-piano-pack.zip';
         },
         appInfo: async () => ({
           name: 'MusicboxMC',
-          version: '0.2.0',
-          license: 'GPL-3.0-or-later',
+          version: fixture.appVersion,
+          license: 'GPL-3.0-only',
           repository: 'https://github.com/xingtuan416/MusicboxMC',
           author: 'xingtuan416',
         }),

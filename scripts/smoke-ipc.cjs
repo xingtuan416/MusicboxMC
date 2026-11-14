@@ -73,10 +73,34 @@ const { join, resolve } = require('node:path');
         (analyzed?.tracks || []).map((t) => t.name || '(unnamed)').join(', '),
     );
 
-    // 3. generate: the file has to exist afterwards, and its size has to match the result.
+    // 3. The main process grants the folder chosen in its native dialog. Stub only that
+    // dialog, then let the real authorization and write path run end to end.
+    await app.evaluate(({ dialog }, directory) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [directory] });
+    }, work);
+    const grant = await page.evaluate(() => window.musicbox.chooseDirectory());
+    check(
+      grant?.path === work && typeof grant?.token === 'string' && grant.token.length > 0,
+      'chooseDirectory returned a directory grant',
+    );
+
+    const forged = await page.evaluate(
+      async ([path, token]) => {
+        try {
+          await window.musicbox.generate(path, {}, { token, fileName: '../escape.litematic' });
+          return false;
+        } catch {
+          return true;
+        }
+      },
+      [song, grant?.token ?? 'missing'],
+    );
+    check(forged, 'generate rejects paths outside the granted directory');
+
+    // 4. generate: the file has to exist afterwards, and its size has to match the result.
     const generated = await page.evaluate(
-      ([path, out]) => window.musicbox.generate(path, {}, out),
-      [song, output],
+      ([path, target]) => window.musicbox.generate(path, {}, target),
+      [song, { token: grant.token, fileName: 'smoke.litematic' }],
     );
     check(generated?.success === true, 'generate reported success: ' + (generated?.error || 'no error'));
     check(existsSync(output), 'generate wrote ' + output);
@@ -94,15 +118,11 @@ const { join, resolve } = require('node:path');
         ((generated?.stats?.noteBlockCount ?? 0) + (generated?.stats?.circuitBlocks ?? 0)),
     );
 
-    // 4. The three dialog-driven calls are deliberately not exercised here.
-    //
-    // `chooseMidi`, `chooseDirectory` and `saveResourcePack` each open a
-    // native modal that nothing can answer under automation; calling one takes the renderer
-    // down with it, which is how the first version of this script failed. The work behind
-    // the dialogs is the same code the non-dialog calls above already reach - a path in, a
-    // result out - so what is left untested is the dialog itself, not the logic behind it.
+    // 5. `chooseMidi` and `saveResourcePack` still open native modals that automation
+    // cannot answer; their file work is covered by the direct calls above. `chooseDirectory`
+    // was exercised in step 3 with only its modal stubbed.
 
-    // 5. windowControl: the frameless title bar's buttons reach the real window.
+    // 6. windowControl: the frameless title bar's buttons reach the real window.
     await page.evaluate(() => window.musicbox.windowControl('maximize'));
     await page.waitForTimeout(400);
     const maximized = await app.evaluate(({ BrowserWindow }) => {
@@ -113,7 +133,7 @@ const { join, resolve } = require('node:path');
     await page.evaluate(() => window.musicbox.windowControl('maximize'));
     await page.waitForTimeout(300);
 
-    // 6. The interface must not have thrown or crashed while all of that happened.
+    // 7. The interface must not have thrown or crashed while all of that happened.
     await page.waitForTimeout(200);
     check(
       errors.length === 0,

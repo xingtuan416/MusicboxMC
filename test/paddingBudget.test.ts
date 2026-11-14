@@ -67,6 +67,11 @@ describe('padding and the branch strength budget', () => {
     const far = Array.from({ length: 40 }, (_, i) => ({ tick: i * 2, midi: 72 }));
     const result = layout(songOfTracks([sparse, far]));
     const drift = result.warnings.filter((w) => w.code === 'SPATIAL_DRIFT');
-    for (const warning of drift) expect(warning.drift).toBeGreaterThan(0);
+    for (const warning of drift) {
+      expect(warning.drift).toBeGreaterThan(0);
+      expect(warning.trackIndex).toBeTypeOf('number');
+      expect(warning.x).toBeTypeOf('number');
+      expect(warning.z).toBeTypeOf('number');
+    }
   });
 });

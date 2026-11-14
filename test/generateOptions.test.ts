@@ -17,6 +17,35 @@ describe('generate option sanitisation at the IPC boundary', () => {
     expect(sanitizeGenerateOptions([])).toEqual({});
   });
 
+  it('accepts only known block slots, regions and plain namespaced block ids', () => {
+    expect(
+      sanitizeGenerateOptions({
+        blocks: {
+          tracks: {
+            0: { noteBase: 'minecraft:stone', wireSupport: 'minecraft:dirt', unknown: 'minecraft:air' },
+            '-1': { floor: 'minecraft:stone' },
+            2: { floor: 'minecraft:oak_stairs[facing=east]' },
+          },
+          regions: {
+            A: { wireSupport: 'minecraft:stone' },
+            Z: { wireSupport: 'minecraft:stone' },
+            B: { noteBase: 'not-namespaced' },
+          },
+          extra: 'ignored',
+        },
+      }),
+    ).toEqual({
+      blocks: {
+        tracks: {
+          0: { noteBase: 'minecraft:stone', wireSupport: 'minecraft:dirt' },
+        },
+        regions: {
+          A: { wireSupport: 'minecraft:stone' },
+        },
+      },
+    });
+  });
+
   it('keeps valid fields and filters arrays and transpose entries', () => {
     expect(
       sanitizeGenerateOptions({

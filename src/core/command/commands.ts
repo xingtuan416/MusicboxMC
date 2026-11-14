@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { INSTRUMENTS, type NoteBlockInstrument } from '../palette/instruments';
+import { INSTRUMENTS, INSTRUMENT_ORDER, type NoteBlockInstrument } from '../palette/instruments';
 import type { ScheduledEvent, Voice } from './schedule';
 
 /**
@@ -22,10 +22,8 @@ const EMPTY_FRAME_LIST_BYTES = 2;
  */
 const COMMAND_CHUNK_BUDGET_BYTES = 24000;
 
-/** Every note-block instrument, in the order the instrument table defines them. */
-export const NOTE_BLOCK_INSTRUMENTS: readonly NoteBlockInstrument[] = Object.keys(
-  INSTRUMENTS,
-) as NoteBlockInstrument[];
+/** Every note-block instrument, in the canonical order used for command voice slots. */
+export const NOTE_BLOCK_INSTRUMENTS: readonly NoteBlockInstrument[] = INSTRUMENT_ORDER;
 
 /**
  * Scoreboard namespace for a set of events.

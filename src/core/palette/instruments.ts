@@ -10,23 +10,33 @@
  * that wording only for the five-slot piano extension, never for a vanilla instrument.
  */
 
-export type NoteBlockInstrument =
-  | 'harp'
-  | 'bass'
-  | 'basedrum'
-  | 'snare'
-  | 'hat'
-  | 'guitar'
-  | 'flute'
-  | 'bell'
-  | 'chime'
-  | 'xylophone'
-  | 'iron_xylophone'
-  | 'cow_bell'
-  | 'didgeridoo'
-  | 'bit'
-  | 'banjo'
-  | 'pling';
+/**
+ * Canonical order of the sixteen instruments.
+ *
+ * Command playback uses this order to assign voice slots. It must not come from
+ * `Object.keys(INSTRUMENTS)`, because editing the visual order of the table would then
+ * silently renumber command voices.
+ */
+export const INSTRUMENT_ORDER = [
+  'harp',
+  'bass',
+  'basedrum',
+  'snare',
+  'hat',
+  'guitar',
+  'flute',
+  'bell',
+  'chime',
+  'xylophone',
+  'iron_xylophone',
+  'cow_bell',
+  'didgeridoo',
+  'bit',
+  'banjo',
+  'pling',
+] as const;
+
+export type NoteBlockInstrument = (typeof INSTRUMENT_ORDER)[number];
 
 export interface InstrumentDef {
   /** Block directly under the note block, which selects the sample. */

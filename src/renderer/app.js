@@ -44,6 +44,8 @@ const state = {
   tracks: [],
   /** Folder the schematic will be written into. The file name is kept separately. */
   outputDir: null,
+  /** Main-process grant for `outputDir`; this is the only thing that authorizes a write. */
+  outputDirToken: null,
   result: null,
   /** 'extended' keeps the five-slot piano range; 'native' follows every MIDI instrument. */
   instrumentMode: 'extended',
@@ -372,36 +374,35 @@ function generateOptions() {
  * Step 5: output location
  * ──────────────────────────────────────────────────────────────────────────── */
 
+function outputFileName() {
+  const raw = $('fileNameInput').value.trim() || suggestedName(state.midiPath, state.song?.name);
+  return raw.toLowerCase().endsWith('.litematic') ? raw : `${raw}.litematic`;
+}
+
 function syncOutputText() {
-  const name = $('fileNameInput').value.trim() || '未命名';
+  const name = outputFileName();
   $('fullPathText').textContent = state.outputDir
     ? `完整路径：${state.outputDir}\\${name}`
     : `完整路径：尚未选择文件夹（文件名 ${name}）`;
   $('outputDirText').textContent = state.outputDir ?? '尚未选择文件夹';
 
-  // Writing a schematic is what this step is for, so it stays disabled until there is
-  // somewhere to write it. `runGeneration` checks the same thing, because a disabled
-  // button is a hint and not a guarantee.
-  $('btnStartGen').disabled = !state.outputDir;
+  // Writing a schematic is what this step is for, so it stays disabled until the main
+  // process has authorized a folder. `runGeneration` checks the same thing, because a
+  // disabled button is a hint and not a guarantee.
+  $('btnStartGen').disabled = !state.outputDirToken;
 }
 
 async function chooseOutputFile() {
   try {
-    const directory = await api.chooseDirectory();
-    if (!directory) return; // Cancelled.
-    state.outputDir = directory;
+    const grant = await api.chooseDirectory();
+    if (!grant) return; // Cancelled.
+    state.outputDir = grant.path;
+    state.outputDirToken = grant.token;
     syncOutputText();
     playNote(480, 'sine', 0.08);
   } catch (error) {
     notify(`无法选择文件夹：${error?.message || error}`);
   }
-}
-
-/** The full path the schematic will be written to, or null while no folder is chosen. */
-function outputPath() {
-  if (!state.outputDir) return null;
-  const name = $('fileNameInput').value.trim() || suggestedName(state.midiPath, state.song?.name);
-  return `${state.outputDir}\\${name}`;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -435,7 +436,7 @@ async function runGeneration() {
     showGenerateError('还没有选择 MIDI 文件。', '缺少输入');
     return;
   }
-  if (!state.outputDir) {
+  if (!state.outputDir || !state.outputDirToken) {
     showGenerateError('还没有选择保存位置。', '缺少输出位置');
     return;
   }
@@ -446,9 +447,12 @@ async function runGeneration() {
   startElapsed();
 
   try {
-    // With a destination chosen the main process also writes the file; without one it
-    // only builds the result, which is what the preview needs.
-    const result = await api.generate(state.midiPath, generateOptions(), outputPath() ?? undefined);
+    // With a destination granted the main process also writes the file. The token is
+    // authorization for the chosen folder; the renderer never sends the full path.
+    const result = await api.generate(state.midiPath, generateOptions(), {
+      token: state.outputDirToken,
+      fileName: outputFileName(),
+    });
     clearInterval(elapsedTimer);
 
     if (!result.success) {
@@ -707,6 +711,7 @@ $('btnNextSong').addEventListener('click', () => {
   state.song = null;
   state.tracks = [];
   state.outputDir = null;
+  state.outputDirToken = null;
   state.result = null;
   $('fileNameInput').value = '';
   setImportView('empty');

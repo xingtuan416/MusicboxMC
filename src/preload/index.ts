@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
-import type { AnalyzeResult, GenerateOptions, GenerateResult } from '../main/service';
+import type {
+  AnalyzeResult,
+  DirectoryGrant,
+  GenerateOptions,
+  GenerateResult,
+  OutputTarget,
+} from '../main/service';
 
 /** Facts the About section states about this build. */
 export interface AppInfo {
@@ -28,8 +34,8 @@ export interface MusicboxApi {
   saveResourcePack(): Promise<string | null>;
   /** Parse only, without generating circuits */
   analyze(path: string): Promise<AnalyzeResult>;
-  /** Full generation; when the output path is empty, generate without writing to disk */
-  generate(path: string, options: GenerateOptions, outputPath?: string): Promise<GenerateResult>;
+  /** Full generation; without an authorized target it only builds bytes in memory. */
+  generate(path: string, options: GenerateOptions, output?: OutputTarget): Promise<GenerateResult>;
   /** Reveal the file in the system file manager */
   reveal(path: string): Promise<void>;
   /** Open the file with the system default application */
@@ -44,8 +50,8 @@ export interface MusicboxApi {
    * preload side with the original File.
    */
   pathForFile(file: File): string;
-  /** Choose the folder a schematic will be written into; null on cancel. */
-  chooseDirectory(): Promise<string | null>;
+  /** Choose the folder a schematic will be written into; the token authorizes that folder. */
+  chooseDirectory(): Promise<DirectoryGrant | null>;
   /** Version, licence and repository, for the About section. */
   appInfo(): Promise<AppInfo>;
   /** The window is frameless, so its buttons come through here. */
@@ -56,7 +62,7 @@ const api: MusicboxApi = {
   chooseMidi: () => ipcRenderer.invoke('dialog:choose-midi'),
   saveResourcePack: () => ipcRenderer.invoke('dialog:save-resource-pack'),
   analyze: (path) => ipcRenderer.invoke('song:analyze', path),
-  generate: (path, options, outputPath) => ipcRenderer.invoke('song:generate', path, options, outputPath),
+  generate: (path, options, output) => ipcRenderer.invoke('song:generate', path, options, output),
   reveal: (path) => ipcRenderer.invoke('shell:reveal', path),
   open: (path) => ipcRenderer.invoke('shell:open', path),
   onLog: (handler) => {

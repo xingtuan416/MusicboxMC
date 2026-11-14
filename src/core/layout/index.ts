@@ -24,6 +24,7 @@ import {
   type BlockTable,
 } from '../palette/blockTable';
 import { secondsToTick } from '../tempo/tick';
+import { numericRange } from '../numericRange';
 import { chooseOctaveOffset } from '../palette/instrumentPitch';
 import { INSTRUMENTS, type NoteBlockInstrument } from '../palette/instruments';
 import type { TrackAssignment, TrackVoicing } from '../palette/assignment';
@@ -102,8 +103,8 @@ function mergeByInstrument<T extends { notes: TrackNote[]; key: string; sourceIn
   for (const input of inputs) {
     const hit = groups.get(input.key);
     if (hit) {
-      hit.notes.push(...input.notes);
-      hit.sourceIndices.push(...input.sourceIndices);
+      for (const note of input.notes) hit.notes.push(note);
+      for (const index of input.sourceIndices) hit.sourceIndices.push(index);
     } else {
       groups.set(input.key, {
         ...input,
@@ -328,8 +329,11 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
       });
     }
     if (input.notes.length > 0) {
-      const midis = input.notes.map((note) => note.midi);
-      const span = Math.max(...midis) - Math.min(...midis);
+      // Span is the written range before the whole-track octave fit; transpose and octave
+      // offset move every note together and cannot change it. `outside` is counted after
+      // that fit, which is what the warning needs to say.
+      const pitchRange = numericRange(input.notes.map((note) => note.midi));
+      const span = pitchRange ? pitchRange.max - pitchRange.min : 0;
       if (span > 24) {
         fitWarnings.push({
           code: 'INSTRUMENT_RANGE_OVERFLOW',
@@ -444,7 +448,7 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
         plan,
       });
 
-      warnings.push(...w);
+      for (const warning of w) warnings.push(warning);
       rangeShiftTotal.notes += laneShift.notes;
       rangeShiftTotal.maxSemitones = Math.max(rangeShiftTotal.maxSemitones, laneShift.maxSemitones);
       tracks.push(track);

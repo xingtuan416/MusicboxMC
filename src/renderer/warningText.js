@@ -38,7 +38,8 @@ const WARN_TEXT = {
     `${ctx.label(w.trackIndex)} · z${w.z} 行 · ${ctx.at(w.tick)} 的音实际在 ` +
     `${ctx.at(w.actual)} 触发，偏移 ${w.actual - w.tick > 0 ? '+' : ''}${w.actual - w.tick} 游戏刻`,
   TRACK_SPLIT: (w) => `tick ${w.tick}：${w.notes} 个音密集放不下，已自动拆到新音轨`,
-  SPATIAL_DRIFT: (w) => `tick ${w.tick}：该处空间偏差 ${w.drift} 格，超出多轨对齐容差`,
+  SPATIAL_DRIFT: (w, ctx) =>
+    `${ctx.label(w.trackIndex)} · ${ctx.at(w.tick)}：该处空间偏差 ${w.drift} 格，超出多轨对齐容差`,
   INSTRUMENT_UNKNOWN: (w, ctx) =>
     `${ctx.label(w.trackIndex)} 没能从 GM 音色或轨道名识别出乐器，按竖琴处理。` +
     `需要别的音色时，把轨道名改成乐器名即可。`,

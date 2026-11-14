@@ -72,8 +72,8 @@ const { resolve } = require('node:path');
     if (shown.version === raw.getVersion) {
       problems.push('About still shows the value app.getVersion() returns, not the manifest');
     }
-    if (shown.license !== 'GPL-3.0') {
-      problems.push('About shows licence ' + shown.license + ', expected GPL-3.0');
+    if (shown.license !== 'GPL-3.0-only') {
+      problems.push('About shows licence ' + shown.license + ', expected GPL-3.0-only');
     }
 
     console.log(problems.length ? 'PROBLEMS:\n' + problems.join('\n') : 'About section is correct');

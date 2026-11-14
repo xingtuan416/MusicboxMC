@@ -6,6 +6,8 @@ import { allowedExternalUrl } from './externalLink';
 import { analyzeFile, generate, generateToFile, type GenerateOptions } from './service';
 import { describeCoreError } from './messages';
 import { resolveRendererPath } from './rendererPath';
+import { grantDirectory, resolveOutputPath } from './outputPaths';
+import { handleFatalException } from './fatal';
 
 /**
  * Static asset resolution. The build output layout is dist/src/main/index.js,
@@ -127,11 +129,13 @@ function registerIpc(): void {
     }
   });
 
-  ipcMain.handle('song:generate', (_e, path: unknown, options: unknown, outputPath: unknown) => {
+  ipcMain.handle('song:generate', (_e, path: unknown, options: unknown, outputTarget: unknown) => {
     try {
       const file = assertFile(path);
       const safeOptions = (options ?? {}) as GenerateOptions;
-      if (typeof outputPath === 'string' && outputPath.length > 0) {
+      if (outputTarget !== undefined && outputTarget !== null) {
+        const outputPath = resolveOutputPath(outputTarget);
+        if (!outputPath) throw new Error('输出位置授权无效或已过期，请重新选择文件夹');
         return generateToFile(file, outputPath, safeOptions);
       }
       return generate(file, safeOptions).result;
@@ -147,7 +151,7 @@ function registerIpc(): void {
       title: '选择保存文件夹',
       properties: ['openDirectory', 'createDirectory'],
     });
-    return picked.canceled || picked.filePaths.length === 0 ? null : picked.filePaths[0];
+    return picked.canceled || picked.filePaths.length === 0 ? null : grantDirectory(picked.filePaths[0]!);
   });
 
   /**
@@ -180,13 +184,13 @@ function registerIpc(): void {
    * What the About section shows.
    *
    * The version comes from the app itself, so a packaged build cannot disagree with it.
-   * The rest is a constant: package.json is not part of a packaged build, so it cannot be
-   * read at runtime, and these are the values a GPL project has to state.
+   * The rest is constant: these are the values a GPL project has to state. `package.json`
+   * is included in the packaged app, but only `appVersion()` reads it.
    */
   ipcMain.handle('app:info', () => ({
     name: 'MusicboxMC',
     version: appVersion(),
-    license: 'GPL-3.0',
+    license: 'GPL-3.0-only',
     repository: 'https://github.com/xingtuan416/MusicboxMC',
     author: 'xingtuan416',
   }));
@@ -241,6 +245,10 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-process.on('uncaughtException', (e) => {
-  logToRenderer(`[主进程异常] ${e.message}`);
+process.on('uncaughtException', (error) => {
+  handleFatalException(error, {
+    notify: logToRenderer,
+    showError: (title, content) => dialog.showErrorBox(title, content),
+    exit: (code) => app.exit(code),
+  });
 });

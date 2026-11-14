@@ -224,7 +224,14 @@ export function buildTrack(opts: BuildTrackOptions): {
     const lastSlotCap = Math.max(0, Math.min(MAX_PAD_RUN, WIRE_STRENGTH - 1 - branchReach));
     const pad = Math.min(padNeeded, lastSlotCap + (slots - 1) * MAX_PAD_RUN);
     if (padNeeded > pad) {
-      warnings.push({ code: 'SPATIAL_DRIFT', tick: g.tick, drift: deficit - pad });
+      warnings.push({
+        code: 'SPATIAL_DRIFT',
+        tick: g.tick,
+        drift: deficit - pad,
+        trackIndex: opts.trackIndex,
+        x: noteXNatural + pad,
+        z: opts.zBase,
+      });
     }
     const padSlots = new Array<number>(slots).fill(0);
     // Fill the last slot up to its own limit, then put the rest ahead of the pre-group

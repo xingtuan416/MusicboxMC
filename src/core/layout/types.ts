@@ -114,7 +114,7 @@ export type LayoutWarning =
   | { code: 'FANOUT_EXPANDED'; tick: number; n: number; limit: number; stages: number }
   /** This group could not be padded with dust to reach the shared X reference line.
    *  Reports the residual drift in cells; no timing is altered and no note is dropped. */
-  | { code: 'SPATIAL_DRIFT'; tick: number; drift: number }
+  | { code: 'SPATIAL_DRIFT'; tick: number; drift: number; trackIndex: number; x: number; z: number }
   /** No GM program, no usable track name: the track falls back to harp. */
   | { code: 'INSTRUMENT_UNKNOWN'; trackIndex: number }
   /** Extended mode replaced one of the five piano-slot instruments. */
