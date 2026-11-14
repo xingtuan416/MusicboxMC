@@ -104,10 +104,9 @@ export const MAX_PAD_RUN = 13;
 /**
  * Shared "song time -> X" reference line for the whole song.
  *
- * It is the upper envelope of every track's **natural** X (no padding). Because an
- * envelope is never behind any track, each track only ever pads forward - it never
- * has to move back or be compressed, so no repeater delay is altered and no
- * cross-track wiring is needed.
+ * It is the upper envelope of positions reachable from each track's actual padded X.
+ * Each track only ever pads forward - it never has to move back or be compressed, so
+ * no repeater delay is altered and no cross-track wiring is needed.
  */
 export interface XPlan {
   /** Reference X (note column position) at a song time, including the song-wide lead-in. */
@@ -118,7 +117,7 @@ export interface XPlan {
 
 /**
  * X samples of each group when a track is laid out naturally (no padding), used by
- * index.ts to build the upper envelope.
+ * index.ts to advance the shared reference line from each track's actual padded position.
  *
  * Mirrors buildTrack's routing exactly: ceil(rest/4) cells of pre-group repeaters, one
  * final-repeater cell and one note cell, plus a single starting dust cell for the first
@@ -132,14 +131,14 @@ export function naturalSamples(
   notes: TrackNote[],
   base: number,
   maxNotes: number = MAX_CHORD_NOTES,
-): Array<{ atRt: number; x: number }> {
+): Array<{ atRt: number; x: number; padCapacity: number }> {
   const counts = new Map<number, number>();
   for (const n of notes) {
     const rt = gameTickToRedstone(n.tick);
     counts.set(rt, (counts.get(rt) ?? 0) + 1);
   }
   const rts = [...counts.keys()].sort((a, b) => a - b);
-  const out: Array<{ atRt: number; x: number }> = [];
+  const out: Array<{ atRt: number; x: number; padCapacity: number }> = [];
   let x = 0;
   let prevRt = 0;
   let first = true;
@@ -149,9 +148,13 @@ export function naturalSamples(
     const rest = gap - r;
     const restCells = Math.ceil(rest / MAX_REPEATER_DELAY);
     const n = Math.min(counts.get(rt)!, maxNotes);
+    const tail = groupTailCells(n);
+    const branchReach = tail === 3 ? chordRows(n) : 0;
+    const lastSlotCap = Math.max(0, Math.min(MAX_PAD_RUN, WIRE_STRENGTH - 1 - branchReach));
+    const padCapacity = lastSlotCap + restCells * MAX_PAD_RUN;
     if (first && rest > 0) x = 1;
-    x += restCells + groupTailCells(n);
-    out.push({ atRt: rt + base, x: x - 1 }); // note column
+    x += restCells + tail;
+    out.push({ atRt: rt + base, x: x - 1, padCapacity }); // note column
     prevRt = rt + base;
     first = false;
   }

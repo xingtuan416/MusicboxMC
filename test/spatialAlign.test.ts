@@ -177,6 +177,23 @@ describe('multi-track spatial alignment: X follows song time', () => {
     expect(res.warnings.some((w) => w.code === 'SPATIAL_DRIFT')).toBe(false);
   });
 
+  it('accounts for earlier padding when a previously sparse track becomes the leading track', () => {
+    const chordTrack = [];
+    for (let rt = 30; rt <= 60; rt += 2) {
+      for (let midi = 60; midi < 64; midi++) chordTrack.push({ tick: rt * 2, midi });
+    }
+    const melodyTrack = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 29, 59, 60].map((rt) => ({
+      tick: rt * 2,
+      midi: 60,
+    }));
+    const res = layout(songOfTracks([chordTrack, melodyTrack]), { config: cfg, regions: DEFAULT_REGIONS });
+
+    const chordX = res.tracks[0]!.taps.find((tap) => tap.t === 60)!.notes[0]!.notePos.x;
+    const melodyX = res.tracks[1]!.taps.find((tap) => tap.t === 60)!.notes[0]!.notePos.x;
+    expect(chordX).toBe(melodyX);
+    expect(res.warnings.some((w) => w.code === 'SPATIAL_DRIFT')).toBe(false);
+  });
+
   it('adds no padding for a single-track song, where the reference line is the track itself', () => {
     const notes = [];
     for (let rt = 1; rt <= 50; rt += 5) notes.push({ tick: rt * 2, midi: 60 });

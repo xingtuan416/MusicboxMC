@@ -109,9 +109,11 @@ track consumes more cells per beat than a sparse one, so by the end of the piece
 they are hundreds of cells apart and no longer sound like one performance.
 
 `layout()` avoids this by building a shared **time → X reference line**: the
-upper envelope of every track's natural X at each redstone tick. Because it is an
-upper envelope, it is never behind any track, so a track only ever has to _pad
-forward_ with dust — never compress, never re-time, never cross-connect.
+upper envelope of every track's reachable X at each redstone tick. The plan advances
+from each track's actual padded position, so earlier dust is not lost when that track
+later becomes the naturally leading track. Because the line is an upper envelope, a
+track only ever has to _pad forward_ with dust — never compress, never re-time, never
+cross-connect.
 
 - At ticks where two or more independent tracks land a note, the tolerance is 0:
   they are aligned exactly.

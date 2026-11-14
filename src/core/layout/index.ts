@@ -6,6 +6,7 @@ import {
   chordSideRows,
   groupByTick,
   naturalSamples,
+  ALIGN_TOLERANCE_CELLS,
   type TrackNote,
   type XPlan,
 } from './track';
@@ -131,33 +132,23 @@ function blockDefaults(regions: RegionTable): BlockDefaults {
 }
 
 /**
- * Build the shared "song time -> X" reference line: the **upper envelope** of every
- * track's natural X.
+ * Build the shared "song time -> X" reference line from positions reachable after
+ * earlier padding. A natural-X-only envelope loses that history: once a padded track
+ * becomes the naturally leading track, its actual line is already ahead of the plan
+ * and later simultaneous groups cannot converge.
  *
- * An upper envelope is never behind any track, so each track only has to pad forward
- * with dust (zero delay) to keep up. Nothing ever has to move backwards or be
- * compressed, and no delay is altered and no cross-track wiring is needed. The X
- * difference between tracks at any quantised time is therefore bounded, instead of
- * accumulating over the length of the song.
+ * Advance every track at each event time, choose the upper envelope of the candidate
+ * positions, then apply the same tolerance and dust budget used by buildTrack. The
+ * resulting actual position becomes the starting point for that track's next group.
  */
-function buildXPlan(samples: Array<{ atRt: number; x: number; trackId: number }>): XPlan {
+function buildXPlan(
+  samples: Array<{ atRt: number; x: number; trackId: number; padCapacity: number }>,
+): XPlan {
   const sorted = [...samples].sort((a, b) => a.atRt - b.atRt);
   const envelope: Array<{ atRt: number; x: number }> = [];
   const synchronizedAtRts = new Set<number>();
+  const states = new Map<number, { naturalX: number; actualX: number }>();
   let max = 0;
-  for (const s of sorted) {
-    max = Math.max(max, s.x);
-    const last = envelope[envelope.length - 1];
-    if (last && last.atRt === s.atRt) last.x = max;
-    else envelope.push({ atRt: s.atRt, x: max });
-  }
-
-  // Mark a time as synchronised whenever two or more independent tracks land a note
-  // there. Simultaneous notes should share an X wherever possible; the natural
-  // distance only decides whether padding can close the gap, and must not be used as
-  // a threshold for giving up. Otherwise a dense and a sparse track would settle onto
-  // permanently different axes late in a long song, as soon as their natural distance
-  // exceeded the check window.
   for (let i = 0; i < sorted.length;) {
     const atRt = sorted[i]!.atRt;
     const sameTime = [];
@@ -165,12 +156,26 @@ function buildXPlan(samples: Array<{ atRt: number; x: number; trackId: number }>
       sameTime.push(sorted[i]!);
       i += 1;
     }
-    // `NaN === NaN` is false, so a non-finite time would consume nothing and spin here
-    // forever. The tick is validated before the plan is built; this makes the loop
-    // provably terminating anyway, so a future path cannot hang the process.
+    // Ticks are validated before planning; keep the empty guard so a future non-finite
+    // input cannot make the grouping loop spin forever.
     if (sameTime.length === 0) break;
     const trackIds = new Set(sameTime.map((s) => s.trackId));
-    if (trackIds.size >= 2) synchronizedAtRts.add(atRt);
+    const synchronized = trackIds.size >= 2;
+    if (synchronized) synchronizedAtRts.add(atRt);
+    const tolerance = synchronized ? 0 : ALIGN_TOLERANCE_CELLS;
+    const candidates = sameTime.map((sample) => {
+      const state = states.get(sample.trackId) ?? { naturalX: 0, actualX: 0 };
+      return { sample, state, naturalX: state.actualX + sample.x - state.naturalX };
+    });
+    for (const candidate of candidates) max = Math.max(max, candidate.naturalX);
+    for (const candidate of candidates) {
+      const deficit = Math.max(0, max - candidate.naturalX);
+      const pad = Math.min(Math.max(0, deficit - tolerance), candidate.sample.padCapacity);
+      candidate.state.naturalX = candidate.sample.x;
+      candidate.state.actualX = candidate.naturalX + pad;
+      states.set(candidate.sample.trackId, candidate.state);
+    }
+    envelope.push({ atRt, x: max });
   }
 
   return {
@@ -366,9 +371,9 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   // Inferring it per track would give the tracks inconsistent first-note offsets.
   const base = minRt === 0 ? 1 : 0;
 
-  // Multi-track spatial alignment: X follows song time, using the upper envelope of
-  // every track's natural X as the shared reference line.
-  const samples: Array<{ atRt: number; x: number; trackId: number }> = [];
+  // Multi-track spatial alignment: X follows song time, advancing the shared reference
+  // line from every track's reachable position after earlier padding.
+  const samples: Array<{ atRt: number; x: number; trackId: number; padCapacity: number }> = [];
   for (const { index, notes } of trackInputs) {
     samples.push(
       ...naturalSamples(notes, base, maxChordNotes).map((sample) => ({
