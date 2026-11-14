@@ -28,7 +28,7 @@
 | `npm run verify:ui`    | 2026-11-14 通过，无 console 错误、无横向溢出                      |
 | `npm run verify:about` | 2026-11-14 通过（版本 0.2.5、许可 GPL-3.0、标题栏图标已解码）     |
 | `npm run format:check` | 通过                                                              |
-| CI                     | 上次 `24c3945` 为绿；本次 `0.2.5` 推送后以 Actions 结果为准       |
+| CI                     | 绿：run #43563003877（`ad19f73`），Node 20 / 22 均通过            |
 
 ## 已完成（按时间倒序，只留结论）
 
@@ -59,7 +59,7 @@
 - `release-0.2.5/MusicboxMC-Setup-0.2.5-win-x64.exe`（83,557,915 字节）
 - `release-0.2.5/MusicboxMC-0.2.5-win-x64.zip`（114,629,586 字节）
 - `release-0.2.5/MusicboxMC-piano-pack-1.20.4.zip`（51,562 字节）
-- GitHub Release：[v0.2.5](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.5)，tag 与 `package.json` 版本一致。
+- GitHub Release：[v0.2.5](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.5)，tag 与 `package.json` 版本一致；三个资产的 GitHub SHA-256 与本地构建一致，状态均为 `uploaded`。
 
 ### 0.2.4 发布资产
 
