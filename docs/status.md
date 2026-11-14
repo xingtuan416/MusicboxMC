@@ -5,33 +5,39 @@
 
 ## 一句话
 
-0.2.5 已发布：修复普通多轨布局丢失历史补齐位置、导致长曲同时音符在空间上拉开的问题。
+`0.3.0` 已完成修复、工具链升级和用户实测；**未提交、未打 tag、未发布**，等待发布决定。
 
 ## 位置
 
 | 项       | 值                                                                                           |
 | -------- | -------------------------------------------------------------------------------------------- |
-| 版本     | `0.2.5`（`package.json`、tag、Release 一致）                                                 |
-| 分支     | `main`                                                                                       |
+| 版本     | `0.3.0`（仅 `package.json`；tag 与 Release 仍是 `v0.2.5`）                                   |
+| 分支     | `main`；工作区有未提交的 `0.3.0` 改动                                                        |
 | 最新发布 | `v0.2.5`：安装包 79.7 MB、免安装 109.3 MB、资源包 51 KB                                      |
 | 备份     | 分支 `backup/before-ui-integration`、标签 `backup-before-ui-integration`、`v0.1.0` —— 不要删 |
 
 ## 质量闸门（最近一次实测，2026-11-14）
 
-| 项                     | 结果                                                              |
-| ---------------------- | ----------------------------------------------------------------- |
-| `npm test`             | 35 文件 / 277 用例通过                                            |
-| `npm run lint`         | 无输出（`scripts/**/*.cjs` 已按 CommonJS 配置）                   |
-| `npm run typecheck`    | 无输出                                                            |
-| `npm run build`        | 通过                                                              |
-| `npm run smoke`        | 10 项通过（16 轨夹具走真 IPC：346 音、16 轨、约 2.8 KB 写盘一致） |
-| `npm run verify:ui`    | 2026-11-14 通过，无 console 错误、无横向溢出                      |
-| `npm run verify:about` | 2026-11-14 通过（版本 0.2.5、许可 GPL-3.0、标题栏图标已解码）     |
-| `npm run format:check` | 通过                                                              |
-| CI                     | 绿：run #43563003877（`ad19f73`），Node 20 / 22 均通过            |
+| 项                         | 结果                                                      |
+| -------------------------- | --------------------------------------------------------- |
+| `npm test`                 | 38 文件 / 286 用例通过                                    |
+| `npm run lint`             | 无输出                                                    |
+| `npm run typecheck`        | 无输出（TypeScript 6.0.3）                                |
+| `npm run build`            | 通过（Node 24）                                           |
+| `npm run smoke`            | 12 项通过（Electron 45；目录授权与越界拒绝已覆盖）        |
+| `npm run verify:ui`        | 通过，无 console 错误、无横向溢出                         |
+| `npm run verify:about`     | 通过（版本 0.3.0、许可 GPL-3.0-only、标题栏图标已解码）   |
+| `npm run verify:litematic` | 通过（独立 Java 读取器接受当前写入器）                    |
+| `npm run format:check`     | 通过                                                      |
+| Node 24 完整打包           | 通过，安装包与便携版在 `release-0.3.0-final/`             |
+| 用户实测                   | 通过（目录选择/生成、长曲拖动、关于页、安装包启动）       |
+| CI                         | 未推送；新增 Linux + Windows 工作流，等待 GitHub 实际运行 |
 
 ## 已完成（按时间倒序，只留结论）
 
+- **0.3.0 用户实测通过**：重点流程无问题，包括目录选择与生成、长曲预览拖动、关于页和安装包启动。重启后清掉了旧 `win-unpacked` 文件锁，只保留 `release-0.3.0-final/` 候选产物。
+- **0.3.0 本地候选**：Node 24 / Electron 45 / electron-builder 26.18 / Vitest 5 / Vite 8 / TypeScript 6.0.3 全量升级；TypeScript 7 因 `typescript-eslint` peer `<6.1.0` 暂缓。修复超长轨栈溢出、目录 token、块配置白名单、`SPATIAL_DRIFT` 定位、致命异常退出、许可证与模板；增加 Windows CI、Java 校验、Dependabot、Release 说明生成器和预览性能优化。286 用例、IPC 冒烟、界面、关于页、Java 校验和 Windows 打包全部通过。
+- **问题清单整理**：新建 `docs/known-issues.md` 作为统一入口，按 `KI`（代码）、`REL`（产品限制）、`OPS`（版本与流程）编号；本文不再重复长清单。
 - **0.2.5 发布**：普通多轨共享 X 参考线改为从实际补齐位置递推，修复长曲同时音无警告拉开；用户 27 轨《鸟之诗》最大间距 179→5 格，277 用例、界面、关于页、IPC 冒烟和 Windows 打包全部通过。安装包、便携版与资源包已上传 [GitHub Releases](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.5)。
 - **普通多轨对齐修复**：共享 X 参考线改为从各轨实际补齐后的位置递推，并使用与布线一致的尘埃容量；不再因丢弃历史补齐而让领先轨无警告超前。新增一个修复前为 X=62 对 X=55 的回归用例。用户提供的 27 轨《鸟之诗》同时发声最大 X 间距从 179 格降到 5 格，4604 个音群的实际中继器累计时序全部不变；完整生成 25066 字节、27 区域成功。`Rush E` 压力案例从 177 格降到 43 格，仍有容量警告，不宣称完全对齐。
 - **0.2.4 发布**：把 0.2.3 tag 之后的审查修复打进安装包——IPC `GenerateOptions` 校验、`shell:open` 只允许 `.litematic`、外链前缀边界、拖拽已加载页面高亮、八度警告只报自动拟合、README 版本占位、CONTRIBUTING 浏览器说明；新增 `test/generateOptions.test.ts` 与拖拽/点击双路径 UI 测试。
@@ -54,6 +60,13 @@
 - **界面**：八步流程、红石布线预览、检查结果分组分页、资源包入口、无边框窗口、音效。
 - **核心修复**：Modified UTF-8、SMPTE 不再死循环、首个 tempo 偏晚、补齐不再饿死分支、最小八度位移、±75ms 量化界、`app://` 目录边界。
 
+### 0.3.0 本地候选资产（未发布）
+
+- `release-0.3.0-final/MusicboxMC-Setup-0.3.0-win-x64.exe`（124,741,139 字节，SHA-256 `0310fec44f28808d96be5d885aa60f22c6d87314208a1117fc4ddfdbcfd800d0`）
+- `release-0.3.0-final/MusicboxMC-0.3.0-win-x64.zip`（156,705,655 字节，SHA-256 `e741a4bcb7784d6fe698bf71146313ccaa5d115678291c14552e9c6bf9ad1e18`）
+- `release-0.3.0-final/MusicboxMC-piano-pack-1.20.4.zip`（51,562 字节）
+- 这三个文件只用于本地实测，没有上传，也没有对应 tag。
+
 ### 0.2.5 发布资产
 
 - `release-0.2.5/MusicboxMC-Setup-0.2.5-win-x64.exe`（83,557,915 字节）
@@ -70,13 +83,21 @@
 
 ## 已知问题（诚实清单）
 
-1. **画布拖动仍不跟手** —— 用户实测反馈。已改 rAF 节流并累积增量，但手感仍未达标；可能需要在 `preview.js` 里改成「只重绘可见区域」或复用离屏画布。
-2. **`docs/` 的散文断言只核了数字** —— 10 个可机核数字全部一致，段落里的因果论断未逐条验证。
-3. **CI 不跑 `verify:ui` / `verify:about` / `smoke`** —— 它们需要显示环境与真实 Electron，目前只能本地跑。
-4. **本机 `ELECTRON_RUN_AS_NODE=1` 是设着的** —— 跑 `_electron` / Electron 前必须删掉，否则 `require('electron')` 返回字符串。
-5. **`out/` 是本地目录，不入库** —— 中间文件一律放这里，不要放 `/tmp`（Git Bash 与原生 node 解析不同）。
-6. **OpenCodeReview 仍只完成了一部分** —— 0.2.3 小范围 15 个文件里 6 个分组失败，产出 3 条发现（外链前缀边界、拖拽高亮落在隐藏元素、点击导入无测试），已全部修复。随后用 Kimi K3 跑全量 `v0.2.1..HEAD`：49 个文件、9 条发现，但 37/49 个分组仍因本地网关 503 失败。已修 6 条（README 版本钉死、八度警告混淆 transpose、CONTRIBUTING 浏览器说明、`GenerateOptions` 未校验、`shell:open` 本地路径过宽），剩余 3 条低优先级建议保留（`NOTE_BLOCK_INSTRUMENTS` 依赖对象键序、`summarizeAssignments` 重复拟合、span 与 outside 的统计帧）。这些是 0.2.3 发布后的修复，已进入 0.2.4 安装包；剩余 3 条低优先级建议留待后续。
+完整、可编号跟踪的清单见 [known-issues.md](known-issues.md)。0.3.0 已修复 `KI-01`～`KI-04`、`KI-06`、`OPS-01`、`OPS-04`～`OPS-08`、`OPS-10`、`OPS-11`。
+
+仍未关闭：
+
+1. `KI-05`：强制合并的全曲 compact/staged 切换，等用户决定。
+2. `OPS-02`：TypeScript 7 被 `typescript-eslint` 上游 peer 阻塞，当前用 6.0.3。
+3. `REL-01`：预览性能已优化且用户实测通过，保留为后续性能回归观察项。
+
+本地前提：
+
+- CI 不跑 `verify:ui` / `verify:about` / `smoke`，它们需要显示环境与真实 Electron。
+- 本机若设置 `ELECTRON_RUN_AS_NODE=1`，跑 Electron 前必须删除。
+- `out/` 是本地目录，不入库；中间文件放这里，不放 `/tmp`。
 
 ## 待用户决定
 
-1. 拖动不跟手的可接受程度（要不要现在深挖）。
+1. 是否提交、推送并发布 `0.3.0`。
+2. `KI-05` 是否保留现状并增加提示。

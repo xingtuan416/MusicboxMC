@@ -7,6 +7,36 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-14
+
+### Changed
+
+- The development runtime is now Node 24, with Electron 45, electron-builder
+  26.18, Vitest 5, Vite 8, TypeScript 6.0 and the current ESLint stack. TypeScript 7
+  is not adopted yet because the supported `typescript-eslint` release still declares
+  `<6.1.0`; forcing it would disable type-aware linting.
+- CI now runs a Windows job (`check` + `dist:dir`, and full packaging on tags/manual
+  runs), the independent Java litematic reader, and Dependabot for grouped updates.
+- The preview keeps a per-result cell-count cache and only reallocates the canvas when
+  its size actually changes, reducing work during long-song drags.
+- README describes compatibility as Litematica litematic v6 plus DataFixer support,
+  rather than treating the Minecraft version list as a standalone guarantee.
+
+### Fixed
+
+- A single track with roughly 125,000 notes or more could overflow the call stack
+  during import analysis and layout. Whole-track scans now use one loop, and the
+  remaining variadic warning/merge pushes were removed as well.
+- Schematic output no longer accepts a renderer-supplied absolute path. The main
+  process grants an opaque directory token, the renderer supplies only a plain file
+  name, and block overrides are whitelisted by slot, region and namespaced block id.
+- `SPATIAL_DRIFT` now carries the source track and cell, so the warning can be located
+  in the wiring preview.
+- An uncaught main-process exception now reports the failure and exits instead of
+  continuing with unknown state.
+- The About screen reports `GPL-3.0-only`, the Issue/PR templates match the current
+  workflow, and the packaged-manifest comment no longer contradicts the package.
+
 ## [0.2.5] - 2026-11-14
 
 ### Fixed

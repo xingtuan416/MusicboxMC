@@ -1,7 +1,9 @@
 # Documentation
 
-- [Project status](status.md) — current version, quality gates, known issues and
-  the items waiting for a decision (Chinese).
+- [Project status](status.md) — current version, quality gates and the items
+  waiting for a decision (Chinese).
+- [Known issues and limitations](known-issues.md) — the authoritative,
+  ID-based list of code problems, release limitations and maintenance debt.
 - [Architecture](architecture.md) — layering, data flow, and where to change what.
 - [Redstone model](redstone-model.md) — topology, timing, alignment, and the
   simulation this project deliberately does not do.
