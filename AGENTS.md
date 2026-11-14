@@ -11,8 +11,9 @@
 | 目的                                 | 命令                                                  |
 | ------------------------------------ | ----------------------------------------------------- |
 | 安装依赖                             | `npm ci`                                              |
+| 下载/确认 Electron 运行时            | `npm run electron:install`                            |
 | 构建（tsc + 拷贝渲染层/assets/图标） | `npm run build`                                       |
-| 启动应用                             | `npm start`（内含 build）                             |
+| 启动应用                             | `npm start`（内含 Electron 运行时检查与 build）       |
 | 全量测试                             | `npm test`                                            |
 | 单跑一个测试文件                     | `npx vitest run test/paddingBudget.test.ts`           |
 | 单跑一个用例                         | `npx vitest run -t "reports a position relative"`     |
