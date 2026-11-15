@@ -19,6 +19,10 @@
   <a href="LICENSE"><img alt="License: GPL-3.0-only" src="https://img.shields.io/badge/license-GPL--3.0--only-blue"></a>
 </p>
 
+<p align="center">
+  Website: <a href="https://xingtuan.dpdns.org/">xingtuan.dpdns.org</a> (Chinese)
+</p>
+
 ![The MusicboxMC interface](docs/images/interface.png)
 
 MusicboxMC reads a MIDI file, compiles it into a redstone circuit, and writes that

@@ -19,6 +19,10 @@
   <a href="LICENSE"><img alt="许可证：GPL-3.0-only" src="https://img.shields.io/badge/license-GPL--3.0--only-blue"></a>
 </p>
 
+<p align="center">
+  官网：<a href="https://xingtuan.dpdns.org/">xingtuan.dpdns.org</a>
+</p>
+
 ![MusicboxMC 界面](docs/images/interface.png)
 
 MusicboxMC 读取 MIDI 文件，编译成红石电路，再写成 Litematica 的 `.litematic`
