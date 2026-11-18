@@ -32,7 +32,7 @@
 | Node 26 Windows 打包       | 通过（`electron-builder --win --x64`，Electron 45.3.2）。`release/win-unpacked` 被系统占用（`EBUSY`，目录内文件删不掉），0.4.0 的打包输出写到 `out/dist-out` 再复制回 `release/` |
 | 打包应用                   | 0.3.0 期间验证过 `release/win-unpacked` 可启动、`app.getVersion()` 与关于页一致；0.4.0 的 asar 已由 `verify:about` 读回（版本 0.4.0、许可 GPL-3.0-only），界面为四个开关版本     |
 | 用户实测                   | 0.3.0 已实测；0.4.0 的投影分区修复待游戏内复测                                                                                                                                   |
-| CI                         | 0.4.0 首轮 run `44331479568` 失败：`docs/status.md` 在提交前没有重新格式化，`format:check` 拦下；已格式化并重推                                                                  |
+| CI                         | 绿：run `44332338636`（提交 3212211）。首轮 run `44331479568` 曾因 `docs/status.md` 未格式化失败                                                                                 |
 
 ## 已完成（按时间倒序，只留结论）
 
