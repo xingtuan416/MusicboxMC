@@ -25,7 +25,20 @@ const knownIssues = readFileSync(resolve('docs/known-issues.md'), 'utf8');
 
 const changes = section(changelog, `## [${version}]`, /\n## \[/);
 const changesBody = changes.replace(/^[^\n]*\n+/, '').trim();
-const limitations = section(knownIssues, '## 产品与游戏内已知限制', /\n## 后续处理建议/);
+const limitationsSection = section(knownIssues, '## 产品与游戏内已知限制', /\n## 后续处理建议/);
+
+/**
+ * Keep only the limitations that still apply.
+ *
+ * The document keeps a section per fixed issue as well, because that history is what makes
+ * the file worth reading; but a release note that lists fixed issues under "limitations"
+ * is worse than no note at all.
+ */
+const [limitationsIntro, ...limitationSections] = limitationsSection.split(/^### /m);
+const openLimitations = limitationSections
+  .filter((part) => !/\*\*状态\*\*：已修复/.test(part))
+  .map((part) => `### ${part.trim()}`);
+const limitations = [limitationsIntro.trim(), ...openLimitations].filter(Boolean).join('\n\n');
 
 console.log(`# MusicboxMC ${version}`);
 console.log('');
