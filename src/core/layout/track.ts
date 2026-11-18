@@ -5,7 +5,7 @@ import { noteBlock, plainBlock, redstoneWire, repeater, type BlockState } from '
 import { coreError } from '../errors';
 import { place } from './placement';
 import { applyWireConnections } from './wiring';
-import { prepareGroups, type NoteToPlace } from './groups';
+import { groupNotes, mapTrackNotes, type NoteToPlace, type OverflowGroup } from './groups';
 import type {
   BlockPlacement,
   LayoutConfig,
@@ -26,7 +26,6 @@ import {
   chordRowLayout,
   chordRows,
   groupTailCells,
-  type OverflowGroup,
   type TrackNote,
   type XPlan,
 } from './model';
@@ -43,8 +42,21 @@ export * from './model';
 
 export interface BuildTrackOptions {
   trackIndex: number;
+  /** Source tracks this lane carries; empty when the caller does not track it. */
+  sourceIndices?: number[];
   zBase: number;
-  notes: TrackNote[];
+  /** Source notes, mapped inside this call. Ignored when `mapped` is given. */
+  notes?: TrackNote[];
+  /**
+   * Already-mapped notes.
+   *
+   * `layout()` maps each source track once, before any merging, so that a track keeps
+   * the octave that suits its own range; a shared lane is then the union of several
+   * tracks' mapped notes. When this is given the range policy is not run again and no
+   * `OUT_OF_RANGE` warning is reported from here - it was already reported by the
+   * caller, once per source note.
+   */
+  mapped?: NoteToPlace[];
   config: LayoutConfig;
   regions: RegionTable;
   resolve: BlockResolver;
@@ -80,6 +92,33 @@ export interface BuildTrackOptions {
    * omitted the track is laid out naturally, which is the single-track case.
    */
   plan?: XPlan;
+  /**
+   * Start this lane mid-song by tapping the lane one gap row below.
+   *
+   * A lane whose first note is late has to carry song time from X=0 with a delay
+   * chain, which on long songs is thousands of cells of dust and hundreds of
+   * repeaters that all have to stay loaded in order. Tapping a neighbour's line
+   * replaces that whole head with one repeater: the guest starts at `x` already
+   * knowing the time, and pads forward from there like any other lane.
+   */
+  ride?: {
+    /** Cell where the neighbour's row is read; the guest's own row starts here. */
+    x: number;
+    /** Z of the tapped row: a neighbouring lane's line, not necessarily zBase - 2. */
+    hostZ: number;
+    /**
+     * Rows between the tapped row and this lane's row, in walking order, one repeater
+     * each. A neighbouring lane is not always two rows away - every chord branch adds
+     * a row per side - so the tap can be several repeater delays deep. `prevRt`
+     * already includes all of them.
+     */
+    corridor?: number[];
+    /** Direction the corridor reads from: `north` when the host sits below this lane. */
+    facing?: 'north' | 'south';
+    /** Song time, in redstone ticks, at which the tap output turns on. */
+    prevRt: number;
+    hostTrackIndex: number;
+  };
 }
 
 /**
@@ -104,29 +143,44 @@ export function buildTrack(opts: BuildTrackOptions): {
 } {
   const maxChordNotes = chordCapacity(opts.config.dMax);
 
-  // 1-2) Map pitches, group by redstone tick, and hand any surplus off as overflow
-  const {
-    groups: prepared,
-    overflow,
-    warnings,
-    rangeShift,
-  } = prepareGroups({
-    notes: opts.notes,
-    regions: opts.regions,
-    outOfRange: opts.outOfRange ?? 'warn',
-    transpose: opts.transpose ?? 0,
+  // 1) Map pitches (unless the caller already did), then 2) group by redstone tick and
+  // hand any surplus off as overflow
+  const mapping = opts.mapped
+    ? null
+    : mapTrackNotes({
+        notes: opts.notes ?? [],
+        regions: opts.regions,
+        outOfRange: opts.outOfRange ?? 'warn',
+        transpose: opts.transpose ?? 0,
+        trackIndex: opts.trackIndex,
+        voicing: opts.voicing,
+        octaveOffset: opts.octaveOffset,
+        trackName: opts.trackName,
+      });
+  const laneNotes = opts.mapped ?? mapping?.notes ?? [];
+  const groupResult = groupNotes({
+    notes: laneNotes,
     maxChordNotes,
     collectOverflow: opts.collectOverflow === true,
-    trackIndex: opts.trackIndex,
-    voicing: opts.voicing,
-    octaveOffset: opts.octaveOffset,
-    trackName: opts.trackName,
-    reportRangeWarnings: opts.reportRangeWarnings !== false,
   });
+  const prepared = groupResult.groups;
+  const overflow = groupResult.overflow;
+  const rangeShift = mapping?.rangeShift ?? { notes: 0, maxSemitones: 0 };
+  const warnings = [
+    // When the caller mapped, it owns the reporting: re-reporting here counted one
+    // source note once per lane it was re-emitted onto.
+    ...(mapping && opts.reportRangeWarnings !== false ? mapping.warnings : []),
+    ...groupResult.warnings,
+  ];
 
   // 3) Lay the main line along +X: [pre-group repeaters][branch column][repeaters][notes]
   const placements: BlockPlacement[] = [];
   const taps: Tap[] = [];
+  // Main-row arrival times, for a neighbouring lane that wants to tap this one.
+  const line: Array<{ x: number; kind: 'dust' | 'repeater'; rt: number }> = [];
+  // Song time of the cell about to be written. Dust is transparent to it; a repeater
+  // adds its own delay.
+  let arrive = 0;
   const placed: Array<{ tick: number; actual: number; x: number }> = [];
 
   /**
@@ -150,6 +204,7 @@ export function buildTrack(opts: BuildTrackOptions): {
     // would paste a pre-lit line, which is not what placing these blocks produces.
     placements.push(place({ x, y: opts.config.circuitY, z }, redstoneWire(0)));
     placements.push(place({ x, y: opts.config.floorY, z }, supportBlock()));
+    if (z === opts.zBase) line.push({ x, kind: 'dust', rt: arrive });
   };
 
   const putRelay = (x: number, z: number, delay: number): void => {
@@ -158,6 +213,10 @@ export function buildTrack(opts: BuildTrackOptions): {
     // opposite of the arrow - output east means facing=west.
     placements.push(place({ x, y: opts.config.circuitY, z }, repeater('west', delay)));
     placements.push(place({ x, y: opts.config.floorY, z }, supportBlock()));
+    if (z === opts.zBase) {
+      arrive += delay;
+      line.push({ x, kind: 'repeater', rt: arrive });
+    }
   };
 
   const putNote = (x: number, z: number, n: NoteToPlace, path: Vec3[]): PlacedNote => {
@@ -182,6 +241,25 @@ export function buildTrack(opts: BuildTrackOptions): {
   let prevRt = 0;
   let first = true;
 
+  const ride = opts.ride;
+  let corridor: number[] = [];
+  let facing: 'north' | 'south' = 'north';
+  if (ride) {
+    // Walk the host's row up to this lane one repeater at a time: `facing` names the
+    // input side, so a repeater facing north reads the row below it and drives the row
+    // above it. One repeater per crossed row, and `prevRt` already counts them all.
+    corridor = ride.corridor ?? [opts.zBase - 1];
+    facing = ride.facing ?? 'north';
+    for (const z of corridor) {
+      placements.push(place({ x: ride.x, y: opts.config.circuitY, z }, repeater(facing, 1)));
+      placements.push(place({ x: ride.x, y: opts.config.floorY, z }, supportBlock()));
+    }
+    prevRt = ride.prevRt;
+    arrive = ride.prevRt;
+    putWire(ride.x, opts.zBase);
+    x = ride.x + 1;
+  }
+
   // A group at rt 0 still needs one redstone tick to drive (the minimum repeater
   // delay), so the whole track shifts by one redstone tick: relative timing is
   // unchanged and everything simply fires 0.1s later. layout() computes this once
@@ -195,6 +273,8 @@ export function buildTrack(opts: BuildTrackOptions): {
     const r = Math.min(MAX_REPEATER_DELAY, gap);
     const rest = gap - r;
     const restCells = Math.ceil(rest / MAX_REPEATER_DELAY);
+
+    arrive = prevRt;
 
     // Spatial alignment: compare this group's natural note-column X against the
     // shared reference line. Pad only when the deficit exceeds the tolerance, and
@@ -246,7 +326,7 @@ export function buildTrack(opts: BuildTrackOptions): {
     // When the first group has repeaters ahead of it, lay one starting dust cell as
     // the power connection point. With rest = 0 the branch column is itself the first
     // cell, so power goes straight onto the column and keeps it at strength 15.
-    if (first && rest > 0) {
+    if (first && rest > 0 && !ride) {
       putWire(0, opts.zBase);
       x = 1;
     }
@@ -346,9 +426,14 @@ export function buildTrack(opts: BuildTrackOptions): {
   return {
     track: {
       trackIndex: opts.trackIndex,
+      sourceIndices: opts.sourceIndices ?? [],
       zBase: opts.zBase,
       placements,
       taps,
+      line,
+      ...(ride
+        ? { ride: { x: ride.x, hostTrackIndex: ride.hostTrackIndex, hostZ: ride.hostZ, corridor, facing } }
+        : {}),
     },
     warnings,
     overflow,

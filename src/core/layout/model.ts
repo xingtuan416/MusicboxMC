@@ -15,12 +15,6 @@ export interface TrackNote {
   midi: number;
 }
 
-/** One group that exceeded the column's capacity, for the caller to re-emit elsewhere. */
-export interface OverflowGroup {
-  tick: number;
-  notes: TrackNote[];
-}
-
 /**
  * Topology: the main line carries its own repeaters, with note blocks inline.
  *

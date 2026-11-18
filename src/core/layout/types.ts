@@ -54,9 +54,37 @@ export interface BlockPlacement {
 
 export interface TrackSkeleton {
   trackIndex: number;
+  /**
+   * Source tracks this lane actually carries.
+   *
+   * A merged lane, a shared lane and the forced spine all hold several source tracks,
+   * so `trackIndex` alone cannot answer "is the lead track on this lane?".
+   */
+  sourceIndices: number[];
   zBase: number;
   placements: BlockPlacement[];
   taps: Tap[];
+  /**
+   * Song time at which each cell of the main row turns on, in redstone ticks.
+   *
+   * Only the main row is recorded. A neighbouring lane can tap it to inherit song time
+   * instead of rebuilding the delay chain that produced it - see `ride`.
+   */
+  line?: Array<{ x: number; kind: 'dust' | 'repeater'; rt: number }>;
+  /**
+   * Set when this lane has no head of its own and is fed from a neighbouring lane's
+   * row at `x`. The saved head is the whole run from x=0 that the delay chain would
+   * otherwise need.
+   */
+  ride?: {
+    x: number;
+    hostTrackIndex: number;
+    hostZ: number;
+    /** Rows walked between the host's line and this one; one repeater each. */
+    corridor?: number[];
+    /** Input side of the corridor repeaters: `north` when the host sits below. */
+    facing?: 'north' | 'south';
+  };
 }
 
 export type LayoutWarning =
@@ -108,6 +136,24 @@ export type LayoutWarning =
     }
   /** A dense group did not fit and was re-emitted on a new track. */
   | { code: 'TRACK_SPLIT'; tick: number; notes: number }
+  /**
+   * Smart routing could not bring the farthest note inside the audible radius.
+   *
+   * The radius is measured from the row the player stands on, not from the edges of the
+   * arrangement: a 60-cell wide song can be perfectly audible when the player stands in
+   * the middle of it.
+   *
+   * `attempted` says whether any merge candidate was measured at all. A pure-harp or
+   * single-instrument song is deliberately kept multi-track, and wording it as "the
+   * narrowest attempt" would claim a merge that was never tried.
+   */
+  | { code: 'SMART_HEARING_UNREACHED'; radiusZ: number; limit: number; attempted: boolean }
+  /** A merge candidate could not be built, so a wider layout was used instead. */
+  | {
+      code: 'SMART_MERGE_FAILED';
+      mode: 'share' | 'same' | 'force';
+      fallback: 'off' | 'share' | 'same' | 'force';
+    }
   /** Song-wide startup compensation in game ticks; music-relative timing is unchanged. */
   | { code: 'FORCE_MERGE_LEAD_IN'; ticks: number; peakNotes: number; sectionCapacity: number }
   /** One chord's bus was extended with renewed power, not split into playback tracks. */
@@ -161,6 +207,21 @@ export interface TrackInstrumentInfo {
 export interface LayoutResult {
   tracks: TrackSkeleton[];
   size: Vec3;
+  /**
+   * Row the player is meant to stand on, in layout coordinates.
+   *
+   * The lead lane's main line is a real row of dust, so standing there is possible while
+   * the song plays; the sign wall says "stand here" on the same row. A layout without a
+   * lead falls back to the middle of the note rows.
+   */
+  playerZ: number;
+  /**
+   * Distance from `playerZ` to the farthest note block, in blocks.
+   *
+   * This - not `size.z` - is what decides whether the song is audible: a note block is
+   * heard within 48 blocks of the player.
+   */
+  hearingRadius: number;
   /** Minimum x/y/z over the whole layout, used to translate into litematic local space. */
   min: Vec3;
   totalTicks: number;

@@ -7,10 +7,18 @@ import {
   groupByTick,
   naturalSamples,
   ALIGN_TOLERANCE_CELLS,
+  MAX_REPEATER_DELAY,
   type TrackNote,
   type XPlan,
 } from './track';
-import type { LayoutConfig, LayoutResult, LayoutWarning, TrackInstrumentInfo, Vec3 } from './types';
+import type {
+  LayoutConfig,
+  LayoutResult,
+  LayoutWarning,
+  TrackInstrumentInfo,
+  TrackSkeleton,
+  Vec3,
+} from './types';
 import { boundsOf, sizeOf } from './placement';
 import type { SongModel } from '../midi/types';
 import { coreError } from '../errors';
@@ -29,6 +37,9 @@ import { chooseOctaveOffset } from '../palette/instrumentPitch';
 import { INSTRUMENTS, type NoteBlockInstrument } from '../palette/instruments';
 import type { TrackAssignment, TrackVoicing } from '../palette/assignment';
 import { buildForcedLayout } from './forced';
+import { hearingSpot } from './hearing';
+import { applyWireConnections } from './wiring';
+import { mapTrackNotes, type NoteToPlace } from './groups';
 
 export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
   baseTps: 20,
@@ -50,6 +61,21 @@ export interface LayoutOptions {
   /** Block material overrides, by track or by pitch region; see palette/blockTable. */
   blocks?: BlockOverrides;
   /**
+   * Source track indices in priority order, lead track first.
+   *
+   * When present, the first track is placed at the Z centre and the rest alternate around
+   * it by priority. Omitting it preserves the historical input order and Z origin.
+   */
+  laneOrder?: readonly number[];
+  /**
+   * Source track whose lane row the player stands on, when `laneOrder` is absent.
+   *
+   * The standing row is what the 48-block hearing radius is measured from, so it has to be
+   * known even when the layout keeps its historical order (centring switched off).
+   * Ignored when `laneOrder` names a lead.
+   */
+  standTrackIndex?: number;
+  /**
    * Merge tracks that share an instrument onto **one main line**, with percussion
    * treated as its own class.
    *
@@ -62,6 +88,25 @@ export interface LayoutOptions {
   mergeSameInstrument?: boolean;
   /** Opt-in: one connected time spine for the whole song; takes precedence over legacy merging. */
   forceMergeSameInstrument?: boolean;
+  /**
+   * Source track indices to fold onto one lane, one array per lane.
+   *
+   * A track with only a handful of notes does not need a main line of its own: its
+   * notes can share the line of a track that is already there. Groups must be disjoint
+   * and may only name tracks that are actually laid out; anything else throws instead
+   * of silently producing the wider layout the caller was trying to avoid.
+   */
+  laneGroups?: readonly (readonly number[])[];
+  /**
+   * Opt-in: let a lane that starts late tap the lane below instead of building a head.
+   *
+   * A lane whose first note is at X=3000 normally carries song time from X=0 with a
+   * delay chain: thousands of dust cells and hundreds of repeaters, all of which have
+   * to stay in loaded chunks in the right order. If the lane one gap row below already
+   * carries that time at some cell, one repeater is enough to inherit it. Default
+   * false: omitting the option keeps the previous layout.
+   */
+  laneRide?: boolean;
   /**
    * Per-track voicing, from `assignTracks`. When omitted every track uses the
    * five-slot piano palette, which keeps existing callers and tests unchanged.
@@ -114,6 +159,68 @@ function mergeByInstrument<T extends { notes: TrackNote[]; key: string; sourceIn
     }
   }
   return [...groups.values()];
+}
+
+/**
+ * Fold the source tracks named by `laneGroups` onto one lane each.
+ *
+ * A group becomes one layout input whose `sourceIndices` are its tracks in the order
+ * given, so the lane carries their already-mapped notes on a single main line. Every
+ * group that cannot be honoured throws: silently ignoring it would report success while
+ * the layout stayed exactly as wide as the caller was trying to avoid.
+ */
+function applyLaneGroups(
+  inputs: LayoutInput[],
+  groups: readonly (readonly number[])[] | undefined,
+): LayoutInput[] {
+  if (!groups || groups.length === 0) return inputs;
+  const owner = new Map<number, LayoutInput>();
+  for (const input of inputs) {
+    for (const source of input.sourceIndices) owner.set(source, input);
+  }
+
+  const folded = new Map<number, LayoutInput>();
+  const consumed = new Set<number>();
+  for (const group of groups) {
+    if (group.length === 0) throw coreError('LAYOUT_INVALID_CONFIG', { field: 'laneGroups' });
+    const members: LayoutInput[] = [];
+    for (const trackIndex of group) {
+      const input = owner.get(trackIndex);
+      if (!input) throw coreError('LAYOUT_INVALID_CONFIG', { field: 'laneGroups' });
+      if (!members.includes(input)) members.push(input);
+    }
+    const first = members[0];
+    if (!first) throw coreError('LAYOUT_INVALID_CONFIG', { field: 'laneGroups' });
+    const sourceIndices = members.flatMap((member) => member.sourceIndices);
+    for (const source of sourceIndices) {
+      // A track may sit on exactly one lane; naming it twice would place it twice.
+      if (consumed.has(source)) throw coreError('LAYOUT_INVALID_CONFIG', { field: 'laneGroups' });
+      consumed.add(source);
+    }
+    const lane: LayoutInput = {
+      ...first,
+      key: `lane:${sourceIndices.join(',')}`,
+      notes: members.flatMap((member) => member.notes).sort((a, b) => a.tick - b.tick),
+      sourceIndices,
+      octaveOffset: 0,
+      outside: 0,
+    };
+    for (const member of members) folded.set(member.index, lane);
+  }
+
+  const result: LayoutInput[] = [];
+  const emitted = new Set<LayoutInput>();
+  for (const input of inputs) {
+    const lane = folded.get(input.index);
+    if (!lane) {
+      result.push(input);
+      continue;
+    }
+    if (emitted.has(lane)) continue;
+    emitted.add(lane);
+    result.push(lane);
+  }
+  return result;
 }
 
 /** Base blocks differ per pitch region and per fixed instrument. */
@@ -210,6 +317,30 @@ export function layoutResolver(
   return createBlockResolver(blockDefaults(regions), overrides);
 }
 
+/** Order inputs by source-track priority, highest first. */
+function orderTrackInputs<T extends { index: number; sourceIndices: number[] }>(
+  inputs: T[],
+  laneOrder: readonly number[] | undefined,
+): { ordered: T[]; leadTrackIndex: number | null } {
+  if (!laneOrder || laneOrder.length === 0) return { ordered: inputs, leadTrackIndex: null };
+  const rank = new Map<number, number>();
+  laneOrder.forEach((trackIndex, index) => rank.set(trackIndex, index));
+  const ranked = [...inputs].sort((a, b) => {
+    const rankOf = (input: T): number => {
+      let best = Number.POSITIVE_INFINITY;
+      for (const source of input.sourceIndices) best = Math.min(best, rank.get(source) ?? best);
+      return best;
+    };
+    const delta = rankOf(a) - rankOf(b);
+    return delta === 0 ? a.index - b.index : delta;
+  });
+  const lead = ranked[0];
+  if (!lead) return { ordered: [], leadTrackIndex: null };
+  // Priority order is distance order: the layout walks this list and always takes the
+  // nearer side of the player's row, so the first entry ends up closest.
+  return { ordered: ranked, leadTrackIndex: lead.index };
+}
+
 /** One entry per source track, including the source tracks of a merged group. */
 function trackInstrumentsFor(
   inputs: LayoutInput[],
@@ -240,6 +371,120 @@ function trackInstrumentsFor(
 }
 
 /** Top-level entry point: SongModel -> redstone layout. */
+/** Shortest head worth trading for a tap; below this the tap costs as much as it saves. */
+const MIN_RIDE_HEAD = 24;
+
+/** Cells the lanes above already occupy, seen by the tap search. */
+interface LaneCells {
+  /** Every occupied X/Z column, at any Y: a corridor may only use a column that is free. */
+  used: Set<string>;
+  /** Repeater columns: a repeater beside a corridor repeater would lock it. */
+  diodes: Set<string>;
+}
+
+function laneCellKey(x: number, z: number): string {
+  return `${x},${z}`;
+}
+
+/** Record a finished lane so later lanes can tap it without crossing its blocks. */
+function rememberLane(track: TrackSkeleton, cells: LaneCells): void {
+  for (const entry of track.placements) {
+    cells.used.add(laneCellKey(entry.pos.x, entry.pos.z));
+    if (entry.block === 'minecraft:repeater') cells.diodes.add(laneCellKey(entry.pos.x, entry.pos.z));
+  }
+}
+
+/** True when the same cell is written twice, which means two parts of a lane collide. */
+function hasRepeatedCell(track: TrackSkeleton): boolean {
+  const seen = new Set<string>();
+  for (const entry of track.placements) {
+    const key = `${entry.pos.x},${entry.pos.y},${entry.pos.z}`;
+    if (seen.has(key)) return true;
+    seen.add(key);
+  }
+  return false;
+}
+
+interface RidePlan {
+  x: number;
+  hostZ: number;
+  prevRt: number;
+  hostTrackIndex: number;
+  corridor: number[];
+  facing: 'north' | 'south';
+}
+
+/**
+ * Find a cell on a neighbouring lane where this lane can start without a head of its own.
+ *
+ * The tap has to land on a **dust** cell: a repeater cannot be read from its side. The
+ * crossed rows and this lane's own row must be free there, and the guest must still have
+ * room to lay the delay chain for the rest of its first gap before the reference line,
+ * otherwise the notes would land east of where their tick puts them. The latest usable
+ * cell wins - it leaves the least padding to lay.
+ *
+ * Neighbouring lanes are not always two rows apart: a lane with chord branches adds a row
+ * on each side, and a merged lane has more of them, so insisting on a single empty row is
+ * what made taps disappear as soon as merging was on. Instead the tap walks up one
+ * repeater per crossed row. A repeater reads only its own input side and repeats the
+ * signal at full strength, so such a column carries the tap across the rows in between
+ * without touching the branches that share them; each repeater costs one redstone tick,
+ * which is why a shorter corridor is preferred at equal reach.
+ */
+function chooseRide(
+  tracks: readonly TrackSkeleton[],
+  zBase: number,
+  notes: readonly NoteToPlace[],
+  plan: XPlan,
+  base: number,
+  cells: LaneCells,
+): RidePlan | null {
+  let firstRt = Number.POSITIVE_INFINITY;
+  for (const note of notes) firstRt = Math.min(firstRt, gameTickToRedstone(note.source.tick));
+  if (!Number.isFinite(firstRt)) return null;
+  const atRt = firstRt + base;
+  const target = plan.targetX(atRt);
+  if (target < MIN_RIDE_HEAD) return null;
+  let best: RidePlan | null = null;
+  for (const host of tracks) {
+    if (!host.line || host.line.length === 0) continue;
+    const delta = zBase - host.zBase;
+    if (delta === 0) continue;
+    // `facing` names the input side, so a host below means every repeater in the corridor
+    // faces north (reads the row below it) and drives the row above it.
+    const facing: 'north' | 'south' = delta > 0 ? 'north' : 'south';
+    const step = delta > 0 ? 1 : -1;
+    const corridor: number[] = [];
+    for (let z = host.zBase + step; z !== zBase; z += step) corridor.push(z);
+    for (const cell of host.line) {
+      if (cell.kind !== 'dust') continue;
+      // One repeater per crossed row: each adds its own delay before the guest sees it.
+      const prevRt = cell.rt + corridor.length;
+      if (prevRt >= atRt) continue;
+      if (cells.used.has(laneCellKey(cell.x, zBase))) continue;
+      let clear = true;
+      for (const z of corridor) {
+        if (
+          cells.used.has(laneCellKey(cell.x, z)) ||
+          cells.diodes.has(laneCellKey(cell.x - 1, z)) ||
+          cells.diodes.has(laneCellKey(cell.x + 1, z))
+        ) {
+          clear = false;
+          break;
+        }
+      }
+      if (!clear) continue;
+      const chain = Math.ceil((atRt - prevRt) / MAX_REPEATER_DELAY);
+      if (cell.x + chain + 2 > target) continue;
+      // Latest cell wins; at equal x the shorter corridor wins because it is fewer blocks.
+      if (!best || cell.x > best.x || (cell.x === best.x && corridor.length < best.corridor.length)) {
+        best = { x: cell.x, hostZ: host.zBase, prevRt, hostTrackIndex: host.trackIndex, corridor, facing };
+      }
+    }
+  }
+  return best;
+}
+
 export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult {
   const config: LayoutConfig = { ...DEFAULT_LAYOUT_CONFIG, ...opts.config };
   // A non-positive or non-finite TPS makes every derived tick NaN. Report it as the
@@ -287,8 +532,7 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
     });
   }
 
-  // Warnings that describe the assignment itself are reported once per source track;
-  // the octave shift is a property of the merged group, so it is computed after merging.
+  // Warnings that describe the assignment itself are reported once per source track.
   const assignmentWarnings: LayoutWarning[] = [];
   for (const input of inputs) {
     if (!input.assigned || input.voicing.kind === 'drums') continue;
@@ -308,44 +552,74 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   // Legacy merging adds simultaneous notes, so merge first and only then work out the
   // spacing and the whole-track octave shift. Forced merging is different: it builds one
   // spine for the whole song, so it must keep every source track's own voicing separate.
-  const merged =
-    opts.mergeSameInstrument && !opts.forceMergeSameInstrument ? mergeByInstrument(inputs) : inputs;
-
+  // Map every source track once, before merging. The octave fit belongs to the track,
+  // not to the lane: two tracks that share an instrument keep the octave that suits
+  // each of them, and the shared lane is simply the union of the mapped notes. Fitting
+  // the union instead moved notes that had been placed correctly on their own.
+  const mappedNotes = new Map<number, NoteToPlace[]>();
   const fitWarnings: LayoutWarning[] = [];
-  for (const input of merged) {
-    if (input.voicing.kind !== 'instrument') continue;
-    const fit = chooseOctaveOffset(input.notes, input.voicing.instrument, opts.transpose?.[input.index] ?? 0);
-    input.octaveOffset = fit.offset;
-    input.outside = fit.outside;
-    // The warning is about the automatic fit; the user's transpose is separate and
-    // already visible in the table.
-    if (fit.offset !== 0) {
-      fitWarnings.push({
-        code: 'INSTRUMENT_OCTAVE_SHIFT',
-        trackIndex: input.index,
-        instrument: input.voicing.instrument,
-        octaves: fit.offset,
-        notes: input.notes.length,
-      });
-    }
-    if (input.notes.length > 0) {
-      // Span is the written range before the whole-track octave fit; transpose and octave
-      // offset move every note together and cannot change it. `outside` is counted after
-      // that fit, which is what the warning needs to say.
-      const pitchRange = numericRange(input.notes.map((note) => note.midi));
-      const span = pitchRange ? pitchRange.max - pitchRange.min : 0;
-      if (span > 24) {
+  const mapWarnings: LayoutWarning[] = [];
+  const rangeShiftTotal = { notes: 0, maxSemitones: 0 };
+  for (const input of inputs) {
+    if (input.voicing.kind === 'instrument') {
+      const fit = chooseOctaveOffset(
+        input.notes,
+        input.voicing.instrument,
+        opts.transpose?.[input.index] ?? 0,
+      );
+      input.octaveOffset = fit.offset;
+      input.outside = fit.outside;
+      // The warning is about the automatic fit; the user's transpose is separate and
+      // already visible in the table.
+      if (fit.offset !== 0) {
         fitWarnings.push({
-          code: 'INSTRUMENT_RANGE_OVERFLOW',
+          code: 'INSTRUMENT_OCTAVE_SHIFT',
           trackIndex: input.index,
           instrument: input.voicing.instrument,
-          span,
-          outside: fit.outside,
+          octaves: fit.offset,
+          notes: input.notes.length,
         });
       }
+      if (input.notes.length > 0) {
+        // Span is the written range before the whole-track octave fit; transpose and
+        // octave offset move every note together and cannot change it. `outside` is
+        // counted after that fit, which is what the warning needs to say.
+        const pitchRange = numericRange(input.notes.map((note) => note.midi));
+        const span = pitchRange ? pitchRange.max - pitchRange.min : 0;
+        if (span > 24) {
+          fitWarnings.push({
+            code: 'INSTRUMENT_RANGE_OVERFLOW',
+            trackIndex: input.index,
+            instrument: input.voicing.instrument,
+            span,
+            outside: fit.outside,
+          });
+        }
+      }
     }
+
+    const mapping = mapTrackNotes({
+      notes: input.notes,
+      regions,
+      outOfRange: opts.outOfRange ?? 'warn',
+      transpose: opts.transpose?.[input.index] ?? 0,
+      trackIndex: input.index,
+      voicing: input.voicing,
+      octaveOffset: input.octaveOffset,
+      trackName: input.trackName,
+    });
+    mappedNotes.set(input.index, mapping.notes);
+    // Pushed one by one: a 200k-note track produces 200k warnings, and spreading them
+    // into push() exceeds the argument limit and throws RangeError.
+    for (const warning of mapping.warnings) mapWarnings.push(warning);
+    rangeShiftTotal.notes += mapping.rangeShift.notes;
+    rangeShiftTotal.maxSemitones = Math.max(rangeShiftTotal.maxSemitones, mapping.rangeShift.maxSemitones);
   }
-  const instrumentWarnings = [...assignmentWarnings, ...fitWarnings];
+  const instrumentWarnings = [...assignmentWarnings, ...fitWarnings, ...mapWarnings];
+
+  const merged =
+    opts.mergeSameInstrument && !opts.forceMergeSameInstrument ? mergeByInstrument(inputs) : inputs;
+  const trackInputs = applyLaneGroups(merged, opts.laneGroups);
 
   if (opts.forceMergeSameInstrument) {
     const forced = buildForcedLayout(inputs, {
@@ -361,7 +635,14 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
       trackInstruments: trackInstrumentsFor(inputs, assignments, opts.transpose),
     };
   }
-  const trackInputs = merged;
+  const { ordered: orderedInputs, leadTrackIndex } = orderTrackInputs(trackInputs, opts.laneOrder);
+  const standTrackIndex = leadTrackIndex ?? opts.standTrackIndex ?? null;
+  if (leadTrackIndex === null && standTrackIndex !== null) {
+    // Historical order is kept, but the standing row still has to be the lead's, so that
+    // lane is laid out first and anchored on z = 0.
+    const at = orderedInputs.findIndex((input) => input.sourceIndices.includes(standTrackIndex));
+    if (at > 0) orderedInputs.unshift(...orderedInputs.splice(at, 1));
+  }
   const maxSideRows = Math.max(1, Math.min(14, Math.floor(config.dMax)));
   const maxChordNotes = chordCapacity(config.dMax);
   let minRt = Number.POSITIVE_INFINITY;
@@ -393,10 +674,20 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   // that both used one row still sat `2 * maxRows + 2` apart, which put six or more empty
   // rows between neighbours, far beyond what the redstone needs to stay separate.
   const minCenterGap = config.trackPitch === 'auto' ? 0 : config.trackPitch;
-  // First free cell before the first track. A lane's upper band starts at `zCursor + 1`,
-  // so one empty row always remains between two neighbours.
-  let zCursor = -1;
-  let previousBase: number | null = null;
+  // Lanes are now laid out on **both** sides of the row the player stands on. The old code
+  // walked Z in one direction, so the last lane was as far away as the song was deep, even
+  // though the player stands in the middle of it: the 48-block rule is a radius around the
+  // player, not the width of the arrangement. Emitting the lanes in priority order and
+  // always taking the nearer side puts the loudest lane next to the player and grows the
+  // arrangement outwards evenly.
+  let aboveLimit = 0;
+  let belowLimit = 0;
+  let nearestAbove: number | null = null;
+  let nearestBelow: number | null = null;
+  let preferAbove = true;
+  let standPlaced = false;
+  /** Row of the lane the player stands on, once that lane has been placed. */
+  let standLaneZ: number | null = null;
 
   const warnings: LayoutWarning[] = [...instrumentWarnings];
   // One notice for the whole song. Every track is shifted by the same lead-in, so this
@@ -404,54 +695,99 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   if (base === 1) warnings.push({ code: 'STARTUP_LEAD_IN', ticks: GAME_TICKS_PER_REDSTONE_TICK });
   const tracks = [];
   const placed: LayoutResult['placed'] = [];
-  const rangeShiftTotal = { notes: 0, maxSemitones: 0 };
   let maxTick = 0;
+  // The tap search needs the columns the lanes above already occupy, heads included.
+  const laneCells: LaneCells = { used: new Set(), diodes: new Set() };
 
-  for (const input of trackInputs) {
+  for (const input of orderedInputs) {
     const { index, notes } = input;
     // Groups past the column's chord capacity move to a new track (TRACK_SPLIT). Each
     // track has its own main line and column capacity, and they all start at the same
     // instant: the remaining notes are laid out again on the new track while their
     // trigger times stay unchanged.
-    let pending = notes;
+    // Mapped once per source track above; a shared lane concatenates its members.
+    let pending = input.sourceIndices.flatMap((source) => mappedNotes.get(source) ?? []);
+    let laneSide: 'above' | 'below' | null = null;
     for (let lane = 0; pending.length > 0; lane++) {
-      const sides = chordSideRows(pending, maxSideRows);
-      // Reserve this lane's own branch rows plus exactly one empty row before the next
-      // lane. An explicit trackPitch is a minimum centre distance, never a collision.
-      let zBase = zCursor + 1 + sides.up;
-      if (previousBase !== null) zBase = Math.max(zBase, previousBase + minCenterGap);
-      zCursor = zBase + sides.down + 1;
-      previousBase = zBase;
-      const {
-        track,
-        warnings: w,
-        overflow,
-        placed: pl,
-        rangeShift: laneShift,
-      } = buildTrack({
+      // The row count only depends on tick and pitch, which the source note still has.
+      const sides = chordSideRows(
+        pending.map((note) => note.source),
+        maxSideRows,
+      );
+      // One empty row always remains between two neighbours; an explicit trackPitch is a
+      // minimum centre distance, never a collision.
+      const placeAbove = (): number => {
+        let z = aboveLimit - 1 - sides.down;
+        if (nearestAbove !== null) z = Math.min(z, nearestAbove - minCenterGap);
+        aboveLimit = z - sides.up - 1;
+        nearestAbove = z;
+        return z;
+      };
+      const placeBelow = (): number => {
+        let z = belowLimit + 1 + sides.up;
+        if (nearestBelow !== null) z = Math.max(z, nearestBelow + minCenterGap);
+        belowLimit = z + sides.down + 1;
+        nearestBelow = z;
+        return z;
+      };
+      let zBase: number;
+      if (!standPlaced) {
+        // The standing lane is the reference row: the player stands on it, so it sits on
+        // z = 0 and every hearing decision is measured from there.
+        zBase = 0;
+        standPlaced = true;
+        standLaneZ = zBase;
+        aboveLimit = -sides.up - 1;
+        belowLimit = sides.down + 1;
+        nearestAbove = 0;
+        nearestBelow = 0;
+      } else if (laneSide !== null) {
+        // A split stays beside the lane it was split from instead of jumping across.
+        zBase = laneSide === 'above' ? placeAbove() : placeBelow();
+      } else {
+        // Nearer side first: priority order then equals distance order.
+        const goAbove: boolean = -aboveLimit < belowLimit || (-aboveLimit === belowLimit && preferAbove);
+        zBase = goAbove ? placeAbove() : placeBelow();
+        laneSide = goAbove ? 'above' : 'below';
+        preferAbove = !goAbove;
+      }
+      const buildOptions = {
         trackIndex: index,
+        sourceIndices: input.sourceIndices,
         zBase,
-        notes: pending,
+        mapped: pending,
         config,
         regions,
         resolve,
-        transpose: opts.transpose?.[index] ?? 0,
-        outOfRange: opts.outOfRange,
-        voicing: input.voicing,
-        octaveOffset: input.octaveOffset,
-        trackName: input.trackName,
         collectOverflow: true,
-        // Only the first lane reports: the rest carry notes that were mapped and
-        // reported already, and re-reporting them counted one source note several times.
-        reportRangeWarnings: lane === 0,
         base,
         plan,
-      });
+      };
+      const ride = opts.laneRide === true ? chooseRide(tracks, zBase, pending, plan, base, laneCells) : null;
+      const hostTrack = ride ? tracks.find((candidate) => candidate.zBase === ride.hostZ) : undefined;
+      let built = buildTrack(ride ? { ...buildOptions, ride } : buildOptions);
+      // A tap that cannot be padded back onto the reference line would place notes east of
+      // their tick; the head is the fallback that never drifts.
+      if (ride && built.warnings.some((warning) => warning.code === 'SPATIAL_DRIFT')) {
+        built = buildTrack(buildOptions);
+      }
+      // The corridor is chosen before this lane's own branches exist, so it can land on
+      // one of them. Two blocks in one cell would paste as one, silently breaking the tap;
+      // the head is the fallback that always fits.
+      if (ride && built.track.ride && hasRepeatedCell(built.track)) {
+        built = buildTrack(buildOptions);
+      }
+      const { track, warnings: w, overflow, placed: pl, rangeShift: laneShift } = built;
+      if (hostTrack && track.ride) {
+        // The tap changes how the host's dust connects towards the gap row.
+        applyWireConnections([...hostTrack.placements, ...track.placements]);
+      }
 
       for (const warning of w) warnings.push(warning);
       rangeShiftTotal.notes += laneShift.notes;
       rangeShiftTotal.maxSemitones = Math.max(rangeShiftTotal.maxSemitones, laneShift.maxSemitones);
       tracks.push(track);
+      rememberLane(track, laneCells);
       for (const p of pl) placed.push({ trackIndex: index, zBase, ...p });
 
       if (overflow.length === 0) break;
@@ -472,14 +808,26 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   const min: Vec3 = bounds ? bounds.min : { x: 0, y: 0, z: 0 };
   const size: Vec3 = bounds ? sizeOf(bounds.min, bounds.max) : { x: 1, y: config.circuitY + 1, z: 1 };
 
+  // The standing lane sits on z = 0, and its row is the one the player can stand on while
+  // the dust runs. Radius, not Z span, is what the 48-block rule measures.
+  // Without an explicit lead the stand row is the lane the layout anchored at z = 0; the
+  // midpoint is only a fallback for a song with no notes at all.
+  const standLane =
+    standTrackIndex === null
+      ? null
+      : (tracks.find((track) => track.sourceIndices.includes(standTrackIndex)) ?? null);
+  const spot = hearingSpot(tracks, standLaneZ ?? standLane?.zBase ?? null);
+
   return {
     tracks,
     size,
+    playerZ: spot.playerZ,
+    hearingRadius: spot.hearingRadius,
     min,
     totalTicks: maxTick,
     warnings,
     placed,
     rangeShift: rangeShiftTotal,
-    trackInstruments: trackInstrumentsFor(trackInputs, assignments, opts.transpose),
+    trackInstruments: trackInstrumentsFor(inputs, assignments, opts.transpose),
   };
 }

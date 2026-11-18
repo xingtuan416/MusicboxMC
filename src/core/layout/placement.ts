@@ -12,7 +12,12 @@ import type { BlockPlacement, Vec3 } from './types';
  * writing a literal in the layout code.
  */
 export function place(pos: Vec3, state: BlockState): BlockPlacement {
-  return { pos, block: state.name, props: state.properties };
+  // Copy the position: callers keep a reference to the cell they passed in (a note's
+  // `notePos`, for instance) and later shift those references to re-centre a lane. Sharing
+  // the object made `translateTrackZ` move the same note block twice - once through the
+  // placement, once through `notePos` - which left every note block one lane-offset away
+  // from its own dust row.
+  return { pos: { ...pos }, block: state.name, props: state.properties };
 }
 
 /**

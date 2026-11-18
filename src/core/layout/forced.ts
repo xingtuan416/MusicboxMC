@@ -34,6 +34,7 @@ import type {
   Vec3,
 } from './types';
 import { validateForcedTrack } from './forcedValidation';
+import { hearingSpot } from './hearing';
 import { coreError } from '../errors';
 
 /** One source track's notes and voicing, before the forced layout combines them. */
@@ -426,6 +427,10 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
       // A synthetic index: the spine is not one source track. Regions and the preview
       // treat a negative index as "merged spine".
       trackIndex: -1,
+      // Every source track is on the spine, which is what lets the annotation name it.
+      sourceIndices: [
+        ...new Set(groups.flatMap((group) => group.notes.map((note) => note.sourceIndex))),
+      ].sort((a, b) => a - b),
       zBase,
       placements,
       taps,
@@ -451,10 +456,15 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
     tracks.length === 0
       ? { x: 1, y: 2, z: 1 }
       : { x: max.x - min.x + 1, y: max.y - min.y + 1, z: max.z - min.z + 1 };
+  // The spine's own row is the one the player can stand on: the chord branches fan out
+  // around it, and those are still notes the 48-block radius has to reach.
+  const spot = hearingSpot(tracks, tracks[0]?.zBase ?? null);
   return {
     tracks,
     min: tracks.length === 0 ? { x: 0, y: 0, z: 0 } : min,
     size,
+    playerZ: spot.playerZ,
+    hearingRadius: spot.hearingRadius,
     totalTicks,
     warnings,
     placed,
@@ -463,5 +473,7 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
     // The caller (layout/index.ts) fills this in; the forced builder is not the place
     // that knows about the assignment table.
     trackInstruments: [],
+    // The forced layout is a single spine: one head, one power point, nothing to tie
+    // together, so there is no start bus.
   };
 }
