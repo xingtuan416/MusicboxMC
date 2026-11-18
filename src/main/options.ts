@@ -8,6 +8,7 @@ const BLOCK_ID = /^[a-z0-9_.-]+:[a-z0-9_./-]+$/;
 const MAX_TRACK_KEYS = 4096;
 const MAX_PRESETS = 32;
 const MAX_AUTHOR_LENGTH = 100;
+const MAX_SPARSE_BELOW = 500;
 
 /**
  * The renderer is not trusted: `song:generate` receives a structured-cloned object,
@@ -73,6 +74,21 @@ export function sanitizeGenerateOptions(raw: unknown): GenerateOptions {
   if (typeof input.mergeSameInstrument === 'boolean') options.mergeSameInstrument = input.mergeSameInstrument;
   if (typeof input.forceMergeSameInstrument === 'boolean') {
     options.forceMergeSameInstrument = input.forceMergeSameInstrument;
+  }
+  if (typeof input.smartSelection === 'boolean') options.smartSelection = input.smartSelection;
+  if (typeof input.laneSharing === 'boolean') options.laneSharing = input.laneSharing;
+  if (typeof input.centerLead === 'boolean') options.centerLead = input.centerLead;
+  if (typeof input.annotateLanes === 'boolean') options.annotateLanes = input.annotateLanes;
+  if (typeof input.laneRide === 'boolean') options.laneRide = input.laneRide;
+  if (
+    Number.isSafeInteger(input.laneShareSparseBelow) &&
+    (input.laneShareSparseBelow as number) >= 1 &&
+    (input.laneShareSparseBelow as number) <= MAX_SPARSE_BELOW
+  ) {
+    options.laneShareSparseBelow = input.laneShareSparseBelow as number;
+  }
+  if (Number.isSafeInteger(input.leadTrackIndex) && (input.leadTrackIndex as number) >= 0) {
+    options.leadTrackIndex = input.leadTrackIndex as number;
   }
   if (typeof input.commandPlayback === 'boolean') options.commandPlayback = input.commandPlayback;
   const blocks = sanitizeBlocks(input.blocks);

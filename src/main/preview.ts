@@ -33,6 +33,9 @@ export function toRegionData(slices: ReturnType<typeof sliceRegions>): RegionDat
       z: b.pos.z,
       state: { name: b.block, properties: b.props ?? {} },
     })),
+    // The lane signs are the only block entities in a redstone export; dropping them
+    // here writes blank signs to the schematic.
+    ...(s.tileEntities ? { tileEntities: s.tileEntities } : {}),
   }));
 }
 

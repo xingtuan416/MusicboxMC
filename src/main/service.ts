@@ -7,4 +7,4 @@
  */
 export * from './types';
 export { analyzeFile } from './analyze';
-export { generate, generateToFile } from './generate';
+export { generate, generateToFile, measureLayout, planSmartSelection } from './generate';

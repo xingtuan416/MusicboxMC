@@ -4,7 +4,9 @@ import type {
   DirectoryGrant,
   GenerateOptions,
   GenerateResult,
+  LayoutMeasure,
   OutputTarget,
+  SmartPlanResult,
 } from '../main/service';
 
 /** Facts the About section states about this build. */
@@ -14,6 +16,17 @@ export interface AppInfo {
   license: string;
   repository: string;
   author: string;
+}
+
+/** Runtime versions and paths, shown by the developer panel. */
+export interface AppVersions {
+  app: string;
+  electron: string;
+  chrome: string;
+  node: string;
+  v8: string;
+  appPath: string;
+  packaged: boolean;
 }
 
 /** What the renderer may ask the window to do; it draws its own title bar. */
@@ -36,6 +49,10 @@ export interface MusicboxApi {
   analyze(path: string): Promise<AnalyzeResult>;
   /** Full generation; without an authorized target it only builds bytes in memory. */
   generate(path: string, options: GenerateOptions, output?: OutputTarget): Promise<GenerateResult>;
+  /** Measure what smart routing would choose, without writing a file. */
+  plan(path: string, options: GenerateOptions): Promise<SmartPlanResult>;
+  /** Measure one layout (X/Y/Z, Minecraft track count) without generating bytes. */
+  measure(path: string, options: GenerateOptions): Promise<LayoutMeasure>;
   /** Reveal the file in the system file manager */
   reveal(path: string): Promise<void>;
   /** Open the file with the system default application */
@@ -54,6 +71,10 @@ export interface MusicboxApi {
   chooseDirectory(): Promise<DirectoryGrant | null>;
   /** Version, licence and repository, for the About section. */
   appInfo(): Promise<AppInfo>;
+  /** Runtime versions and paths, for the developer panel. */
+  versions(): Promise<AppVersions>;
+  /** Save a diagnostics report the user asked for; null when the dialog was cancelled. */
+  saveReport(content: string, suggestedName?: string): Promise<string | null>;
   /** The window is frameless, so its buttons come through here. */
   windowControl(action: WindowAction): Promise<void>;
 }
@@ -63,6 +84,8 @@ const api: MusicboxApi = {
   saveResourcePack: () => ipcRenderer.invoke('dialog:save-resource-pack'),
   analyze: (path) => ipcRenderer.invoke('song:analyze', path),
   generate: (path, options, output) => ipcRenderer.invoke('song:generate', path, options, output),
+  plan: (path, options) => ipcRenderer.invoke('song:plan', path, options),
+  measure: (path, options) => ipcRenderer.invoke('song:measure', path, options),
   reveal: (path) => ipcRenderer.invoke('shell:reveal', path),
   open: (path) => ipcRenderer.invoke('shell:open', path),
   onLog: (handler) => {
@@ -72,6 +95,8 @@ const api: MusicboxApi = {
   windowControl: (action) => ipcRenderer.invoke('window:control', action),
   chooseDirectory: () => ipcRenderer.invoke('dialog:choose-directory'),
   appInfo: () => ipcRenderer.invoke('app:info'),
+  versions: () => ipcRenderer.invoke('app:versions'),
+  saveReport: (content, suggestedName) => ipcRenderer.invoke('dev:save-report', content, suggestedName),
 };
 
 contextBridge.exposeInMainWorld('musicbox', api);

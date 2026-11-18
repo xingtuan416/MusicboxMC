@@ -1,13 +1,41 @@
 import { app, BrowserWindow, Menu, dialog, ipcMain, net, protocol, shell } from 'electron';
 import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { copyFileSync, existsSync, readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { allowedExternalUrl } from './externalLink';
-import { analyzeFile, generate, generateToFile, type GenerateOptions } from './service';
+import {
+  analyzeFile,
+  generate,
+  generateToFile,
+  measureLayout,
+  planSmartSelection,
+  type GenerateOptions,
+} from './service';
 import { describeCoreError } from './messages';
 import { resolveRendererPath } from './rendererPath';
 import { grantDirectory, resolveOutputPath } from './outputPaths';
 import { handleFatalException } from './fatal';
+
+/**
+ * Where the app keeps its profile (cache, local storage, session data).
+ *
+ * An unpackaged run (`electron dist/src/main/index.js`) calls itself "Electron", so
+ * `userData` defaults to `%APPDATA%\Electron` - the folder every other unpackaged
+ * Electron app on the machine uses. Two copies then cannot both own the cache
+ * directory: the second one logs "Unable to move the cache: access denied (0x5)" on
+ * every start, and both write the same local storage, where a setting changed in one
+ * window is invisible in the other. The development build gets a profile of its own;
+ * the packaged application keeps `%APPDATA%\MusicboxMC`.
+ *
+ * `MUSICBOXMC_USER_DATA` overrides both, so a scripted launch (`npm run smoke`,
+ * `verify:about`) never fights the window a developer already has open.
+ */
+const userDataOverride = process.env.MUSICBOXMC_USER_DATA;
+if (userDataOverride) {
+  app.setPath('userData', userDataOverride);
+} else if (!app.isPackaged) {
+  app.setPath('userData', join(app.getPath('appData'), 'MusicboxMC-dev'));
+}
 
 /**
  * Static asset resolution. The build output layout is dist/src/main/index.js,
@@ -144,6 +172,26 @@ function registerIpc(): void {
     }
   });
 
+  // Layout measurement for the developer panel: no file is written and no litematic bytes
+  // are built, so it is cheap enough to run whenever an option changes.
+  ipcMain.handle('song:measure', (_e, path: unknown, options: unknown) => {
+    try {
+      return measureLayout(assertFile(path), (options ?? {}) as GenerateOptions);
+    } catch (e) {
+      throw new Error(`测量失败：${describeCoreError(e)}`, { cause: e });
+    }
+  });
+
+  // The configuration step asks what smart routing would choose. Nothing is written; this
+  // is a measurement, so the settings the user sees are the ones the generator will use.
+  ipcMain.handle('song:plan', (_e, path: unknown, options: unknown) => {
+    try {
+      return planSmartSelection(assertFile(path), (options ?? {}) as GenerateOptions);
+    } catch (e) {
+      throw new Error(`智能推荐失败：${describeCoreError(e)}`, { cause: e });
+    }
+  });
+
   // Where the schematic goes, without writing it: the file is produced by the next step.
   ipcMain.handle('dialog:choose-directory', async () => {
     if (!win) return null;
@@ -195,6 +243,44 @@ function registerIpc(): void {
     author: 'xingtuan416',
   }));
 
+  /**
+   * Runtime versions and paths, for the developer panel.
+   *
+   * The packaged app bundles its own runtime, so these numbers are the only place the
+   * difference between "works here" and "works on the user's machine" can be seen.
+   */
+  ipcMain.handle('app:versions', () => ({
+    app: appVersion(),
+    electron: process.versions.electron ?? '',
+    chrome: process.versions.chrome ?? '',
+    node: process.versions.node,
+    v8: process.versions.v8 ?? '',
+    appPath: app.getAppPath(),
+    packaged: app.isPackaged,
+  }));
+
+  /**
+   * Write a diagnostics report the developer built in the renderer.
+   *
+   * It is a text file the user chose the location for, capped in size, and nothing in the
+   * generator reads it back. The path never becomes an authorized output directory.
+   */
+  ipcMain.handle('dev:save-report', async (_e, content: unknown, suggested: unknown) => {
+    if (typeof content !== 'string' || content.length === 0) throw new Error('诊断内容为空');
+    if (content.length > 8_000_000) throw new Error('诊断内容过大（超过 8 MB）');
+    const res = await dialog.showSaveDialog(win ?? undefined!, {
+      title: '保存诊断报告',
+      defaultPath:
+        typeof suggested === 'string' && suggested.length > 0
+          ? basename(suggested)
+          : 'musicboxmc-diagnostics.json',
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    });
+    if (res.canceled || !res.filePath) return null;
+    writeFileSync(res.filePath, content, 'utf8');
+    return res.filePath;
+  });
+
   // The window is frameless, so the renderer's own buttons drive these.
   ipcMain.handle('window:control', (_e, action: unknown) => {
     if (!win) return;
@@ -229,7 +315,27 @@ function registerIpc(): void {
   });
 }
 
+/**
+ * One window per profile.
+ *
+ * Starting the app twice used to start two copies against one profile - the cache
+ * warnings above, plus two windows whose local storage silently overwrote each
+ * other. The second launch now focuses the window that is already open.
+ */
+const ownsProfile = app.requestSingleInstanceLock();
+// `app.quit()` before ready exits with a Windows breakpoint status; `app.exit(0)` is the
+// documented way to stop a second instance that never created a window.
+if (!ownsProfile) app.exit(0);
+
+app.on('second-instance', () => {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.focus();
+});
+
 app.whenReady().then(() => {
+  // Another copy owns this profile and already shows the window: stay out of its way.
+  if (!ownsProfile) return;
   // The renderer owns the application chrome; keep Electron's native File/Edit menu hidden.
   Menu.setApplicationMenu(null);
   serveRenderer();

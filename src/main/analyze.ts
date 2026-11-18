@@ -6,6 +6,7 @@ import { detectTrack } from '../core/palette/instrumentMap';
 import { formatDuration } from '../core/tempo/speed';
 import { MAX_LAYOUT_ERROR_MS, MAX_QUANTIZE_ERROR_MS, secondsToTick } from '../core/tempo/tick';
 import { numericRange } from '../core/numericRange';
+import { chooseLeadTrack, trackProminence, type ProminenceTrack } from '../core/arrangement/prominence';
 import type { AnalyzeResult, TrackSummary } from './types';
 
 /**
@@ -19,7 +20,9 @@ function summarizeTracks(song: SongModel): TrackSummary[] {
   return song.tracks.map((t) => {
     const ticks = t.notes.map((n) => secondsToTick(n.timeSec));
     const tickRange = numericRange(ticks);
+    const midiRange = numericRange(t.notes.map((note) => note.midi));
     const detection = detectTrack(t);
+    const prominence = trackProminence(t.notes, song.durationSec);
     return {
       index: t.index,
       name: t.name,
@@ -32,11 +35,22 @@ function summarizeTracks(song: SongModel): TrackSummary[] {
       noteCount: t.notes.length,
       minTick: tickRange?.min ?? 0,
       maxTick: tickRange?.max ?? 0,
+      minMidi: midiRange?.min ?? 0,
+      maxMidi: midiRange?.max ?? 0,
+      meanVelocity: prominence.meanVelocity,
+      maxVelocity: prominence.maxVelocity,
+      activeSeconds: prominence.activeSeconds,
+      polyphonicOnsetRatio: prominence.polyphonicOnsetRatio,
+      melodicScore: prominence.melodicScore,
+      activityScore: prominence.activityScore,
+      prominenceScore: prominence.prominenceScore,
     };
   });
 }
 
 export function analyze(song: SongModel, path: string): AnalyzeResult {
+  const tracks = summarizeTracks(song);
+  const lead = chooseLeadTrack(tracks as ProminenceTrack[]);
   return {
     path,
     file: basename(path),
@@ -52,7 +66,9 @@ export function analyze(song: SongModel, path: string): AnalyzeResult {
       commandErrorMs: MAX_QUANTIZE_ERROR_MS,
       layoutErrorMs: MAX_LAYOUT_ERROR_MS,
     },
-    tracks: summarizeTracks(song),
+    tracks,
+    recommendedLeadTrackIndex: lead?.index ?? null,
+    recommendedLeadBasis: lead?.basis ?? null,
     tempoSegments: song.tempos,
   };
 }
