@@ -36,18 +36,18 @@ CI 在 Node 26 上跑 `npm run check` 与 `verify:litematic`，另有一个 Wind
 
 ## 目录地图
 
-| 路径               | 说明                                                                                                                                                        |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/core/`        | 纯逻辑，不依赖 Electron：`midi` `layout` `palette` `litematic` `nbt` `tempo` `command`                                                                      |
-| `src/main/`        | 主进程：`service`（编排）、`generate`、`analyze`、`messages`（错误码→中文）、`index`（窗口与 IPC）                                                          |
-| `src/preload/`     | `contextBridge`，渲染层唯一入口                                                                                                                             |
-| `src/renderer/`    | 界面：`app.js`（全部行为）、`preview.js`（画布）、`warningText.js`、`resourcepack.js`、`index.html`                                                         |
-| `scripts/`         | `copy-assets.mjs`、`cli.ts`、`check-piano-pack.mjs`、`smoke-ipc.cjs`、`verify-ui.cjs`、`verify-about.cjs`、`verify-litematic-java.ts`、`serve-renderer.cjs` |
-| `test/`            | vitest；`fixtures/` 有 `.mid`、`.litematic` 与 Java 校验器                                                                                                  |
-| `docs/`            | 架构、红石模型、litematic 格式、命令播放；**`status.md` 是当前项目状态，`known-issues.md` 是统一问题清单，开工前先读**                                      |
-| `.opencodereview/` | 按路径的代码审查规则（`ocr review` 使用）                                                                                                                   |
-| `dist/` `release/` | **生成物，勿手改**                                                                                                                                          |
-| `out/`             | 本地工作目录，已 gitignore，**勿提交**                                                                                                                      |
+| 路径               | 说明                                                                                                                                                                                                                                                               |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/core/`        | 纯逻辑，不依赖 Electron：`midi` `layout` `palette` `litematic` `nbt` `tempo` `command`                                                                                                                                                                             |
+| `src/main/`        | 主进程：`service`（编排）、`generate`、`analyze`、`messages`（错误码→中文）、`index`（窗口与 IPC）                                                                                                                                                                 |
+| `src/preload/`     | `contextBridge`，渲染层唯一入口                                                                                                                                                                                                                                    |
+| `src/renderer/`    | 界面：`app.js`（全部行为）、`preview.js`（画布）、`warningText.js`、`resourcepack.js`、`index.html`                                                                                                                                                                |
+| `scripts/`         | `copy-assets.mjs`、`cli.ts`、`check-piano-pack.mjs`、`smoke-ipc.cjs`、`verify-ui.cjs`、`verify-about.cjs`、`verify-litematic-java.ts`、`serve-renderer.cjs`                                                                                                        |
+| `test/`            | vitest；`fixtures/` 有 `.mid`、`.litematic` 与 Java 校验器                                                                                                                                                                                                         |
+| `docs/`            | **`README.md` 是索引**；**`logic-guide.md` 是不含代码的功能逻辑说明，`constants.md` 是常量与阈值总表**；`status.md` 是当前项目状态，`known-issues.md` 是统一问题清单，`0.4.0-plan.md` 是按轮次的历史实施记录；另含架构、红石模型、多乐器、litematic 格式、命令播放 |
+| `.opencodereview/` | 按路径的代码审查规则（`ocr review` 使用）                                                                                                                                                                                                                          |
+| `dist/` `release/` | **生成物，勿手改**                                                                                                                                                                                                                                                 |
+| `out/`             | 本地工作目录，已 gitignore，**勿提交**                                                                                                                                                                                                                             |
 
 ## 代码约定
 
@@ -102,7 +102,7 @@ CI 在 Node 26 上跑 `npm run check` 与 `verify:litematic`，另有一个 Wind
 4. **NEVER** 把 URL 交给 `shell.openPath`，它只打开文件；外部链接走 `shell.openExternal`（否则点击毫无反应）。
 5. **MUST** 高频事件里不要直接 `renderPreview`。重绘整张电路在长曲子上远超一帧，要累积增量并用 `requestAnimationFrame` 节流，否则拖动会跟不上光标。
 6. **MUST** 走多乐器路径时把 `assignments` 传给 `layout()` / `buildCommandPlayback()`。不传就走旧的五槽钢琴模式，16 轨文件会全部变成竖琴且不报错。识别优先级固定为 **GM 音色 → 通道 9 鼓 → 轨道名 → 竖琴**；16 种乐器的锚点、底块和替代表见 `docs/multi-instrument.md`。`TrackModel.program` 一旦在 `parseMidi` 里丢掉，GM 优先就静默失效。
-7. **NEVER** 在同时发声的音符行之间留空行，或把和弦音符按两行间隔排。和弦行必须**相邻**：≤3 个音只给内联音符一个中继器，两侧靠音符盒单跳点亮；≥4 个音每行一个同延迟中继器。Minecraft 不会因为相邻音符盒同时被邻格点亮就响两次。强制合并的紧凑路径也用同一拓扑；只有超过单列容量（27 音）的极端和弦才退回 staged 两行总线。这条曾被改错成"每音隔一格"，既浪费空间又把相邻轨推出 48 格听距。
+7. **NEVER** 在同时发声的音符行之间留空行，或把和弦音符按两行间隔排。和弦行必须**相邻**：≤3 个音只给内联音符一个中继器，两侧靠音符盒单跳点亮；≥4 个音每行一个同延迟中继器。Minecraft 不会因为相邻音符盒同时被邻格点亮就响两次。强制合并的紧凑路径也用同一拓扑；只有超过紧凑路径容量（`min(2×dMax+1, 27)`，默认 27 音）的极端和弦才退回 staged 两行总线。注意普通布局的单列容量是 `2×dMax+1`（默认 29 音），超过它是拆轨而不是换拓扑。这条曾被改错成"每音隔一格"，既浪费空间又把相邻轨推出 48 格听距。
 8. **MUST** 共享 X 参考线从每条轨**实际补齐后的位置**递推，不能只看各轨独立的自然 X。历史补齐会改变后续每组的起点；丢掉它会让曾经补齐的轨超前于参考线且不产生 `SPATIAL_DRIFT`，长多轨音乐的同时音符会重新拉开。
 
 ## 常见故障

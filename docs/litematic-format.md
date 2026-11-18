@@ -78,8 +78,24 @@ this wrong produces a schematic that looks plausible but is transposed.
 
 Litematica stores one dense array per region, so a single region covering a whole
 song costs `volume * bits / 8` bytes regardless of how empty it is. `sliceRegions`
-therefore emits **one region per track**; because tracks are separated by at least
-one `trackPitch` along Z, the regions never overlap.
+therefore starts from **one region per track** — but a region box may never contain a
+block that belongs to another track.
+
+That is not automatic. A lane's chord branches spread over several Z rows, so a track
+with deep chords has a tall bounding box. A power corridor (see
+[`redstone-model.md`](redstone-model.md)) runs through the Z rows _between_ its host
+and its guest track, so the corridor column can fall inside the tall track's box. The
+tall track then stores `air` for a coordinate where the corridor's own region stores a
+`repeater`: two claims for one cell, and whichever claim the reader honours, the other
+is silently dropped. In the field this showed up as a corridor that was complete in the
+file but missing 7 of its 9 repeaters in game.
+
+The fix: each track is sliced into **bands**, one band per contiguous run of Z rows
+whose blocks all share the same X range, and that X range stops at any column owned by
+another track. A track whose own box already avoids every other track still ships as a
+single region, so ordinary songs keep one region per track. When a corridor forces a
+split you get several regions for the same `trackIndex` (`src/core/layout/regions.ts:34-58`
+explains the geometry, `:162-175` decides whole-vs-bands).
 
 Two details matter:
 

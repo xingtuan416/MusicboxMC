@@ -194,22 +194,55 @@ whole track is moved by one octave when that lets it fit, so a melody keeps its
 contour (`INSTRUMENT_OCTAVE_SHIFT`). Neither mode drops a note silently. Drums ignore
 the note value, so they are always written at note 0.
 
+## The redstone simulator
+
+`src/core/sim/redstone.ts` executes a layout block by block. It is a port of the
+vanilla sources for the three blocks a layout is made of - redstone wire,
+repeaters and note blocks (`BlockRedstoneWire`, `BlockRedstoneDiode`, `BlockNote`
+of the 1.12.2 MCP tree, the only decompiled sources available on this machine). It
+exists because everything above is arithmetic: until the circuit is actually
+ticked, no test can tell whether the model of the game is right.
+
+What it reproduces:
+
+- dust conducts in the same tick and loses one power level per block (15 to 1)
+- a repeater reads only from the side it faces, takes `delay × 2` game ticks, and
+  outputs 15; its side input powers nothing, so a T junction cannot be used to turn
+- a conductor (note block, solid block) passes strong power only from the block
+  feeding it, and does not chain through a second conductor
+- a note block fires once per rising edge of `isBlockPowered`, never twice
+- an unloaded chunk stops propagation: dust does not conduct across the border, and
+  a repeater that falls due there re-schedules instead of firing
+
+`test/redstoneSim.test.ts` pins those primitives and then runs the generator's own
+output: with every chunk loaded, all 346 note blocks of
+`test/fixtures/happy-birthday-16.mid` fire at the tick the layout planned, and the
+simultaneous-tick chords stay simultaneous. `test/laneRide.test.ts` repeats the
+check for a layout whose lanes borrow power from their neighbour, because that is
+the one part of the wiring the arithmetic never described.
+
+The one thing it made obvious is not a timing bug at all: a 2678-block song is 168
+chunks wide, so a player standing at the start hears 4% of its notes and 94% after
+walking east at 0.4 blocks per game tick. That is chunk loading, and it is what
+"the song breaks in the middle" looks like from inside the game.
+
 ## What this model does not cover
 
-The layout is a **static description**, not a simulator. The following are not
-modelled and must be verified in game:
-
-- Minecraft's block-update order and redstone tick ordering
-- network isolation between adjacent groups (a group's wiring must not leak into
-  its neighbour's)
-- chunk loading, and whether the whole structure is loaded when it runs
+- Minecraft's block-update order **between** independent networks: the simulator
+  walks each network to a fixed point, which is deterministic; the game interleaves
+  them, and a group whose wiring touches its neighbour's is still the layout's job
+  to avoid
+- chunk loading **over time**: the simulator accepts an "is this chunk loaded"
+  predicate, but does not model the order in which a player loads chunks
 - server performance and `maxCommandChainLength`
+- version drift: the ported sources are 1.12.2 (see `REL-06`), the export targets
+  1.20.4
 
-`test/layout.acceptance.test.ts` deliberately asserts only invariants that hold
-regardless of those unknowns: note conservation, non-overlap between tracks, a
-valid `.litematic`, and the relative timing of `placed` events. It does not
-simulate redstone propagation, because a simplified propagation model would give
-false confidence rather than real coverage.
+`test/layout.acceptance.test.ts` still asserts only invariants that hold regardless
+of the above: note conservation, non-overlap between tracks, a valid `.litematic`,
+and the relative timing of `placed` events. The full simulation is a separate,
+deliberately slow test: it ticks blocks one by one, so it runs on scored fixtures
+rather than on every song.
 
 The forced layout is the exception: it combines the whole song onto one connected
 spine, and `core/layout/forcedValidation.ts` walks the produced block graph,

@@ -7,10 +7,159 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-18
+
+This release makes a layout something a player can stand in. Listening distance is now measured from
+the row the player stands on, the loudest track owns that row, and the other tracks fan out in
+priority order, so importance and distance agree. Every switch that changes the schematic says what it
+does and what it does not apply to, and smart selection became a preset that cannot disagree with the
+file. The projection partition was rebuilt after a pasted schematic lost most of a power corridor.
+
+### Added
+
+- Lead-track detection from MIDI velocity alone, and lane ordering that follows it. Every song now
+  gets a lead track (percussion included; ties go to the track with more notes, then to file order),
+  the loudest track sits on the row the player stands on, and the other tracks alternate above and
+  below it by priority, so distance from the player matches importance
+  (`src/core/arrangement/prominence.ts`, `src/core/layout/index.ts`).
+- Listening distance is measured from that row instead of from the whole layout: `LayoutResult.playerZ`
+  is the lead track's wire row (the spine row after a forced merge) and `hearingRadius` is the distance
+  from it to the furthest note block (`src/core/layout/hearing.ts`). Every 30/48 comparison, every
+  warning and every readout uses the radius, so a song may span 82 cells and still fit: 27 tracks of
+  鸟之诗 span 82 cells but their furthest note is 42 cells from the player.
+- Configuration switches for the parts that change the schematic: 按主轨排序 (priority order or file
+  order, with the player on the lead row either way), 稀疏音轨借道, 相邻轨道取电 and 投影注释. Each
+  switch explains itself in place, shows what it does not apply to, and the summary line names the
+  choice (`src/renderer/index.html`, `src/renderer/app.js`).
+- Smart selection as an option preset: `song:plan` measures the candidate layouts without writing a
+  file, picks instrument mode, merge mode and resource-pack advice, and writes them into the same
+  state the manual controls use, so the switch never claims a value the file does not follow.
+  `test/smartEquivalence.test.ts` pins the meaning: for twelve combinations of song shape, dMax and
+  sharing, turning smart selection on produces the same regions, blocks and ticks as picking its
+  answer by hand, and a thirteenth case compares the measurement step.
+- Sparse-lane sharing: a track with fewer than 50 notes can be folded onto a neighbouring track
+  instead of paying for its own strip of Z (threshold editable). Two or more near-empty tracks that no
+  host can take are combined onto a collector track only when together they carry enough notes. The
+  check step and the assignment table name every borrow, and `ShareOutcome` reports why sharing did
+  or did not apply.
+- Sparse-lane sharing also runs after a same-instrument merge: the merge decides how instruments
+  collapse, then every track it left nearly empty is folded onto a neighbour that already has notes,
+  and no collector track is created there (that would mix back the instruments the merge just
+  separated). On a 27-track song the merged layout goes from 7 tracks to 6 and its hearing radius
+  from 49 to 45 cells; on the 16-track fixture 12 tracks become 3.
+- Lane riding (`GenerateOptions.laneRide`, default on): a track whose first note is far away no
+  longer pays for its own head - the thousands of cells of repeater chain between X = 0 and the first
+  note. It reads one signal from a track above and starts there. A repeater reads only its own input
+  side and repeats at full strength, so one repeater per crossed row carries the reading down without
+  lighting the rows it passes, and each of those rows costs one redstone tick that the layout subtracts
+  again. On a 27-track song (2678 × 2 × 82, 7410 notes) that removes 30546 blocks without moving a
+  single note off its tick.
+- Lane signs in the schematic (`GenerateOptions.annotateLanes`, 投影注释 switch, on by default): a wall
+  sign stands three blocks west of every track on a gold (lead) or copper (secondary) block, naming its
+  source tracks, its strength and where to stand. The signs are a region of their own, so they can be
+  deleted or moved in Litematica without touching the circuit, and the export reports the standing
+  position (`LaneAnnotationInfo`) so the check step can repeat it. A forced single spine stops claiming
+  a lead track: the sign reads 全曲主线 / 主线行.
+- A redstone simulator (`src/core/sim/redstone.ts`) ported from the vanilla sources of redstone wire,
+  repeaters and note blocks, plus tests that run real generated layouts through it: every note block
+  fires on the tick the layout planned (346/346 on the 16-track fixture, 7410/7410 on a 27-track song),
+  including chords that share a tick. It also models chunk loading, which is what makes a wide song
+  stop playing in the middle: standing at the start of a 168-chunk song plays 4% of its notes.
+- Developer mode: an opt-in diagnostics drawer (remembered per profile) with the current state, the
+  smart-routing measurement, per-track prominence numbers, the last generation result, and every IPC
+  call with its duration. It can re-run the measurement and the check step, copy the current view and
+  save the report as JSON. With it on, the configuration step also shows a live layout readout for the
+  current options, re-measured (debounced) whenever an option changes.
+- Generation and the live readout share one planning function, so the hearing radius, track count and
+  merge mode shown before generating are the ones the file will use, together with `ShareOutcome`, the
+  number of tracks that borrow power and every measured candidate.
+
+### Fixed
+
+- Regions could claim the same coordinate twice. A lane's power corridor runs through the Z rows
+  between its host and its guest, so a tall lane (one with deep chords) had a bounding box that
+  swallowed the corridor column: that lane stored `air` where the corridor's own region stored a
+  `repeater`, and whichever claim a reader honoured, the other was dropped. A pasted projection
+  showed 7 of 9 corridor repeaters missing on one lane. Regions are now sliced into bands that stop
+  at any column owned by another track, and a track keeps a single region whenever its box is
+  already clean, so ordinary songs still ship one region per track (`src/core/layout/regions.ts`,
+  `test/regionSlices.test.ts`).
+- Listening distance was compared against the whole Z span instead of the distance from the row the
+  player stands on, so warnings fired on songs that fit and merges were chosen for the wrong reason: a
+  wide 27-track layout reported `SMART_HEARING_UNREACHED` although its furthest note was well inside
+  48 cells. The check step, the router and the sharing decisions all read the radius now
+  (`SMART_RADIUS.compact` / `.audible`), and the warning reads "最远 N 格".
+- Re-ordering the tracks for the lead track moved every note block twice, because the block cell and
+  the note it belongs to shared one object and both were translated. The note blocks ended up rows
+  away from the dust that should power them: the 16-track fixture went from 40 to 56 cells wide and
+  the simulator fired none of its 346 notes. Geometry is now independent of the track order (40 cells
+  either way), and a regression test drives an ordered layout through the simulator note by note.
+- Turning the lead track off used to leave the schematic with no lead track, no ordering and a sign
+  that said 未指定主轨; the player also had to guess a Z. The lead track is always chosen now, and the
+  player is always placed on its wire row - the same row the signs name.
+- Track centring could widen a layout and the router measured a second, uncentred layout to warn about
+  it (`SMART_CENTER_UNREACHED`). The widening was the aliasing bug above; once fixed, centring does not
+  change the width, and symmetric placement makes "turn centring off to save listening distance"
+  impossible to follow, so both the warning and its extra measurement pass are gone.
+- The interface called MC output tracks 赛道 while 音轨 already meant MIDI tracks, so one word covered
+  both ends of the pipeline. All interface text now says 轨道 for the laid-out track and keeps 音轨 for
+  the MIDI one.
+- Under a same-instrument merge the sharing hint claimed the whole song had been merged into one line,
+  and the readout said sharing had not applied "because the song was merged into one line", while the
+  file really had eight tracks. The reason now comes from the layout that was kept: `merged` only means
+  a forced single spine, and `no-sparse` means the merge left no near-empty track to fold.
+- Lane riding stopped working as soon as same-instrument merging was on: the tap only looked for a host
+  exactly two rows away, and a merged track carries a row of chord branches on each side, so every
+  neighbour was three to five rows off. A tap now crosses every row in between. 27-track song: 100956
+  to 70410 blocks unmerged, 54040 to 49174 merged, and the simulator still fires all 7410 notes on
+  their planned tick in both.
+- A hand-made layout wider than the 48-cell hearing radius said nothing at all: the width check only
+  ran on the smart path. It now reports `SMART_HEARING_UNREACHED` on both paths, with
+  `attempted: false` so the wording does not claim a merge was tried.
+- After any merge the lead track was still described as its own track, and nothing in the pasted
+  schematic said which row to stand on: the lead track is now looked up through the tracks' source
+  tracks, and a forced single spine stops claiming one.
+- Smart selection was a checkbox that could read "on" while the summaries and the file followed a
+  manual value. It is now an action: applying it writes the recommended options into the same state the
+  manual controls use, and any manual edit shows a 手动 badge.
+- A merge candidate that failed to build no longer leaves the summary claiming it was applied; the
+  reported mode is the layout actually used, and `SMART_MERGE_FAILED` names the candidate that was
+  dropped.
+- A 30-48 cell multi-instrument song is no longer merged into a layout outside the audible radius, and
+  same-instrument merging is not assumed to be narrower: every candidate is measured and accepted only
+  when it removes tracks and does not push the hearing radius past 48.
+- A pure-harp or single-instrument song that is too wide now says that no merge was attempted, instead
+  of implying the narrowest candidate won.
+- Command playback no longer reports a hearing radius, merge mode or resource-pack advice it does not
+  use, and the sharing and riding cards disappear from the configuration step under a forced single
+  spine instead of showing a hint that they do not apply.
+- The developer layout readout measured a layout the file would never have: it skipped smart routing,
+  so with smart selection on and a manual merge it could print a value the generator never produces.
+- Extended harp range is only chosen for a pure-harp song whose notes do not fit the single harp slot,
+  and it always comes with the pack recommendation: the five slots only sound like one instrument with
+  that pack, so choosing the mode without it is a bad experience. Every other song stays on its own
+  instruments and is not offered the pack.
+- Same-instrument merging fitted a single octave to the union of every track it merged, which could
+  shift notes that were fine on their own. Each source track now keeps the octave it would have been
+  generated in alone.
+- Fold-card borders are an ink hairline instead of white, which rendered as a broken dashed line at
+  100% DPI, and the summary values are no longer accent-coloured.
+- Starting the app a second time - or next to any other unpackaged Electron app - made Chromium print
+  `Unable to move the cache: access denied (0x5)` on every launch, and two windows silently overwrote
+  each other's local storage. The development build now keeps its profile in
+  `%APPDATA%\MusicboxMC-dev` instead of sharing `%APPDATA%\Electron`, a second launch focuses the
+  window that is already open, and the scripted runs (`smoke`, `verify:about`) ask for a throw-away
+  profile (`MUSICBOXMC_USER_DATA`) so they never fight a window the developer has open.
+
 ### Changed
 
-- Development moves to Node 26 LTS, with CI and the Windows packaging jobs on the
-  same runtime. `@types/node` follows the runtime at 26.6.6.
+- Development moves to Node 26 LTS, with CI and the Windows packaging jobs on the same runtime.
+  `@types/node` follows the runtime at 26.6.6.
+- The outer UI has a shared smart-panel treatment, focus-visible outlines, restrained step/hover
+  motion and reduced-motion support. The redstone grid itself is not animated.
+- Documentation gained two code-free guides: `docs/logic-guide.md` (how every feature works) and
+  `docs/constants.md` (every constant, labelled as game fact, repository convention, implementation
+  choice or external assumption, with the file that uses it).
 
 ## [0.3.0] - 2026-11-14
 

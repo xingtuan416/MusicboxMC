@@ -48,7 +48,8 @@ SongModel                       { tracks: TrackModel[], tempos, ppq, ... }
         (independent backend; does not go through layout/)
 
 LayoutResult
-  │  core/layout/regions.ts   split into per-track regions, translate to origin
+  │  core/layout/regions.ts   per-track regions, split into bands when a taller
+  │                            track's box would swallow another track's blocks
   ▼
 RegionData[]                    { position, size, blocks[], tileEntities[] }
   │  core/litematic/build.ts  palette, bit packing, NBT tree

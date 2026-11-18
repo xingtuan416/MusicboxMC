@@ -396,7 +396,7 @@ note = midi + 12 * transpose + 12 * k - A
   - `kind: 'pitch'` → `piano`
   - `kind: 'instrument'` → `instrument:<id>`
   - 打击乐独立分组。
-- 强制合并：所有源轨合成**一条**主线；每个音按自己源轨的 `voicing`/`octaveOffset` 映射，`forcedValidation` 继续按实际方块图校验整条主线。和弦行相邻：≤27 音用普通分支列（≤3 音单跳、≥4 音每行一个同延迟中继器），超过 27 音才退回 staged 两行总线。
+- 强制合并：所有源轨合成**一条**主线；每个音按自己源轨的 `voicing`/`octaveOffset` 映射，`forcedValidation` 继续按实际方块图校验整条主线。和弦行相邻：≤3 音单跳（只给内联音一个中继器）、≥4 音每行一个同延迟中继器；容量是 `min(2×dMax+1, 27)`（默认 dMax 14 → 27，比普通布局的 29 少两行，因为紧凑列从上一组经一格红石粉取电、根到达强度只有 14），超过才退回 staged 两行总线。
 - `LayoutResult` 增加 `trackInstruments`，携带原生/生效乐器、识别来源、八度偏移、丢弃数。
 
 ### 6.3 命令后端
@@ -532,7 +532,7 @@ note = midi + 12 * transpose + 12 * k - A
 
 ### 10.5 闸门
 
-`lint` / `typecheck` / `test` / `build` / `format:check` / `smoke` / `verify:ui` / `verify:about` 全绿，CI Node 20/22 通过。
+`lint` / `typecheck` / `test` / `build` / `format:check` / `smoke` / `verify:ui` / `verify:about` 全绿，CI 通过（当前基线为 Node 26）。
 
 ## 11. 实施顺序
 

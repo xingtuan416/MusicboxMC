@@ -1,40 +1,64 @@
 # 项目状态
 
 > 每次有实质进展就更新这个文件。**写法见 `AGENTS.md` 的「状态文档」一节。**
-> 最后更新：2026-11-14
+> 最后更新：2026-11-18（第十五轮：0.4.0 定稿——清理产物、CHANGELOG 提为 0.4.0、全量闸门通过）
 
 ## 一句话
 
-`0.3.0` 已发布；`main` 的开发基线已升级到 Node 26 LTS，应用产物没有变化，因此没有新 Release。
+`0.4.0` 已在工作区完成声部识别、主轨居中、智能分流、稀疏音轨借道、投影注释和外层 UI 打磨；第五轮加了“相邻轨道取电”（首音很晚的轨道不再自己铺几千格中继器车头），并照 vanilla 源移植了一个红石模拟器，用它在同 tick 多轨上验证时序。第六轮修掉开发版与别的 Electron 应用共用 `%APPDATA%\Electron` 造成的启动缓存报错，并加了单实例锁；第七轮把取电从“只借相邻两行”改成跨行走廊；第八轮让同乐器合并之后也能借道（合并出的轨道再折一次，27 轨曲目 Z 49 → 45）；第九轮查清“主轨居中让 Z 变宽”是 `place()` 与 `PlacedNote.notePos` 共享同一个坐标对象、居中时被平移两次的 bug，修完后居中与不居中的宽度完全相同。第十一轮按用户“玩家站中间、左右各 40 格都听得见”的指出，把听距判据从“整条 Z 跨度”改成“玩家到最远音符的半径”（`LayoutResult.playerZ` / `hearingRadius`，`src/core/layout/hearing.ts`）：主音轨永远存在且只按力度排序、玩家固定站在主音轨的红石粉那一行、其余轨道按优先级对称铺到两侧，force 合并时界面直接隐藏借道与取电卡，并新增 `test/smartEquivalence.test.ts` 13 条证明“智能只挑选项、选项一致时结果逐字节相同”。第十三轮试过「用一根总线给所有轨道供电」的方案，用户看过实际效果后否决，代码与文档已整条删除，接线回到每条轨道自己在起点接红石线。第十四轮按用户实测反馈修掉投影分区互相重叠的问题：借道走廊会穿过中间轨道，而带深和弦的轨道包围盒很高，于是同一条走廊的坐标在一个 region 里是空气、在另一个 region 里是中继器，Litematica 只认其中一份——用户文件里有 7610 处这种矛盾，正好复现「x=190 的九格走廊只剩两格中继器」。现在分区改成按列归属切带，普通歌曲仍是一条轨道一个 region。第十五轮做发布准备：`CHANGELOG.md` 的 Unreleased 提为 `0.4.0 - 2026-11-18`（并加了一段本版摘要），`npm run release:notes` 改成只列仍未关闭的限制（已修复的 KI 条目不再出现在 Release 说明的「已知限制」里），修掉 `docs/known-issues.md` 里重复的 REL-03 编号（第二条改为 REL-08 并按第十一轮口径改写），清理 `out/` 与 `release/` 的历史产物，全量闸门重跑通过后提交并发布 `v0.4.0`。
 
 ## 位置
 
 | 项       | 值                                                                                           |
 | -------- | -------------------------------------------------------------------------------------------- |
-| 版本     | `0.3.0`（tag 与 Release）；`main` 多一个 Node 26 开发基线提交                                |
-| 分支     | `main`                                                                                       |
-| 最新发布 | `v0.3.0`：安装包 119.0 MB、免安装 149.4 MB、资源包 51 KB                                     |
+| 版本     | `0.4.0`（tag `v0.4.0`）；`v0.3.0` 是上一个发布                                                |
+| 分支     | `main`（0.4.0 已提交并打 tag）                                                               |
+| 最新发布 | `v0.4.0`：安装包 119.0 MB、免安装 149.5 MB、资源包 51 KB                                     |
 | 备份     | 分支 `backup/before-ui-integration`、标签 `backup-before-ui-integration`、`v0.1.0` —— 不要删 |
 
-## 质量闸门（最近一次实测，2026-11-14）
+## 质量闸门（最近一次实测，2026-11-18）
 
-| 项                         | 结果                                                         |
-| -------------------------- | ------------------------------------------------------------ |
-| `npm test`                 | 38 文件 / 286 用例通过                                       |
-| `npm run lint`             | 无输出                                                       |
-| `npm run typecheck`        | 无输出（Node 26.13.1；tsc 7.0.2，ESLint 用并排 TS 6 API）    |
-| `npm run build`            | 通过（Node 26.13.1）                                         |
-| `npm run smoke`            | 12 项通过（Electron 45；目录授权与越界拒绝已覆盖）           |
-| `npm run verify:ui`        | 通过，无 console 错误、无横向溢出                            |
-| `npm run verify:about`     | 通过（版本 0.3.0、许可 GPL-3.0-only、标题栏图标已解码）      |
-| `npm run verify:litematic` | 通过（独立 Java 读取器接受当前写入器）                       |
-| `npm run format:check`     | 通过                                                         |
-| Node 26 Windows 打包       | 通过（`npm run dist:dir`，Electron 45.3.2）                  |
-| 用户实测                   | 通过（0.3.0 目录选择/生成、长曲拖动、关于页、安装包启动）    |
-| CI                         | 绿：Node 26 run `43604563631`；Linux、Windows、Java 校验通过 |
+| 项                         | 结果                                                                                                                                                                                                                                     |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm test`                 | 53 文件 / 386 用例通过                                                                                                                                                                                                                   |
+| `npm run lint`             | 无输出                                                                                                                                                                                                                                   |
+| `npm run typecheck`        | 无输出（Node 26.13.1；tsc 7.0.2，ESLint 用并排 TS 6 API）                                                                                                                                                                                |
+| `npm run build`            | 通过（Node 26.13.1）                                                                                                                                                                                                                     |
+| `npm run smoke`            | 13 项通过（Electron 45；目录授权与越界拒绝、独立 profile 已覆盖）                                                                                                                                                                        |
+| `npm run verify:ui`        | 通过（含借道、取电、按主轨排序、注释四个开关、强制合并时借道/取电卡隐藏、阈值联动、开关行几何与检查页注释/取电摘要断言），无 console 错误、无横向溢出                                                                                    |
+| `npm run verify:about`     | 通过（版本 0.4.0、许可 GPL-3.0-only、标题栏图标已解码）                                                                                                                                                                                  |
+| `npm run verify:litematic` | 通过（独立 Java 读取器接受当前写入器）                                                                                                                                                                                                   |
+| `npm run format:check`     | 通过                                                                                                                                                                                                                                     |
+| Node 26 Windows 打包       | 通过（`electron-builder --win --x64`，Electron 45.3.2）。`release/win-unpacked` 被系统占用（`EBUSY`，目录内文件删不掉），0.4.0 的打包输出写到 `out/dist-out` 再复制回 `release/` |
+| 打包应用                   | 0.3.0 期间验证过 `release/win-unpacked` 可启动、`app.getVersion()` 与关于页一致；0.4.0 的 asar 已由 `verify:about` 读回（版本 0.4.0、许可 GPL-3.0-only），界面为四个开关版本 |
+| 用户实测                   | 0.3.0 已实测；0.4.0 等待实测                                                                                                                                                                                                             |
+| CI                         | Node 26 上次 run `43604883442` 绿；0.4.0 改动未推送                                                                                                                                                                                      |
 
 ## 已完成（按时间倒序，只留结论）
 
+- **0.4.0 发布准备与发布（2026-11-18，第十五轮）**：①`CHANGELOG.md` 的 `[Unreleased]` 提为 `[0.4.0] - 2026-11-18`，并在标题下加一段本版摘要（听距改成玩家站行到最远音符、最响的轨道占住玩家那一行、其余按优先级向外铺、投影分区重建）。②`scripts/release-notes.mjs` 改为只列仍未关闭的限制：文档里已经标「已修复」的 KI 条目不再出现在 Release 说明的「已知限制」段（此前 KI-09/13/14/15/16 都会混进去）。③`docs/known-issues.md` 里重复的 `REL-03` 编号修掉（主音轨音量那条改为 `REL-08`），并按第十一轮口径重写它的「事实」段（主音轨只按力度选、玩家站在它的红石粉行，不再说「主轨在 Z 方向居中」）。④清理 `out/`（一次性探针、日志、截图、`pack-check`）与 `release/` 里的 0.2.5 旧产物；`release/win-unpacked` 与 `out/dist-out` 的 `win-unpacked` 在系统里被占用（`EBUSY`，目录内文件删不掉，进程列表里没有从该目录运行的进程），因此打包输出走 `out/dist-out` 再复制回 `release/`，这条已记进闸门表。⑤全量闸门重跑：`npm run check`（53 文件 / 386 用例）、`verify:litematic`、`smoke`（13 项）、`verify:about`、`verify:ui` 全部通过。⑥打包产物：`MusicboxMC-Setup-0.4.0-win-x64.exe`（124,780,234 字节，sha256 `d7d325a9fda906619092edd7a4dadb9ce68834f2cb1915cd3ac8d1b86ec8202e`）、`MusicboxMC-0.4.0-win-x64.zip`（156,749,620 字节，sha256 `c8ba860de08e46f7ae02ce177a2a4daafa64e70e987665983613c54330292f87`）、资源包 51 KB。
+- **投影分区不再互相重叠（2026-11-18，第十四轮）**：用户实测反馈「借电那里红石断了」。根因不是走廊缺块（文件里 9 个中继器逐个都在），而是 `sliceRegions()` 按「一条轨道一个 region」切、假设 region 永不重叠；走廊穿过带深和弦的高轨道时，后者的包围盒把走廊的列包成空气，与走廊自身 region 的中继器冲突（用户文件 7610 处矛盾，正好是 x=190 走廊的 7 格）。①`src/core/layout/regions.ts` 重写成「每列唯一归属 + 同轨道连续同 X 范围的 Z 行并成 band + band 遇到别人的列就断开」，只有包围盒干净时才合并回单 region（普通歌曲与 force 单脊柱仍是 1 轨 1 region）；②新增 `test/regionSlices.test.ts` 三条回归（自造高和弦轨道 + 穿过它的走廊；旧实现下两条失败）；③实测《鸟之诗》dMax 14 + 借道 + 取电 + 同乐器合并：18 regions / 28279 字节 / 矛盾坐标 0，不合并 27 轨 27 regions / 两两盒重叠 0。文档同步：`docs/litematic-format.md` 的 Regions 一节、`docs/logic-guide.md` 第 1 与第 12 节、`docs/constants.md` 第十一节、`docs/known-issues.md` 的 KI-16、`docs/architecture.md` 数据流图。测试总数 383 → 386。
+- **文档全量改写与清理（2026-11-18，第十二轮）**：用户要求「更新所有文档、删除过时文档、清理过时/无用的临时文件与测试文件、维护项目鲁棒性、为提交做准备」。①新增 `docs/README.md` 作为索引（Start here / Reference / History 三组），`docs/0.4.0-plan.md` 文首加横幅声明它是按轮次追加的历史记录、当前行为以 `logic-guide.md` + `constants.md` + `known-issues.md` 为准，并列出三处被后续轮次推翻的结论（§5.9 居中变宽实为 `place()` 坐标别名 bug、§5.10 全曲主线站 Z 中点、§5.11 取电只借相邻两行）；②`CHANGELOG.md` 的 190 行按轮次流水账重写成 Added / Fixed / Changed 三段约 45 条（去掉自相矛盾与已删码名）；③`docs/logic-guide.md` 第 10 节按第十一轮行为改写（牌面第 4 行、玩家站在主音轨红石行、`spreadZ` 就是听距半径）；④docs 下「车道 / 赛道」全部改成「轨道」（`0.4.0-plan.md` 41 处、`known-issues.md` 45 处、`status.md` 38 处），界面文案此前已改；⑤新增 `test/docsConsistency.test.ts` 5 条：文档提到的仓库路径必须存在（`src/main/java/` 是 Litematica mod 引用，跳过）、`docs/README.md` 必须列出每个文档、当前行为文档不得出现已删的 `SMART_Z` / `SMART_WIDTH_UNRESOLVED` / `SMART_CENTER_WIDENS` / `SMART_CENTER_UNREACHED`（历史文档允许，因为要说明「已删除」）、当前行为文档与 `src/renderer/` 不得出现「赛道」「车道」、文档里的 `npm run X` 必须是真实脚本；⑥删除 `out/` 下 283 个一次性探针、补丁脚本、日志与旧截图（`out/` 已 gitignore，`verify:ui` / `verify:about` 会重新生成截图与 profile）；⑦删除根目录两个旧安装包归档 `release-0.2.5/` 与 `release-0.3.0-final/`（共 1.1 GB），`.gitignore` 增加 `.idea/`（`*.iml` 原本已忽略）。测试 50 文件 / 373 用例 → 51 文件 / 378 用例。
+
+- **听距改半径口径 + 主音轨恒在 + 对称铺轨（2026-11-18，第十一轮）**：用户指出「声音距离是 48 格没错，但玩家站在中间，左右各 40 格都听得见」，并且要求「所有情况下都应该有主音轨，只考虑力度」。①判据：新增 `src/core/layout/hearing.ts` 的 `hearingSpot(tracks, preferredZ)`，布局建完后算出 `playerZ`（主音轨的红石粉那一行，force 合并时是 spine 行）与 `hearingRadius`（所有音符盒里离该行最远的 Z 距离），写进 `LayoutResult`；`SMART_RADIUS = { compact: 30, audible: 48 }`、`SMART_HEARING_UNREACHED`（原 `SMART_WIDTH_UNRESOLVED`）、`decideMerge()`、`attemptShare()` / `attemptLaneFold()` 的接受条件、检查页读数全部改半径，读数写「最远 N 格」。实测《鸟之诗》dMax 14 不合并：27 轨、Z 跨度 82、**半径 42**、玩家 Z 0——旧口径 82 判超距，新口径在听距内；`SMART_CENTER_UNREACHED` 与“重测一次不居中布局”整条移除（对称铺轨后“关掉居中省听距”不可能成立）。②主音轨：`src/core/arrangement/prominence.ts` 的排序改成纯力度（`meanVelocity` 降序 → noteCount 降序 → index 升序），删掉 `VELOCITY_TIE = 0.03` 与“排除打击乐”，`LeadBasis` 只剩 `velocity`；`generate()` / `measureLayout()` 一律调用 `buildLaneOrder()`，智能关闭也有主音轨。③铺轨：`orderTrackInputs` 不再做“主轨居中 + 两侧交替”，改为纯优先级顺序；Z 分配改成双侧游标（`aboveLimit` / `belowLimit` / `preferAbove`），站轨轨道固定 `zBase = 0`，其余轨道按优先级放到更近的一侧，`TRACK_SPLIT` 沿同侧追加；`centerLead` 语义变成“按优先级排 / 按文件顺序排”，站立行另由 `GenerateOptions.standTrackIndex` 传入。④借道/折轨道接受条件改成“轨道更少 且 半径 ≤ max(原半径, 48)”，不再要求 Z 不变宽。⑤force 合并时配置页直接 `hidden` 掉借道卡（`#laneShareCard`）与取电卡（`#laneRideCard`），后端也忽略这两个选项。⑥新增 `test/smartEquivalence.test.ts` 13 条：手写 SMF 造宽曲（4 音和弦 / 交错单音）与窄夹具，参数矩阵 3 曲型 × dMax 8/14 × laneSharing 开/关，断言“智能开关打开”与“手挑同一组选项”产出的 regions、placed、方块数、警告完全相同，另 1 条断言 `measureLayout()` 报的就是文件里那次合并。测试总数 358 → 373；`test/centerLead.test.ts`、`test/trackSpacing.test.ts`、`test/trackOrder.test.ts`、`test/prominence.test.ts`、`test/smartGenerate.test.ts`、`test/measure.test.ts` 全部按新口径重写。界面文案里 MC 输出的旧称呼（赛道、车道）已统一改成「轨道」（MIDI 侧仍叫「音轨」）。
+- **常量核对（2026-11-18，第十轮补）**：用户要求「自行网络搜索，对比文档中的常量」。核对结论写进 `docs/constants.md` 第十九节的表里（每条带公开来源链接）：48 格听距从「需实测的外部知识」升级为**已核实的游戏事实**（官方《方块周：音符盒》「anyone within 48 blocks will hear a sound」、Wiki「Notes can be heard up to 48 blocks away」、MCPE-164935 开发者回复「volume 3 … linear audible range of 48 blocks」）；1 红石 tick = 2 游戏刻 = 0.1 秒、中继器 1–4 红石 tick、红石粉 15 与每格 −1、红石粉同一游戏刻内传完、音符盒 25 个音高 F#3–F#5 与各乐器音域偏移（低音 −2 八度、长笛 +1、铃/风铃/木琴 +2，对应代码锚点 30/42/54/66/78）、音符盒是导体、1.20.4 的 dataVersion 3700、litematic Version 6 覆盖 1.18–1.20.4、NBT 字符串 65535 字节上限且为 Modified UTF-8、`maxCommandChainLength` 默认 65536、计分板 int32 溢出（MC-79954），全部吻合。两处修正：计分板最大值 2147483646 的来源等级从 [游戏事实] 改为 [实现选择]（是 int 上限减一）；「48 格」的数值是游戏事实，但**拿它去比整首歌 Z 跨度而非玩家到最远轨道距离，是项目自己的口径**，仍在待决定第 10 条。一条新发现（不是 bug）：Litematica 自家写入器从 dataVersion 3120（1.19.2）起写 `SubVersion = 1`，本仓库只写 `Version` + `MinecraftDataVersion`（`src/core/litematic/build.ts:180-184`），读取端视为可选字段，已记进 `docs/constants.md` 第十一节。同时给 `docs/logic-guide.md` 第 2 节的「音符盒把电传给身后的粉」补了导电性依据。同轮用户指出两处标注错误并已改正：①第二节「单列最多和弦音 27 个（= 2×14 + 1）」算式错——普通布局的单列容量是 `2×dMax+1`（默认 **29**），27 是强制合并紧凑路径的上限 `min(2×dMax+1, 27)`（紧凑列根到达强度只有 14，每侧 13 行）；两个数分别在 `src/core/layout/model.ts:54-64` 与 `src/core/layout/forced.ts:190-198`，同时订正了 `AGENTS.md` 规则 7、`docs/known-issues.md` REL-04、`docs/multi-instrument.md` 的同一句；②乐器「MIDI 锚点 30/42/54/66/78」从 [游戏事实] 降为 [仓库约定]：游戏只给「每个乐器 25 个音高、起点是各乐器自己的 F#」，MIDI 数字还要叠两层约定（MIDI 60 = C4 的行业记法 + 本项目按绝对八度选槽），已在 `docs/constants.md` 第十节写明。没有改任何代码。
+- **两份不含代码的说明文档（2026-11-18，第九轮补）**：按用户要求（不改代码、只读代码）新增 `docs/logic-guide.md` 与 `docs/constants.md`。前者按「流水线 → 电路拓扑 → 时间轴 → 空间对齐 → Z 分层 → 主音轨 → 合并三条路 → 借道 → 取电 → 注释牌 → 命令后端 → 界面读数 → 模拟了什么/没模拟什么」逐节解释逻辑，每节带 `文件:行`，并统一术语为“音轨 = MIDI 输入、轨道 = MC 输出”（此前文档与界面把 MC 轨道写成“车道 / 赛道”，第十一轮已把界面改成“轨道”）。后者是常量总表，按 [游戏事实] / [仓库约定] / [实现选择] / [外部假设] 四级标注来源，覆盖时间网格、红石模型、对齐容差、30/48 阈值、主音轨权重、借道与取电门槛、注释牌参数、乐器音域、导出格式、命令播放预算、输入上限、界面与性能参数，并在第五节专门说明“48 格听距”：仓库里只有 `src/main/smartSelection.ts:8` 的 `SMART_Z.audible`，代码无推导，外部知识（音量 3.0 × 约 16 格/音量 ≈ 48 格）当时标注为需实测；这一条已在 2026-11-18 用公开资料核实（见上一条与 `docs/constants.md` 第十八节）。
+- **主轨居中“拉宽”是 bug（2026-11-17，第九轮）**：用户问「功能 A 完整实现了吗」，只读审计外加探针发现，居中让多轨变宽（夹具 40 → 56 格、《鸟之诗》82 → 122 格）不是排布代价，而是 `src/core/layout/placement.ts` 的 `place()` 直接返回传入的格子对象：`src/core/layout/track.ts` 的 `putNote` 把同一个 `notePos` 既交给 `place()` 又存进 `PlacedNote.notePos`，于是 `translateTrackZ()` 平移轨道时把每个音符盒平移了两次，音符盒整体离开自己的红石行（346/346 全偏、最远 19 格，红石模拟器里一个音都不响）。改成 `place()` 克隆坐标后，居中与不居中宽度完全相同（夹具 40 / 40、鸟之诗 82 / 82、合并后 38 / 38），`SMART_CENTER_WIDENS` 不再触发。`test/centerLead.test.ts` 两条改成“居中不改宽度”，新增 `test/layoutGeometry.test.ts` 4 条（音符位置与方块一致、行内不重复、轨道顺序不改宽度、居中布局跑模拟器 346/346 准点）。同轮修掉手动布局超过 48 格听距时完全静默（`KI-14`，非智能分支补 `SMART_WIDTH_UNRESOLVED`，`attempted: false`），并把主轨下拉的手动选择重新纳入智能测量的签名（选主轨不再顺手关掉智能推荐，但下一步会按新主轨重测）。
+- **同乐器合并后也借道（2026-11-15，第八轮）**：用户指出「为什么这里选择同乐器借道不生效，并且这里的稀疏音轨借道怎么也触发不了」。根因是 `attemptShare` 只在 `mergeMode === 'off'` 时调用，`same` 直接跳过借道并把 `shareOutcome` 固定写成 `'merged'`（文案照强制合并写，实际有 8 条轨道）。改成两段借道：先按不合并的形状借，再在合并出的轨道上借一次（`laneFoldPlan()` 以轨道为单位重新规划、`allowCollector: false` 不再新建收集轨、`laneSharingInfo(plan, expand)` 把代表编号展开回全部源轨）；接受条件是“轨道更少且 Z 不变宽”。`ShareOutcome` 新增 `no-sparse`，`merged` 文案改为“已强制合并成一条主线”。实测《鸟之诗》dMax 14 + `same`：7 轨 / Z 49 → 6 轨 / **Z 45**（跨过 48 格听距）、方块 45004 → 46120；16 轨夹具 dMax 14：12 轨 / Z 52 → 3 轨 / Z 29；折叠后红石模拟器 7410/7410 音符全部准点。`test/laneSharing.test.ts` 16 条、`test/laneRide.test.ts` 8 条。教训：候选宽度必须跟着被采纳的布局更新。
+- **取电支持跨行走廊（2026-11-15，第七轮）**：用户报告「启用同乐器合并之后就无法借电了」。根因是 `chooseRide` 只认 `zBase - 2` 的宿主——同乐器合并把多个源轨的和弦分支行叠在同一条轨道上，相邻轨道 Z 差变成 3–5 行，取电于是全部消失（《鸟之诗》合并后取电 0 条）。改成跨行走廊：中继器只从自己的输入面读、输出固定 15，所以每跨一行放一个同向中继器就能把信号带上来，且**不会**点亮它侧面经过的行；每格多 1 红石 tick，由 `prevRt = 宿主该格 rt + 走廊长度` 计入时间轴。落点与走廊格必须在已建轨道所有方块（`laneCells.used`）之外、左右不挨中继器（防锁定），同一 `x` 取最短走廊；走廊若撞上本轨道自己的分支行就退回自建车头。实测《鸟之诗》dMax 14：不合并 100956 → 70410 方块（17 条取电）、合并 54040 → 49174（3 条，8 轨 / Z 39 不变）；夹具 dMax 8 5066 → 4454（4 条）。红石模拟器在不合并与合并两种布局下 7410/7410 音符全部按计划 tick 触发，零提前零延后。`test/laneRide.test.ts` 7 条（含走廊逐行朝向、合并后仍取电、合并 + 走廊逐音符准点）。教训：探针不能用最终布局的全部方块判断列占用——会把 guest 自己的车头算成障碍。
+- **开发版独立 profile + 单实例锁（2026-11-15，第六轮）**：用户 `npm start` 每次启动都刷 `Unable to move the cache: 拒绝访问 (0x5)`。根因是未打包运行时 `app.getName()` 为 `Electron`，`userData` 落在 `%APPDATA%\Electron`，与机器上任何别的未打包 Electron 应用共用（当时有三个实例占着同一个 `Cache`）。修复：开发版改用 `%APPDATA%\MusicboxMC-dev`（打包版仍是 `%APPDATA%\MusicboxMC`）、主进程加 `app.requestSingleInstanceLock()`（第二次启动只聚焦已有窗口并以 0 退出）、新增 `MUSICBOXMC_USER_DATA` 覆盖，`smoke` 与 `verify:about` 各用一次性 profile 并断言 `app.getPath('userData')`。实测：第二次启动 `SECOND_EXIT=0`、两侧无缓存报错、始终只有一个主进程；`npm run smoke` 13 项、`verify:about` 与 `dist:dir` 通过。
+- **相邻轨道取电 + 红石模拟器（2026-11-15，第五轮）**：先照 vanilla 的 `BlockRedstoneWire` / `BlockRedstoneDiode` / `BlockNote`（本机唯一的 1.12.2 MCP 反编译源）移植 `src/core/sim/redstone.ts`，逐 tick 执行布局，结论是时序没有问题——16 轨夹具 346/346、27 轨《鸟之诗》7410/7410 音符全部落在计划 tick，和弦仍同时；真正的“断点”来自区块加载：2678 格 = 168 个区块，玩家站起点只听到 4%，以 0.4 格/game tick 向东走才到 94%。据此新增 `src/core/layout/track.ts` 的轨道取电（`GenerateOptions.laneRide`，默认开，配置页「相邻轨道取电」）：前面没有任何 tap 的轨道从上方最近的轨道取一次电（第七轮已改成跨行走廊），整段“车头”消失（第五轮数据：27 轨省 8026 方块与 729 个中继器；第七轮改成跨行走廊后为 100956 → 70410 方块），时间轴逐音符不变。`test/redstoneSim.test.ts` 10 条、`test/laneRide.test.ts` 7 条（含“不传 laneRide 时布局与旧行为逐项相同”和取电后复跑模拟器）。开发者读数新增“取电 N 条”，检查页列出“Z 2←0、30←28”。
+- **投影注释与合并后的主音轨语义（2026-11-15，第四轮）**：新增 `src/core/layout/annotation.ts`，每条轨道在电路西侧 3 格立一块墙牌——金色底座＝主音轨、铜色＝副轨，牌面写「主音轨 / 轨 N · 力度 P% / 站这里」；副轨写「副轨 / 距主轨 N」；全曲合并成一条主线时改标「全曲主线 / 站这里 / Z 中段」，站位取主线中点而不是一端。注释是**独立区域**（`trackIndex: -2`），可以在投影里单独删除或移动，不碰电路。`GenerateOptions.annotateLanes`（默认开）与配置页「投影注释」开关控制，命令播放后端不适用。检查页追加「投影注释：N 条牌 · 站 (x, y, z) · 最远 Z D 格」，单条主线时主音轨行改为“全曲合并成一条主线，没有独立主音轨”。`LayoutMeasure` 增加 `annotatedSigns` / `annotatedExtraX`（注释会让 X 多 3 格），开发者读数显示“注释 N 牌（+3 X）”。`test/laneAnnotation.test.ts` 10 条；`TrackSkeleton.sourceIndices` 让合并/借道后仍能找到主轨所在的轨道。
+
+- **主轨居中可关闭 + 宽度代价提示（2026-11-15，KI-09 方案 B）**：新增 `GenerateOptions.centerLead`（默认开＝旧行为）与配置页「主轨居中」开关，关掉即回到历史轨道顺序。智能分流在最终布局仍 >48 格时用同一合并方式再跑一次不居中布局，若更窄且 ≤48 格则报 `SMART_CENTER_WIDENS`（`reason: 'out-of-range'`）；若只是靠合并才放下，报 `reason: 'merge-avoidable'`，说明“关掉居中后不合并也放得下”。第 6 步摘要多一行“主轨居中：不居中 Z N 格（当前 M 格）”。实测：16 轨夹具 dMax 8 居中 56 / 不居中 40，18 轨纯竖琴 51 / 35。`test/centerLead.test.ts` 4 条。（当时 56 / 40 的差值后来查明是 `place()` 让同一个音符盒被平移两次的 bug，见第九轮条目。）
+
+- **生成与读数共用一次规划（2026-11-15）**：`src/main/generate.ts` 的候选决策抽成 `planLayout()`，`generate()` 与 `measureLayout()` 都走它，第 4 步开发者读数不再可能与真实产物不一致（此前 measure 不跑智能分流，开着智能但手动合并时读数与文件矛盾）。新增 `ShareOutcome`（`applied` / `outranked` / `not-narrower` / `merged` / `compact` / `no-plan` / `disabled` / `failed`）与候选宽度列表，读数追加“借道未生效（已合并成一条主线）”这类原因和“候选 不合并 56 / 借道 29”，回答“为什么开了开关读数没变”。配置页借道开关在合并模式或命令后端下就地说明“借道只在「不合并」时生效”。诊断结论：用户报告的《鸟之诗》开关无效并非缺陷——该曲 27 轨，借道后 122→86 格仍 > 48，智能分流直接强制合并成 22 格，没有第二条轨道可借。
+- **稀疏音轨借道（2026-11-15）**：新增 `src/core/arrangement/laneSharing.ts` 与 `GenerateOptions.laneSharing` / `laneShareSparseBelow`。音符数低于阈值（默认 50）的非主轨不再单开轨道，而是按 Z 相邻优先并到已有轨道；没有宿主吃得下时把 ≥2 条零碎轨合成一条收集轨（要求总音符 ≥ 50），仍然放不下就保持独立。只在未合并布局 Z > 30 格时尝试，顺序为借道 → 同乐器合并 → 强制合并，每个候选都实测；借道只在轨道更少且 Z 不变宽时采用。同乐器合并改为“每条源轨保持单独生成时的八度”，不再用并集拟合。配置页「其它」新增可关开关与阈值输入，摘要显示“借道 <50 音”；检查页与乐器分配表逐条列出“借轨到轨 N / 合成收集轨”。新增 `test/laneSharing.test.ts` 13 条（含“不传 option 时布局与旧行为逐字节一致”）。
+- **开发者模式（2026-11-15）**：设置里可开关（按 profile 记忆，默认关闭，Ctrl+Shift+D 也可切换）。打开后右下角 `DEV` 打开诊断抽屉：状态（含分析结果、生成选项、目录授权状态）、智能（主轨与每轨力度/活跃/单音比例/综合分、实测候选宽度、包建议）、结果（stats、regions、warning 计数与前 40 条、trackInstruments）、日志（每次 IPC 的方法、耗时、参数与错误）。可重测智能、跑检查、复制当前视图、保存诊断 JSON（新增 `app:versions` 与 `dev:save-report`）。第 4 步在 dev 模式下多一行实时读数：`X × Y × Z`、合并/拆分后的 MC 轨道数（与 MIDI 音轨数分开显示）、源音轨、区域、音符盒、方块、合并方式与测量耗时；改选项后 320ms 防抖重测（新增 `song:measure`，只跑 `layout()` + `sliceRegions()`，不生成字节）。`verify:ui` 增加了开关与四个标签页的检查。
+- **0.4.0 第三轮修正（2026-11-15）**：乐器模式收紧为“只有纯竖琴曲跨出单槽才扩展”。扩展竖琴音域等于引导用户装资源包（不装包时五槽是五种音色），所以多乐器曲、单乐器曲、单槽内的纯竖琴一律原版乐器且不推荐包；扩展模式一定同时推荐资源包，超出 F#1–F#7 时只扩展、不推荐（包解决不了超域）。测试补了多组模式/包用例。
+- **0.4.0 第二轮审查修复（2026-11-15）**：智能选择从复选框改成动作按钮，点击/进入配置页时用新增的 `song:plan` 实测并**写回**乐器模式与合并模式（此前勾选态与摘要、产物可能三处不一致）；选轨页主音轨卡片改为纵向卡片，修掉标签被压成一字一行、下拉框冲出卡片的布局错误；`decideMerge` 改为只在实测宽度落在 48 格内时接受合并，30–48 格不再因为合并变宽而放弃可用布局；合并候选抛错时报告实际采用的模式并给出 `SMART_MERGE_FAILED`；纯竖琴/单乐器过宽时说明“未尝试合并”；命令后端不再显示 Z 宽度、合并与资源包结论；折叠卡边框改墨色细线（100% DPI 下白边看起来像虚线），摘要值不再用强调色。测试 302 通过。
+- **0.4.0 本地实现**：主轨统计与推荐、主轨居中、候选 Z 布局智能分流、资源包建议、外层 UI 打磨与动效全部落地；新增 299 用例，`check`、Java 校验、IPC 冒烟、关于页和界面验证通过，待用户实测。
+- **0.4.0 计划评审**：`docs/0.4.0-plan.md` 已确认“横向”=Z 轨间距；五槽映射提供 F#1–F#7、资源包只统一钢琴采样；纯竖琴多轨初版不合并；玩家与主轨重合；主轨按 MIDI 力度优先；外层 UI 先打磨再加动效。未修改功能代码。
 - **Node 26 LTS 开发基线**：`engines >=26`、CI/Windows job、`@types/node 26.6.6`、`.nvmrc` 全部升级；Node 26.13.1 下 `npm run check`、`dist:dir`、Electron IPC 冒烟、关于页和界面验证通过。该变化只影响开发与构建环境，应用产物未变。
 - **0.3.0 发布**：Node 24 / Electron 45 / TypeScript 7 运行时升级，超长轨、目录 token、块配置白名单、警告定位、致命异常和预览性能修复；Windows CI、Java 校验、Dependabot 和 Release 说明生成器接入。用户重点实测通过，CI tag run 全绿，三个资产已上传 [GitHub Releases](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.3.0)。
 - **0.3.0 本地候选**：Node 24 / Electron 45 / electron-builder 26.18 / Vitest 5 / Vite 8 / TypeScript 7.0.2 全量升级；TypeScript 7 用 `@typescript/typescript6` 并排满足 ESLint 的 TS 6 API 依赖。修复超长轨栈溢出、目录 token、块配置白名单、`SPATIAL_DRIFT` 定位、致命异常退出、许可证与模板；增加 Windows CI、Java 校验、Dependabot、Release 说明生成器和预览性能优化。286 用例、IPC 冒烟、界面、关于页、Java 校验和 Windows 打包全部通过。
@@ -46,7 +70,7 @@
 - **0.2.3 发布**：第 2 步拖拽恢复（Electron 32 移除 `File.path`，改走 preload `pathForFile` + 整步 drop target）；修复 0.2.2 审查发现（外链白名单、排除轨不再进入警告/分配表/`pitchRange`、八度拟合计入 transpose、去掉大轨 `Math.max(...)` 展开）；新增 `npm run check` 作为本地/CI 单一闸门；GitHub About 改中文并整理 19 个 topics。资产已上传 [GitHub Releases](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.3)。
 - **0.2.2 发布**：多乐器支持、紧凑和弦行、多轨间距与强制合并修复；安装包/免安装/资源包已上传 [GitHub Releases](https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.2)，tag `v0.2.2`。
 - **配置摘要联动**：第 4 步「其它」折叠下的小字现在随合并模式、作者、基准 TPS 更新；之前一直停在初始文案。`verify:ui` 增加了对应检查。
-- **和弦行相邻**：强制合并的紧凑路径改成普通和弦列——≤3 音只给内联音一个中继器、两侧靠单跳；≥4 音每行一个同延迟中继器，音符行**相邻不留空**；超过 27 音的极端和弦才退回 staged 两行总线。新增 `test/chordSpacing.test.ts`（3/4/20 音）。
+- **和弦行相邻**：强制合并的紧凑路径改成普通和弦列——≤3 音只给内联音一个中继器、两侧靠单跳；≥4 音每行一个同延迟中继器，音符行**相邻不留空**；超过紧凑路径容量 `min(2×dMax+1, 27)`（默认 27 音）的极端和弦才退回 staged 两行总线（普通布局的单列容量是 `2×dMax+1`，默认 29 音，超过它是拆轨而不是换拓扑——见 `docs/constants.md` 第二节）。新增 `test/chordSpacing.test.ts`（3/4/20 音）。
 - **间距与强制合并修复**：普通模式的 Z 间距改为按每条轨自己的和弦上下行数计算，相邻轨之间固定留一格空行（16 轨夹具从每轨间 5–6 格缩到 1 格）；「强制合并」改为全曲合成一条主线（之前是每种乐器一条，16 轨仍有 12 条），每个音仍按自己源轨的乐器/八度映射，`forcedValidation` 校验整条主线；预览初始定位到音符最多的主行，不再开在空白上支。
 - **多乐器支持（0.2.2）**：16 种经典音符盒乐器（13 有音高 + 3 固定鼓）；识别顺序 GM 音色 → 通道 9 鼓 → 轨道名 → 竖琴；两种模式——「原版乐器」与默认的「扩展竖琴音域」（五槽钢琴保留，其余乐器原版，被占用的 bass/guitar/flute/bell 用 didgeridoo/banjo/bit/chime 替代）；整轨先选八度、个别音再兜底；红石与命令后端、界面、预览颜色、警告文案、文档全部接入。16 轨夹具 `test/fixtures/happy-birthday-16.mid` 入库，新增 58 个测试。
 - **注释统一**：`index.html` 的 33 条 CSS/HTML 注释与 `scripts/fresh-dist.cjs` 的 JSDoc 全部改为英文；顺手修正 CSS 里过时的步骤编号（生成进度是第 7 步、问题清单是第 6 步）和 `265px`→`240px` 的高度下限。代码注释现在只有 `textEncoding.ts` 的乱码示例保留中文（`AGENTS.md` 的既定例外）。
@@ -88,18 +112,36 @@
 
 仍未关闭：
 
-1. `KI-05`：强制合并的全曲 compact/staged 切换，等用户决定。
+1. `KI-05`：强制合并的全曲 compact/staged 切换，等用户决定；0.4.0 计划暂不纳入修复。
 2. `REL-01`：预览性能已优化且用户实测通过，保留为后续性能回归观察项。
+3. `KI-09`：~~主轨居中把多轨 Z 拉宽~~ —— 第九轮查清是 `place()` 共享坐标对象导致音符盒被平移两次，修完后居中不再改变宽度；第十一轮把“重测一次不居中布局”的守卫（`SMART_CENTER_UNREACHED`）也删了，`centerLead` 现在只决定“按优先级排 / 按文件顺序排”，见 `known-issues.md`。
+4. `KI-10`：~~合并后主音轨语义失效、投影里看不出主音轨~~ —— 0.4.0 第四轮已加注释牌，并在单条主线时不再宣称主音轨，见 `known-issues.md`。
+5. `KI-11`：~~首音很晚的轨道要铺几千格中继器车头~~ —— 0.4.0 第五轮已加「相邻轨道取电」，第七轮改成跨行走廊、合并后也能取电，见 `known-issues.md`。
+6. `KI-12`：~~开发版共用 `%APPDATA%\Electron`，第二次启动报缓存拒绝访问~~ —— 0.4.0 第六轮已改独立 profile + 单实例锁，见 `known-issues.md`。
+7. `KI-13`：~~同乐器合并后借道不跑、提示还谎称“已合并成一条主线”~~ —— 0.4.0 第八轮已改成“合并出的轨道上再借一次”，见 `known-issues.md`。
+8. `KI-14`：~~手动布局超过 48 格听距时完全没有提示~~ —— 0.4.0 第九轮已在非智能分支补判定（`attempted: false`），第十一轮改名为 `SMART_HEARING_UNREACHED` 并按半径比较，见 `known-issues.md`。
+9. `KI-15`：~~听距拿整条 Z 跨度比 48~~ —— 0.4.0 第十一轮已改成“玩家到最远音符的半径”，见 `known-issues.md`。
 
 Node 26 是开发/构建要求；打包后的 Electron 应用仍自带自己的 Node 运行时，用户不需要安装 Node。
 
 本地前提：
 
+- 项目要求 Node 26；终端默认版本不是 26 时，先执行 `fnm use`。
 - CI 不跑 `verify:ui` / `verify:about` / `smoke`，它们需要显示环境与真实 Electron。
 - 本机若设置 `ELECTRON_RUN_AS_NODE=1`，跑 Electron 前必须删除。
 - `out/` 是本地目录，不入库；中间文件放这里，不放 `/tmp`。
 
 ## 待用户决定
 
-1. `KI-05` 是否保留现状并增加提示。
-2. 下一次功能或修复版本是否顺带发布 Node 26 开发基线（用户产物无变化，也可以不单独发布）。
+1. 实测 `0.4.0` 的目录选择/生成、主轨改选、智能建议、外层 UI 和实际听感。
+2. 30–48 格的多乐器曲：合并后实测宽度超过 48 格时，当前默认保留不合并的可用布局（而不是为了“合并”牺牲听距）。若不合并更宽是想要的，需要明确改回。
+3. `KI-05` 是否保留现状并增加提示。
+4. 下一次功能或修复版本是否顺带发布 Node 26 开发基线（用户产物无变化，也可以不单独发布）。
+5. ~~合并模式下是否也要借道~~ —— 第八轮已实现（`laneFoldPlan()` 以合并后的轨道为单位规划、不新建收集轨）。剩下的边界是只在形状 Z > 30 时尝试，且折完必须“轨道更少且 Z 不变宽”，否则保留合并结果。原记录：实测 `laneGroups` 在 `mergeSameInstrument` 之后仍能折叠轨道（16 轨夹具 same 40 格/16 轨 → same+折两条 39 格/15 轨），但收益是每折一条省 1 格，且现有 planner 按源轨统计容量、合并后宿主的负载会被低估；要做得先改成“以合并后的轨道为单位”规划。等用户决定是否值得。
+6. 注释牌的位置与朝向（电路西侧 3 格、墙牌朝 -X）是按“从起点正面读”定的；若希望贴在玩家出生点一侧或改成浮空悬挂牌，需要实测后再定。
+7. 借道目前只在未合并布局 Z > 30 格时尝试，且要求宿主轨本身够密（≥ 阈值音符）。若希望“任何多轨都先借道”，需要下调 Z 门限，或改成逐音收集（要重写布局的轨道规划阶段）。
+8. ~~「相邻轨道取电」只做 Z 相邻两行~~ —— 第七轮已改成跨行走廊（每跨一行一个中继器、+1 红石 tick，已在排布里补偿）。剩下的限制是走廊只能竖着走：横向借电仍需中继器拐角，会多点亮一行。
+9. 取电默认开启（`laneRide`）、注释牌默认开启（`annotateLanes`）：长曲实测后若觉得投影“太花”或想先看原始布线，可以改成默认关闭，只留开关。
+10. ~~智能分流判 30 / 48 格阈值用“整首歌 Z 跨度”还是“玩家到最远轨道的距离”~~ —— 第十一轮已按用户要求改成半径（`hearingRadius`），48 这个数字本身也是已核实的游戏事实，见 `docs/known-issues.md` KI-15。
+11. ~~智能选择关掉之后，第 3 步选中的主轨要不要继续生效~~ —— 第十一轮已决定“永远生效”：主音轨恒在、只按力度排序，智能开关不再影响它是否存在。
+12. ~~智能选择关闭时，检查页要不要仍然显示 Z 宽度与 48 格听距提示~~ —— 第十一轮在非智能分支也会 push `SMART_HEARING_UNREACHED`，第 4 步读数固定显示「站 Z N · 最远 N 格」，第 6 步仍按是否开智能决定显示整块摘要。

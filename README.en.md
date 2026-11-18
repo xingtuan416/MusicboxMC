@@ -27,7 +27,8 @@
 
 MusicboxMC reads a MIDI file, compiles it into a redstone circuit, and writes that
 circuit as a Litematica `.litematic` schematic. Paste it into a world, apply
-redstone power at the start, and the song plays.
+redstone power at the start of the main line, and it
+plays.
 
 The hard part is not placing note blocks, it is timing. The generator quantises
 every note onto the redstone tick grid, works out the repeater delays that carry
@@ -75,7 +76,8 @@ what it generates.
    ![The redstone wiring view](docs/images/preview.png)
 
 4. **Paste.** Put the `.litematic` in `.minecraft/schematics/`, load it with
-   Litematica in game, and power the circuit at its start.
+   Litematica in game, then connect redstone to the start of the main line and drive it with a
+   button.
 
 If anything needs attention afterwards, the **check results** step lists it. Every
 warning that has a location carries a **locate in the wiring view** button: one click
