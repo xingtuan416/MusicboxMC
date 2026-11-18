@@ -302,6 +302,8 @@ describe('forced single-spine merge on the 16-track fixture', () => {
     expect(generated.result.success).toBe(true);
     expect(generated.result.stats.outputTrackCount).toBe(1);
     expect(generated.result.stats.noteBlockCount).toBe(NOTE_COUNT);
-    expect(parseLitematic(generated.buffer!).regions).toHaveLength(1);
+    const regions = parseLitematic(generated.buffer!).regions;
+    expect(regions.filter((entry) => entry.tileEntities.length === 0)).toHaveLength(1);
+    expect(regions.filter((entry) => entry.tileEntities.length > 0)).toHaveLength(1);
   });
 });

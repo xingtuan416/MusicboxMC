@@ -214,8 +214,9 @@ describe('forced instrument merge', () => {
       expect(result.stats.outputTrackCount).toBe(1);
       expect(result.stats.noteBlockCount).toBe(90);
       const exported = parseLitematic(buffer!);
-      expect(exported.regions).toHaveLength(1);
-      const region = exported.regions[0]!;
+      // One circuit region plus the lane legend, which carries the signs.
+      expect(exported.regions.filter((entry) => entry.tileEntities.length === 0)).toHaveLength(1);
+      const region = exported.regions.find((entry) => entry.tileEntities.length === 0)!;
       expect(
         Array.from(region.indices).filter((id) => region.palette[id]!.name === 'minecraft:note_block'),
       ).toHaveLength(90);

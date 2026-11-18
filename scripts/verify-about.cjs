@@ -16,6 +16,10 @@ const { resolve } = require('node:path');
 (async () => {
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
+  // Its own profile, so the single-instance lock never makes this launch exit early.
+  const profile = resolve('out/profiles/verify-about');
+  mkdirSync(profile, { recursive: true });
+  env.MUSICBOXMC_USER_DATA = profile;
 
   const problems = [];
   // The screenshots below assume this exists; a fresh clone has no out/ at all.

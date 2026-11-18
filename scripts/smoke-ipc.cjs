@@ -37,9 +37,15 @@ const { join, resolve } = require('node:path');
   // then yields a path string instead of the API. It cost an hour once.
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
+  // Its own profile: the app holds a single-instance lock per profile, so a smoke run
+  // would otherwise exit immediately when a developer already has the window open.
+  const profile = join(work, 'profile');
+  env.MUSICBOXMC_USER_DATA = profile;
 
   const app = await _electron.launch({ args: [resolve('dist/src/main/index.js')], env });
   try {
+    const usedProfile = await app.evaluate(({ app: electronApp }) => electronApp.getPath('userData'));
+    check(usedProfile === profile, 'runs on the profile the script asked for: ' + usedProfile);
     const page = await app.firstWindow();
     // Registered before anything is driven, so an error thrown by an early call is caught
     // rather than happening before the listener exists.

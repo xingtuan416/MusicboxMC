@@ -3,7 +3,7 @@ const { mkdirSync, readFileSync, writeFileSync, rmSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 const { Midi } = require('@tonejs/midi');
-const { generate } = require('./fresh-dist.cjs').requireFreshService();
+const { generate, measureLayout } = require('./fresh-dist.cjs').requireFreshService();
 const { serveRenderer } = require('./serve-renderer.cjs');
 
 /**
@@ -54,7 +54,7 @@ function buildSource(directory) {
   mkdirSync(directory, { recursive: true });
   const source = buildSource(directory);
 
-  const analyze = generate(source, { dMax: 6 });
+  const analyze = generate(source, { dMax: 6, smartSelection: true });
   if (!analyze.result.success) throw new Error(analyze.result.error);
   const result = {
     ...analyze.result,
@@ -68,6 +68,9 @@ function buildSource(directory) {
       `${result.stats.noteBlockCount + result.stats.circuitBlocks} blocks, ` +
       `${result.outOfRangeNotes} out of range`,
   );
+
+  // A real layout measurement, so the developer readout shows real numbers.
+  const layoutMeasure = measureLayout(source, {});
 
   mkdirSync(resolve('out/ui-shots'), { recursive: true });
   const browser = await chromium.launch({ channel: 'msedge', headless: true });
@@ -85,33 +88,52 @@ function buildSource(directory) {
       if (response.status() >= 400) problems.push(`HTTP ${response.status()} ${response.url()}`);
     });
 
-    await page.addInitScript((fixture) => {
-      window.__calls = [];
-      window.musicbox = {
-        onLog() {},
-        chooseMidi: async () => fixture.path,
-        analyze: async () => fixture,
-        generate: async () => fixture,
-        chooseDirectory: async () => ({ path: fixture.outputDir, token: 'ui-verification-token' }),
-        saveResourcePack: async () => {
-          window.__calls.push('saveResourcePack');
-          return 'C:/tmp/musicboxmc-piano-pack.zip';
-        },
-        appInfo: async () => ({
-          name: 'MusicboxMC',
-          version: fixture.appVersion,
-          license: 'GPL-3.0-only',
-          repository: 'https://github.com/xingtuan416/MusicboxMC',
-          author: 'xingtuan416',
-        }),
-        reveal: async (p) => {
-          window.__calls.push('reveal ' + p);
-        },
-        open: async () => {},
-        pathForFile: () => fixture.path,
-        windowControl: async () => {},
-      };
-    }, result);
+    await page.addInitScript(
+      (payload) => {
+        const { fixture, layoutMeasure } = payload;
+        window.__calls = [];
+        window.musicbox = {
+          onLog() {},
+          chooseMidi: async () => fixture.path,
+          analyze: async () => fixture,
+          generate: async () => fixture,
+          plan: async () => ({ info: fixture.smartSelection }),
+          measure: async () => layoutMeasure,
+          chooseDirectory: async () => ({ path: fixture.outputDir, token: 'ui-verification-token' }),
+          saveResourcePack: async () => {
+            window.__calls.push('saveResourcePack');
+            return 'C:/tmp/musicboxmc-piano-pack.zip';
+          },
+          appInfo: async () => ({
+            name: 'MusicboxMC',
+            version: fixture.appVersion,
+            license: 'GPL-3.0-only',
+            repository: 'https://github.com/xingtuan416/MusicboxMC',
+            author: 'xingtuan416',
+          }),
+          versions: async () => ({
+            app: fixture.appVersion,
+            electron: '45.3.2',
+            chrome: '140.0.0.0',
+            node: '26.0.0',
+            v8: '14.0',
+            appPath: 'stub',
+            packaged: false,
+          }),
+          saveReport: async () => {
+            window.__calls.push('saveReport');
+            return 'C:/tmp/diagnostics.json';
+          },
+          reveal: async (p) => {
+            window.__calls.push('reveal ' + p);
+          },
+          open: async () => {},
+          pathForFile: () => fixture.path,
+          windowControl: async () => {},
+        };
+      },
+      { fixture: result, layoutMeasure },
+    );
 
     await page.goto(site.url);
     await page.waitForTimeout(400);
@@ -192,30 +214,114 @@ function buildSource(directory) {
     if (!firstTrackText.includes('识别：')) {
       problems.push('track rows do not show the detected instrument');
     }
+    const leadOptions = await page.locator('#leadTrackSelect option').count();
+    if (leadOptions !== result.tracks.length) {
+      problems.push(`lead selector has ${leadOptions} options, expected ${result.tracks.length}`);
+    }
+    const leadReason = await page.locator('#leadReason').textContent();
+    if (!leadReason || !leadReason.includes('轨 ')) problems.push('lead recommendation has no reason');
+    // The card used to be a flex row whose label collapsed to one character per line while
+    // the select (width:100% from .input-clean) pushed out past the card. Geometry is the
+    // only thing that proves the fix: the text was still there, just unreadable.
+    const leadBox = await page.evaluate(() => {
+      const panel = document.getElementById('leadPanel').getBoundingClientRect();
+      const select = document.getElementById('leadTrackSelect').getBoundingClientRect();
+      return {
+        inside: select.left >= panel.left - 0.5 && select.right <= panel.right + 0.5,
+        reason: document.getElementById('leadReason').getBoundingClientRect().width,
+      };
+    });
+    if (!leadBox.inside) problems.push('the lead selector overflows its card');
+    if (leadBox.reason < 200) problems.push(`the lead reason collapsed to ${leadBox.reason}px wide`);
+    await page.locator('#leadTrackSelect').selectOption({ index: leadOptions > 1 ? 1 : 0 });
+    const manualLead = await page.locator('#leadReason').textContent();
+    if (!manualLead.includes('手动指定')) problems.push('lead selector did not record a manual choice');
     await shot('3-tracks');
 
     await page.locator('#btnStep3Next').click();
-    await page.locator('[data-fold="fold-pitch"]').click();
 
-    // Both instrument modes must exist, and switching modes must update the summary
-    // and the resource-pack advice.
+    // Entering the step measures the routing by itself. The result is written into the same
+    // summaries the manual options write, so the two can never disagree.
+    const appliedBadge = () => page.locator('#smartBadge').textContent();
+    await page.waitForFunction(() => document.getElementById('smartBadge').textContent === '已应用', null, {
+      timeout: 30000,
+    });
+    const appliedRouting = await page.locator('#smartApplyResult').textContent();
+    if (!appliedRouting.includes('最远')) problems.push(`routing line is empty: ${appliedRouting}`);
+    const smartPitch = await page.locator('#sumPitch').textContent();
+    // This fixture is multi-instrument, so the recommendation has to keep every track on
+    // its own instrument: extended mode would push the companion pack onto a song that has
+    // no use for it.
+    if (!smartPitch.includes('原版乐器')) {
+      problems.push(`the applied recommendation is not shown in the summary: ${smartPitch}`);
+    }
+    const smartPack = await page.locator('#packDescription').textContent();
+    if (!smartPack.includes('替换成钢琴')) {
+      problems.push(`a multi-instrument song still recommends the pack: ${smartPack}`);
+    }
+    await shot('4-config-smart');
+
+    await page.locator('[data-fold="fold-pitch"]').click();
     const modeBoxes = await page.locator('[data-cfg-group="instrument"]').count();
     if (modeBoxes !== 2) problems.push(`expected two instrument modes, found ${modeBoxes}`);
-    await page.locator('[data-cfg-group="instrument"][data-cfg-val="native"]').click();
-    const nativeSummary = await page.locator('#sumPitch').textContent();
-    if (!nativeSummary.includes('原版乐器')) {
-      problems.push(`native mode summary is wrong: ${nativeSummary}`);
-    }
-    const nativePack = await page.locator('#packDescription').textContent();
-    if (!nativePack.includes('不建议安装')) {
-      problems.push('native mode still recommends the piano resource pack');
-    }
+    // The other mode, chosen by hand, must update the summary, flip the badge to manual and
+    // switch the pack advice to "this mode is the one that needs the pack".
     await page.locator('[data-cfg-group="instrument"][data-cfg-val="extended"]').click();
     const extendedSummary = await page.locator('#sumPitch').textContent();
     if (!extendedSummary.includes('扩展竖琴音域')) {
       problems.push(`extended mode summary is wrong: ${extendedSummary}`);
     }
+    const manualBadge = await appliedBadge();
+    if (!manualBadge.includes('手动')) problems.push(`manual choice left the badge at ${manualBadge}`);
+    const extendedPack = await page.locator('#packDescription').textContent();
+    if (!extendedPack.includes('统一扩展竖琴')) {
+      problems.push(`extended mode does not recommend the pack: ${extendedPack}`);
+    }
+    if (await page.locator('#smartSelectionInput').count()) {
+      problems.push('the smart checkbox is back; the recommendation is an action now');
+    }
 
+    // The button has to restore the recommendation itself, not just the badge.
+    await page.locator('#btnSmartApply').click();
+    await page.waitForFunction(() => document.getElementById('smartBadge').textContent === '已应用', null, {
+      timeout: 30000,
+    });
+    const restored = await page.locator('#sumPitch').textContent();
+    if (!restored.includes('原版乐器')) {
+      problems.push(`re-applying the recommendation did not restore native mode: ${restored}`);
+    }
+    // Developer mode also measures the layout behind the options on this step.
+    await page.locator('#btnOpenSettings').click();
+    await page.locator('#btnDevMode').click();
+    await page.locator('#btnCloseSettings').click();
+    await page.locator('#btnDevClose').click();
+    await page.waitForFunction(
+      () => {
+        const element = document.getElementById('devMeasure');
+        return element && element.getBoundingClientRect().height > 0 && element.textContent.includes('轨道');
+      },
+      null,
+      { timeout: 30000 },
+    );
+    const measureText = await page.locator('#devMeasure').textContent();
+    if (!/X \d+ × Y \d+ × Z \d+/.test(measureText.replace(/\s+/g, ' '))) {
+      problems.push(`dev layout readout has no size: ${measureText}`);
+    }
+    if (!measureText.includes('MC 轨道'))
+      problems.push(`dev layout readout has no track count: ${measureText}`);
+    // The readout exists to explain a switch that changed nothing, so the sharing reason
+    // has to be part of it.
+    if (!measureText.includes('借道'))
+      problems.push(`dev layout readout does not explain lane sharing: ${measureText}`);
+    // The readout sits at the top of the step; the earlier fold clicks scrolled past it.
+    await page.evaluate(() => {
+      document.getElementById('step-4').scrollTop = 0;
+    });
+    await shot('4-config-devmeasure');
+    // Back to a clean state for the rest of the flow.
+    await page.locator('#btnOpenSettings').click();
+    await page.locator('#btnDevMode').click();
+    await page.locator('#btnCloseSettings').click();
     // The fold summaries must follow the controls, not stay at their initial text.
     await page.locator('[data-fold="fold-misc"]').click();
     await page.locator('[data-cfg-group="merge"][data-cfg-val="force"]').click();
@@ -223,6 +329,189 @@ function buildSource(directory) {
     if (!miscSummary.includes('强制合并')) {
       problems.push(`merge summary did not update: ${miscSummary}`);
     }
+    if (!(await appliedBadge()).includes('手动')) {
+      problems.push('a manual merge did not switch the badge to 手动');
+    }
+
+    // A forced merge leaves one spine, so borrowing and riding have nothing to act on: the
+    // cards step aside instead of sitting there inert.
+    if (await page.locator('#laneShareCard').isVisible()) {
+      problems.push('the sharing card stays visible under a forced merge');
+    }
+    if (await page.locator('#laneRideCard').isVisible()) {
+      problems.push('the riding card stays visible under a forced merge');
+    }
+    // Back to one line per track, where both switches apply again.
+    await page.locator('[data-cfg-group="merge"][data-cfg-val="off"]').click();
+    if (!(await page.locator('#laneShareCard').isVisible())) {
+      problems.push('the sharing card did not come back when the forced merge was lifted');
+    }
+    if (!(await page.locator('#laneRideCard').isVisible())) {
+      problems.push('the riding card did not come back when the forced merge was lifted');
+    }
+
+    // Lane sharing is a switch, not a fourth merge box: it composes with the merge choice.
+    const shareSwitch = page.locator('#btnLaneSharing');
+    if ((await shareSwitch.getAttribute('role')) !== 'switch') {
+      problems.push('lane sharing is not exposed as a switch');
+    }
+    if ((await shareSwitch.getAttribute('aria-checked')) !== 'true') {
+      problems.push('lane sharing is off by default');
+    }
+    const shareOnSummary = await page.locator('#sumMisc').textContent();
+    if (!shareOnSummary.includes('借道 <50 音')) {
+      problems.push(`sharing summary is missing while sharing is on: ${shareOnSummary}`);
+    }
+    await shareSwitch.click();
+    if ((await shareSwitch.getAttribute('aria-checked')) !== 'false') {
+      problems.push('the sharing switch did not turn off');
+    }
+    const shareOffSummary = await page.locator('#sumMisc').textContent();
+    if (!shareOffSummary.includes('不借道')) {
+      problems.push(`sharing summary did not follow the switch: ${shareOffSummary}`);
+    }
+    if (!(await page.locator('#laneShareSparse').isDisabled())) {
+      problems.push('the sparse threshold stays editable while sharing is off');
+    }
+    await shareSwitch.click();
+    if (await page.locator('#laneShareSparse').isDisabled()) {
+      problems.push('the sparse threshold stays disabled after sharing is turned back on');
+    }
+    // The threshold is the definition of "sparse", so it has to reach the summary.
+    await page.locator('#laneShareSparse').fill('24');
+    await page.locator('#laneShareSparse').press('Tab');
+    const shareThresholdSummary = await page.locator('#sumMisc').textContent();
+    if (!shareThresholdSummary.includes('借道 <24 音')) {
+      problems.push(`the sparse threshold did not reach the summary: ${shareThresholdSummary}`);
+    }
+    if ((await page.locator('#laneShareSparse').inputValue()) !== '24') {
+      problems.push('the sparse threshold input lost the typed value');
+    }
+    await page.locator('#laneShareSparse').fill('50');
+    await page.locator('#laneShareSparse').press('Tab');
+    // The switch row spans the fold instead of sitting in one of its three columns, and it
+    // must not push anything past the card's edge.
+    const shareGeometry = await page.evaluate(() => {
+      const card = document.querySelector('#fold-misc .switch-card');
+      const content = document.querySelector('#fold-misc .fold-content');
+      if (!card || !content) return null;
+      const c = card.getBoundingClientRect();
+      const p = content.getBoundingClientRect();
+      const style = getComputedStyle(content);
+      const inner = p.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      return { inside: c.right <= p.right + 1 && c.left >= p.left - 1, width: c.width, content: inner };
+    });
+    if (!shareGeometry) {
+      problems.push('the sharing switch row is missing from the "其它" fold');
+    } else if (!shareGeometry.inside) {
+      problems.push(`the sharing switch row overflows its fold (${shareGeometry.width}px)`);
+    } else if (shareGeometry.width < shareGeometry.content - 4) {
+      problems.push(`the sharing switch row does not span the fold (${shareGeometry.width}px)`);
+    }
+    // Centring is a layout switch of its own: it can be the reason a song is too wide.
+    const centerSwitch = page.locator('#btnCenterLead');
+    if ((await centerSwitch.getAttribute('role')) !== 'switch') {
+      problems.push('lead centring is not exposed as a switch');
+    }
+    if ((await centerSwitch.getAttribute('aria-checked')) !== 'true') {
+      problems.push('lead centring is off by default');
+    }
+    const centerOnSummary = await page.locator('#sumMisc').textContent();
+    if (!centerOnSummary.includes('按主轨排序')) {
+      problems.push(`centring summary is missing while centring is on: ${centerOnSummary}`);
+    }
+    await centerSwitch.click();
+    if ((await centerSwitch.getAttribute('aria-checked')) !== 'false') {
+      problems.push('the centring switch did not turn off');
+    }
+    const centerOffSummary = await page.locator('#sumMisc').textContent();
+    if (!centerOffSummary.includes('按文件顺序')) {
+      problems.push(`centring summary did not follow the switch: ${centerOffSummary}`);
+    }
+    await centerSwitch.click();
+    const centerGeometry = await page.evaluate(() => {
+      const cards = document.querySelectorAll('#fold-misc .switch-card');
+      const content = document.querySelector('#fold-misc .fold-content');
+      const card = cards[0];
+      if (!card || !content || cards.length < 2) return null;
+      const c = card.getBoundingClientRect();
+      const p = content.getBoundingClientRect();
+      const style = getComputedStyle(content);
+      const inner = p.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      return { inside: c.right <= p.right + 1 && c.left >= p.left - 1, width: c.width, content: inner };
+    });
+    if (!centerGeometry) {
+      problems.push('the centring switch row is missing from the "其它" fold');
+    } else if (!centerGeometry.inside || centerGeometry.width < centerGeometry.content - 4) {
+      problems.push(
+        `the centring switch row does not lay out like the sharing row (${centerGeometry.width}px)`,
+      );
+    }
+    // Borrowed power is its own switch: it rewrites the circuit without touching the merge mode.
+    const rideSwitch = page.locator('#btnLaneRide');
+    if ((await rideSwitch.getAttribute('role')) !== 'switch') {
+      problems.push('lane riding is not exposed as a switch');
+    }
+    if ((await rideSwitch.getAttribute('aria-checked')) !== 'true') {
+      problems.push('lane riding is off by default');
+    }
+    const rideOnSummary = await page.locator('#sumMisc').textContent();
+    if (!rideOnSummary.includes('轨道取电')) {
+      problems.push(`riding summary is missing while riding is on: ${rideOnSummary}`);
+    }
+    await rideSwitch.click();
+    if ((await rideSwitch.getAttribute('aria-checked')) !== 'false') {
+      problems.push('the riding switch did not turn off');
+    }
+    const rideOffSummary = await page.locator('#sumMisc').textContent();
+    if (!rideOffSummary.includes('不取电')) {
+      problems.push(`riding summary did not follow the switch: ${rideOffSummary}`);
+    }
+    await rideSwitch.click();
+    const rideGeometry = await page.evaluate(() => {
+      const card = document.querySelector('#btnLaneRide')?.closest('.switch-card');
+      const content = document.querySelector('#fold-misc .fold-content');
+      if (!card || !content) return null;
+      const c = card.getBoundingClientRect();
+      const p = content.getBoundingClientRect();
+      const style = getComputedStyle(content);
+      const inner = p.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      return { inside: c.right <= p.right + 1 && c.left >= p.left - 1, width: c.width, content: inner };
+    });
+    if (!rideGeometry) {
+      problems.push('the riding switch row is missing from the "其它" fold');
+    } else if (rideGeometry.inside === false || rideGeometry.width < rideGeometry.content - 4) {
+      problems.push(`the riding switch row does not lay out like the sharing row (${rideGeometry.width}px)`);
+    }
+    // A pasted schematic cannot say which lane is the lead, so the export has to carry a legend.
+    const badgeBeforeAnnotate = await page.locator('#smartBadge').textContent();
+    const annotateSwitch = page.locator('#btnAnnotateLanes');
+    if ((await annotateSwitch.getAttribute('role')) !== 'switch') {
+      problems.push('lane annotation is not exposed as a switch');
+    }
+    if ((await annotateSwitch.getAttribute('aria-checked')) !== 'true') {
+      problems.push('lane annotation is off by default');
+    }
+    const annotateOnSummary = await page.locator('#sumMisc').textContent();
+    if (!annotateOnSummary.includes('注释牌')) {
+      problems.push(`annotation summary is missing while annotation is on: ${annotateOnSummary}`);
+    }
+    await annotateSwitch.click();
+    if ((await annotateSwitch.getAttribute('aria-checked')) !== 'false') {
+      problems.push('the annotation switch did not turn off');
+    }
+    const annotateOffSummary = await page.locator('#sumMisc').textContent();
+    if (!annotateOffSummary.includes('无注释牌')) {
+      problems.push(`annotation summary did not follow the switch: ${annotateOffSummary}`);
+    }
+    // Signs never change the circuit, so switching them must not touch the routing state.
+    const badgeAfterAnnotate = await page.locator('#smartBadge').textContent();
+    if (badgeAfterAnnotate.trim() !== badgeBeforeAnnotate.trim()) {
+      problems.push(
+        `toggling annotation changed the routing badge: ${badgeBeforeAnnotate} → ${badgeAfterAnnotate}`,
+      );
+    }
+    await annotateSwitch.click();
     await page.locator('#authorInput').fill('UI check');
     const authorSummary = await page.locator('#sumMisc').textContent();
     if (!authorSummary.includes('UI check')) {
@@ -299,6 +588,14 @@ function buildSource(directory) {
     const assignmentSummary = await page.locator('#sumAssignments').textContent();
     if (!assignmentSummary.includes('条轨')) {
       problems.push(`assignment summary is empty: ${assignmentSummary}`);
+    }
+
+    const smartDetail = await page.locator('#smartResultDetail').textContent();
+    if (!smartDetail.includes('分类：') || !smartDetail.includes('主音轨：')) {
+      problems.push(`smart selection summary is incomplete: ${smartDetail}`);
+    }
+    if (!smartDetail.includes('投影注释：')) {
+      problems.push(`smart selection summary does not mention the lane signs: ${smartDetail}`);
     }
 
     const canvas = await page.evaluate(() => {
@@ -391,19 +688,46 @@ function buildSource(directory) {
     await page.waitForFunction(() => document.getElementById('step-8').classList.contains('active'), {
       timeout: 60000,
     });
-    // A first export that wrote a file explains the optional pack, exactly once, and the
-    // dialog has to actually be visible: the stylesheet hides a backdrop without `open`.
+    // A pack nudge appears only when smart selection recommends it. When it does, it must
+    // be visible and close exactly once.
+    const recommended = result.smartSelection?.resourcePackRecommended ?? true;
     const nudges = await page.locator('.modal-backdrop.open').count();
-    if (nudges !== 1) problems.push(`expected one resource-pack nudge, found ${nudges}`);
-    await page.waitForTimeout(260);
-    await page.screenshot({ path: resolve('out/ui-shots/8-pack-nudge.png') });
-
-    await page.getByRole('button', { name: '以后再说' }).click();
-    await page.waitForTimeout(200);
-    if (await page.locator('.modal-backdrop.open').count()) {
-      problems.push('the resource-pack nudge did not close');
+    if (nudges !== (recommended ? 1 : 0)) {
+      problems.push(`expected ${recommended ? 1 : 0} resource-pack nudge, found ${nudges}`);
+    }
+    if (recommended) {
+      await page.waitForTimeout(260);
+      await page.screenshot({ path: resolve('out/ui-shots/8-pack-nudge.png') });
+      await page.getByRole('button', { name: '以后再说' }).click();
+      await page.waitForTimeout(200);
+      if (await page.locator('.modal-backdrop.open').count()) {
+        problems.push('the resource-pack nudge did not close');
+      }
     }
 
+    // Developer mode: off by default, toggled from settings, and it must show the live
+    // data rather than an empty frame.
+    await page.locator('#btnOpenSettings').click();
+    const devOff = (await page.locator('#btnDevMode').textContent()).trim();
+    if (devOff !== '关闭') problems.push(`developer mode is not off by default: ${devOff}`);
+    await page.locator('#btnDevMode').click();
+    await page.locator('#btnCloseSettings').click();
+    await page.waitForFunction(() => !document.getElementById('devDock').hidden);
+    const devState = await page.locator('#devOutput').textContent();
+    if (!devState.includes('"versions"') || !devState.includes('"midiPath"')) {
+      problems.push(`developer panel shows no data: ${devState.slice(0, 120)}`);
+    }
+    await page.locator('[data-dev-tab="result"]').click();
+    const devResult = await page.locator('#devOutput').textContent();
+    if (!devResult.includes('"stats"')) problems.push('developer result tab is empty');
+    await page.locator('[data-dev-tab="log"]').click();
+    const devLogText = await page.locator('#devOutput').textContent();
+    if (!devLogText.includes('ipc')) problems.push('developer log has no IPC entries');
+    await shot('9-devmode');
+    await page.locator('#btnDevClose').click();
+    await page.locator('#btnOpenSettings').click();
+    await page.locator('#btnDevMode').click();
+    await page.locator('#btnCloseSettings').click();
     await shot('7-done');
 
     const done = await page.evaluate(() => ({

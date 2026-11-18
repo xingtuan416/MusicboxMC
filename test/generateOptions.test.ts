@@ -60,6 +60,8 @@ describe('generate option sanitisation at the IPC boundary', () => {
         mergeSameInstrument: true,
         forceMergeSameInstrument: false,
         commandPlayback: true,
+        smartSelection: true,
+        leadTrackIndex: 2,
       }),
     ).toEqual({
       instrumentMode: 'native',
@@ -73,6 +75,8 @@ describe('generate option sanitisation at the IPC boundary', () => {
       mergeSameInstrument: true,
       forceMergeSameInstrument: false,
       commandPlayback: true,
+      smartSelection: true,
+      leadTrackIndex: 2,
     });
   });
 });

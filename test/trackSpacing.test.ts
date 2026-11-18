@@ -24,9 +24,11 @@ describe('track Z spacing', () => {
     );
     expect(result.tracks).toHaveLength(2);
     const [first, second] = ranges(result);
-    expect(second!.zBase - first!.zBase).toBe(2);
-    // One empty row: the difference between the two occupied edges is 2.
-    expect(second!.min - first!.max - 1).toBe(1);
+    // The player's lane is anchored on z = 0, and the next track takes the nearer side.
+    expect(first!.zBase).toBe(0);
+    expect(Math.abs(second!.zBase - first!.zBase)).toBe(2);
+    const ordered = ranges(result).sort((a, b) => a.min - b.min);
+    expect(ordered[1]!.min - ordered[0]!.max - 1).toBe(1);
   });
 
   it('reserves only the chord sides that are actually used', () => {
@@ -37,11 +39,13 @@ describe('track Z spacing', () => {
         { notes: [{ tick: 10, midi: 60 }] },
       ]),
     );
-    const [first, second] = ranges(result);
-    expect(first!.zBase).toBe(1);
-    expect(first!.min).toBe(0);
-    expect(first!.max).toBe(3);
-    expect(second!.min - first!.max - 1).toBe(1);
+    const [first] = ranges(result);
+    expect(first!.zBase).toBe(0);
+    // One row above, two below: the unused upper row is not reserved.
+    expect(first!.min).toBe(-1);
+    expect(first!.max).toBe(2);
+    const ordered = ranges(result).sort((a, b) => a.min - b.min);
+    expect(ordered[1]!.min - ordered[0]!.max - 1).toBe(1);
   });
 
   it('keeps one empty row between tracks whose chords lean to different sides', () => {
@@ -68,7 +72,8 @@ describe('track Z spacing', () => {
       { config: { trackPitch: 10 } },
     );
     const [first, second] = ranges(result);
-    expect(second!.zBase - first!.zBase).toBe(10);
-    expect(second!.min - first!.max).toBeGreaterThan(0);
+    expect(Math.abs(second!.zBase - first!.zBase)).toBe(10);
+    const ordered = ranges(result).sort((a, b) => a.min - b.min);
+    expect(ordered[1]!.min - ordered[0]!.max).toBeGreaterThan(0);
   });
 });
