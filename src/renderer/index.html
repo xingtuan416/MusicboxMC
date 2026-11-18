@@ -770,18 +770,179 @@
         font-weight: 600;
       }
 
+      /*
+        The recommendation surfaces - the lead track on the selection step and the routing
+        summary on the configuration step - share one shape: a heading with a state badge,
+        one line of reasoning, then the control. They were a checkbox and a squeezed flex
+        row; the row had no min-width, so its label collapsed to one character per line and
+        the select (width 100% from .input-clean) pushed out past the card.
+      */
+      .smart-card {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-width: 0;
+        padding: 18px 20px;
+        border-radius: 16px;
+        background: rgba(255, 252, 244, 0.86);
+        border: 1px solid rgba(20, 20, 19, 0.1);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+      }
+
+      .smart-card-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+
+      .smart-title {
+        font-size: 15px;
+        font-weight: 800;
+        letter-spacing: -0.01em;
+        color: var(--ink-primary);
+      }
+
+      .smart-badge {
+        display: inline-flex;
+        align-items: center;
+        height: 21px;
+        padding: 0 9px;
+        border-radius: 999px;
+        background: rgba(20, 20, 19, 0.07);
+        color: var(--ink-secondary);
+        font-size: 11.5px;
+        font-weight: 700;
+        white-space: nowrap;
+        transition: background-color 0.2s var(--ease-out);
+      }
+
+      .smart-badge[data-state='auto'] {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+
+      .smart-badge[data-state='error'] {
+        background: var(--danger-bg);
+        color: var(--danger);
+      }
+
+      .smart-note {
+        font-size: 12.5px;
+        line-height: 1.6;
+        color: var(--ink-secondary);
+        white-space: pre-line;
+      }
+
+      /* The one limitation the interface has to keep saying out loud. */
+      .smart-foot {
+        font-size: 11.5px;
+        line-height: 1.6;
+        color: var(--ink-muted);
+      }
+
+      .lead-select {
+        width: 100%;
+        min-width: 0;
+        height: 44px;
+        flex: none;
+        text-overflow: ellipsis;
+      }
+
+      .smart-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .smart-apply {
+        height: 38px;
+        padding: 0 16px;
+        font-size: 13px;
+      }
+
+      .smart-result {
+        min-width: 0;
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--ink-secondary);
+      }
+
+      @media (max-width: 700px) {
+        .smart-card {
+          padding: 16px;
+        }
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .screen-step.active .step-inner {
+          animation: step-enter 240ms var(--ease-out);
+        }
+
+        .track-item,
+        .fold-card,
+        .issue,
+        .stat-card {
+          transition:
+            transform 160ms var(--ease-out),
+            border-color 160ms var(--ease-out),
+            background-color 160ms var(--ease-out);
+        }
+
+        .track-item:hover,
+        .fold-card:hover {
+          transform: translateY(-1px);
+        }
+      }
+
+      @keyframes step-enter {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+
       .fold-list {
         display: flex;
         flex-direction: column;
         gap: 10px;
       }
 
+      /*
+        A hairline in ink, not white: a 1px white border on the cream background renders at
+        100% DPI as a broken, dashed-looking line, which is what the fold cards looked like.
+      */
       .fold-card {
         border-radius: 16px;
-        background: var(--glass-bg);
-        border: 1px solid var(--glass-border);
-        box-shadow: var(--glass-shadow);
+        background: rgba(255, 255, 255, 0.5);
+        border: 1px solid rgba(20, 20, 19, 0.09);
+        box-shadow: 0 10px 24px -20px rgba(20, 20, 19, 0.55);
         overflow: hidden;
+      }
+
+      .fold-card.open .fold-trigger {
+        border-bottom: 1px solid rgba(20, 20, 19, 0.06);
+      }
+
+      /* The chevron says which way the card will move; animating it with the panel keeps
+         the two in step instead of the panel opening under a static arrow. */
+      .fold-trigger svg {
+        transition: transform 190ms cubic-bezier(0.2, 0.7, 0.3, 1);
+        color: var(--ink-muted);
+        flex: none;
+      }
+      .fold-card.open .fold-trigger svg {
+        transform: rotate(180deg);
       }
 
       .fold-trigger {
@@ -803,11 +964,14 @@
         color: var(--ink-primary);
       }
 
+      /* Accent is reserved for state badges; four accent-coloured summaries in a row read
+         as four warnings. */
       .fold-val {
-        font-size: 13px;
+        font-size: 12.5px;
         font-weight: 600;
-        color: var(--accent);
-        margin-top: 2px;
+        color: var(--ink-secondary);
+        margin-top: 3px;
+        line-height: 1.4;
       }
 
       .fold-content {
@@ -871,6 +1035,135 @@
         color: var(--ink-secondary);
         margin-top: 3px;
         display: block;
+      }
+
+      /* Lane sharing sits on top of the merge choice rather than beside it: it composes with
+         every merge mode, so it is a switch on its own full-width row, not a fourth box. */
+      .switch-card {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px 18px;
+        padding: 13px 16px;
+        border-radius: 13px;
+        border: 1px solid rgba(20, 20, 19, 0.12);
+        background: rgba(255, 255, 255, 0.6);
+      }
+
+      /* A forced merge leaves one spine, so the borrowing and riding cards are removed from
+         the grid entirely; display: grid would otherwise override the hidden attribute. */
+      .switch-card[hidden] {
+        display: none;
+      }
+
+      .switch-copy {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        min-width: 0;
+      }
+
+      .switch-title {
+        font-size: 13.5px;
+        font-weight: 700;
+        color: var(--ink-primary);
+      }
+
+      .switch-desc {
+        font-size: 12px;
+        line-height: 1.5;
+        color: var(--ink-secondary);
+      }
+
+      /* A switched-on control that cannot act has to say why, or the row reads as broken. */
+      .switch-hint {
+        grid-column: 1 / -1;
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.55;
+        color: var(--ink-secondary);
+      }
+
+      .switch-hint[hidden] {
+        display: none;
+      }
+
+      .switch-side {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex: none;
+      }
+
+      .switch-threshold {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--ink-secondary);
+        white-space: nowrap;
+      }
+
+      .input-tiny {
+        width: 64px;
+        height: 34px;
+        padding: 0 10px;
+        border-radius: 9px;
+        font-size: 13px;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .switch-threshold .input-tiny:disabled {
+        opacity: 0.5;
+      }
+
+      .switch-track {
+        position: relative;
+        width: 46px;
+        height: 26px;
+        padding: 0;
+        border-radius: 999px;
+        border: 1px solid rgba(20, 20, 19, 0.16);
+        background: rgba(20, 20, 19, 0.1);
+        cursor: pointer;
+        transition:
+          background 0.18s var(--ease-out),
+          border-color 0.18s var(--ease-out);
+      }
+
+      .switch-knob {
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 1px 3px rgba(20, 20, 19, 0.28);
+        transition: transform 0.18s var(--ease-out);
+      }
+
+      .switch-track[aria-checked='true'] {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+
+      .switch-track[aria-checked='true'] .switch-knob {
+        transform: translateX(20px);
+      }
+
+      .switch-track:disabled {
+        cursor: default;
+        opacity: 0.45;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .switch-track,
+        .switch-knob {
+          transition: none;
+        }
       }
 
       /* ==========================================================================
@@ -1434,12 +1727,155 @@
         transform: rotate(180deg);
       }
 
+      /* ==========================================================================
+       Developer mode: opt-in diagnostics drawer
+       ========================================================================== */
+      /* Step 4 readout: the layout behind the options, only while dev mode is on. */
+      .dev-measure {
+        display: none;
+        padding: 10px 14px;
+        border-radius: 12px;
+        border: 1px dashed rgba(20, 20, 19, 0.22);
+        background: rgba(20, 20, 19, 0.04);
+        font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.55;
+        color: var(--ink-primary);
+        word-break: break-word;
+      }
+
+      body.dev-on .dev-measure {
+        display: block;
+      }
+
+      .dev-pill {
+        position: fixed;
+        left: 16px;
+        bottom: 16px;
+        z-index: 86;
+        height: 30px;
+        padding: 0 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(20, 20, 19, 0.24);
+        background: rgba(20, 20, 19, 0.86);
+        color: #ffffff;
+        font-family: inherit;
+        font-size: 11.5px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        cursor: pointer;
+      }
+
+      .dev-dock {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 87;
+        width: min(520px, calc(100vw - 32px));
+        height: min(70vh, 640px);
+        display: flex;
+        flex-direction: column;
+        border-radius: 18px;
+        border: 1px solid rgba(20, 20, 19, 0.14);
+        background: rgba(250, 249, 245, 0.98);
+        box-shadow: 0 24px 60px rgba(20, 20, 19, 0.22);
+        overflow: hidden;
+      }
+
+      .dev-dock[hidden] {
+        display: none;
+      }
+
+      .dev-dock-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 10px 12px;
+        border-bottom: 1px solid rgba(20, 20, 19, 0.08);
+      }
+
+      .dev-title {
+        margin-right: auto;
+        font-size: 12.5px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+      }
+
+      .dev-mini {
+        height: 26px;
+        padding: 0 10px;
+        font-size: 12px;
+      }
+
+      .dev-tabs {
+        display: flex;
+        gap: 4px;
+        padding: 8px 10px;
+        border-bottom: 1px solid rgba(20, 20, 19, 0.08);
+      }
+
+      .dev-tab {
+        height: 26px;
+        padding: 0 10px;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--ink-secondary);
+        font-family: inherit;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .dev-tab:hover {
+        background: rgba(20, 20, 19, 0.05);
+      }
+
+      .dev-tab.active {
+        background: var(--ink-primary);
+        color: #ffffff;
+      }
+
+      .dev-body {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        padding: 10px 12px;
+        background: #fbfaf6;
+      }
+
+      .dev-pre {
+        margin: 0;
+        font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+        font-size: 11.5px;
+        line-height: 1.55;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: var(--ink-primary);
+        user-select: text;
+      }
+
+      .dev-foot {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-top: 1px solid rgba(20, 20, 19, 0.08);
+        font-size: 11px;
+        color: var(--ink-muted);
+      }
+
+      .dev-foot .dev-mini {
+        height: 24px;
+        font-size: 11.5px;
+      }
+
+      .dev-hint {
+        margin-left: auto;
+      }
       @media (prefers-reduced-motion: reduce) {
         .track-item[data-pop='true'] .check-box {
           animation: none;
-        }
-        .fold-content {
-          transition: none;
         }
       }
     </style>
@@ -1722,6 +2158,18 @@
             ></p>
             <div id="trackListBox" class="track-list"></div>
 
+            <div class="smart-card" id="leadPanel">
+              <div class="smart-card-head">
+                <span class="smart-title">主音轨 · 听感中心</span>
+                <span class="smart-badge" id="leadBadge">自动推荐</span>
+              </div>
+              <p class="smart-note" id="leadReason">根据 MIDI 力度、活跃时长和单音旋律自动推荐。</p>
+              <select id="leadTrackSelect" class="input-clean lead-select" aria-label="主音轨"></select>
+              <p class="smart-foot" id="leadFoot">
+                玩家默认站在主音轨上；力度只决定选哪条轨，红石音符盒的音量固定，听感差异来自距离。
+              </p>
+            </div>
+
             <div class="action-bar">
               <button type="button" class="btn-glass" data-goto="2">上一步</button>
               <button type="button" id="btnStep3Next" class="btn-obsidian" data-goto="4">下一步：配置</button>
@@ -1741,7 +2189,24 @@
             </div>
 
             <div class="preset-notice" id="configNotice">
-              下面几组都已经是默认值，直接下一步即可；需要时再展开微调。
+              智能推荐已经替你选好乐器模式与合并方式；下面几组默认收起，需要时再展开微调。
+            </div>
+
+            <!-- Developer mode only: the layout behind the current options. -->
+            <div id="devMeasure" class="dev-measure" aria-live="polite"></div>
+
+            <div class="smart-card" id="smartConfigPanel">
+              <div class="smart-card-head">
+                <span class="smart-title">智能推荐</span>
+                <span class="smart-badge" id="smartBadge" data-state="busy">待计算</span>
+              </div>
+              <p class="smart-note" id="smartConfigHint">
+                按所选音轨自动判定乐器模式与合并方式，进入这一步就会算一次；改动下面的设置会切回手动。
+              </p>
+              <div class="smart-actions">
+                <button type="button" id="btnSmartApply" class="btn-glass smart-apply">应用智能推荐</button>
+                <span class="smart-result tnum" id="smartApplyResult"></span>
+              </div>
             </div>
 
             <div class="fold-list">
@@ -1894,6 +2359,110 @@
                   </svg>
                 </button>
                 <div class="fold-content">
+                  <div class="switch-card" id="centerLeadCard">
+                    <div class="switch-copy">
+                      <div class="switch-title">按主轨排序</div>
+                      <div class="switch-desc">
+                        玩家站在主音轨那一行，其余轨道按力度从近到远铺到你两侧：最重要的离你最近，次要的一层层往外。关掉这个开关就按
+                        MIDI 文件里的顺序铺，你仍然站在主音轨那一行，只是左右次序恢复成文件顺序。
+                      </div>
+                    </div>
+                    <div class="switch-side">
+                      <button
+                        type="button"
+                        class="switch-track"
+                        id="btnCenterLead"
+                        role="switch"
+                        aria-checked="true"
+                        aria-label="按主轨排序"
+                      >
+                        <span class="switch-knob"></span>
+                      </button>
+                    </div>
+                    <p class="switch-hint" id="centerLeadHint" hidden></p>
+                  </div>
+                  <div class="switch-card" id="laneShareCard">
+                    <div class="switch-copy">
+                      <div class="switch-title">稀疏音轨借道</div>
+                      <div class="switch-desc">
+                        音符很少的音轨不再单开一条轨道，而是并到相邻轨道：轨道更少、方块更少，代价是它们共用一条主线的电路。听距（最远的音符离你几格）已经小于
+                        30
+                        格时不再尝试；同乐器合并之后也会在合并出的轨道上再试一次。合并可能把和弦行铺深，所以会实测：听距不降反升就不采用。
+                      </div>
+                    </div>
+                    <div class="switch-side">
+                      <label class="switch-threshold">
+                        少于
+                        <input
+                          type="number"
+                          id="laneShareSparse"
+                          class="input-clean input-tiny"
+                          min="1"
+                          max="500"
+                          step="1"
+                          value="50"
+                          aria-label="音符数少于该值的音轨算稀疏"
+                        />
+                        个音符
+                      </label>
+                      <button
+                        type="button"
+                        class="switch-track"
+                        id="btnLaneSharing"
+                        role="switch"
+                        aria-checked="true"
+                        aria-label="稀疏音轨借道"
+                      >
+                        <span class="switch-knob"></span>
+                      </button>
+                    </div>
+                    <p class="switch-hint" id="laneShareHint" hidden></p>
+                  </div>
+                  <div class="switch-card" id="laneRideCard">
+                    <div class="switch-copy">
+                      <div class="switch-title">相邻轨道取电</div>
+                      <div class="switch-desc">
+                        首音很晚的轨道不再自己从起点一路铺几千格中继器，而是从另一条轨道取一次电：方块更少、中继器少几百个，长曲子里最容易被区块加载打断的「长车头」也随之消失。被借的那段必须是红石粉；两条轨道之间每跨一行就多一个中继器（多
+                        1 红石
+                        tick，排布时已经算进时间轴），所以会挑最近、最省的一行。开头就有音的轨道不受影响。
+                      </div>
+                    </div>
+                    <div class="switch-side">
+                      <button
+                        type="button"
+                        class="switch-track"
+                        id="btnLaneRide"
+                        role="switch"
+                        aria-checked="true"
+                        aria-label="相邻轨道取电"
+                      >
+                        <span class="switch-knob"></span>
+                      </button>
+                    </div>
+                    <p class="switch-hint" id="laneRideHint" hidden></p>
+                  </div>
+                  <div class="switch-card">
+                    <div class="switch-copy">
+                      <div class="switch-title">投影注释</div>
+                      <div class="switch-desc">
+                        每条轨道前立一块牌，写明主音轨、副轨与它的力度：金色底座是主音轨，铜色是副轨，牌面「站这里」就是玩家该站的位置。全曲合并成一条主线时不再宣称主音轨，牌上改标「全曲主线」并提示站到
+                        主线那一行。注释是独立区域，不想要可以在投影里单独删掉。
+                      </div>
+                    </div>
+                    <div class="switch-side">
+                      <button
+                        type="button"
+                        class="switch-track"
+                        id="btnAnnotateLanes"
+                        role="switch"
+                        aria-checked="true"
+                        aria-label="在投影里标出主音轨"
+                      >
+                        <span class="switch-knob"></span>
+                      </button>
+                    </div>
+                    <p class="switch-hint" id="annotateLanesHint" hidden></p>
+                  </div>
                   <button
                     type="button"
                     class="opt-box selected"
@@ -2137,6 +2706,11 @@
               <p id="checkSummary" class="step-sub">生成时发现的问题会列在这里。</p>
             </div>
 
+            <div id="smartResult" class="smart-card" style="display: none">
+              <div class="smart-title">智能选择结果</div>
+              <div id="smartResultDetail" class="smart-note"></div>
+            </div>
+
             <!--
             What each source track became. It is reference, not a problem, so it is a
             fold rather than part of the issue list.
@@ -2370,6 +2944,15 @@
         </div>
         <div class="setting-row">
           <div>
+            <div style="font-size: 14.5px; font-weight: 700">开发者模式</div>
+            <div style="font-size: 12.5px; color: var(--ink-secondary)">
+              诊断面板：状态、智能判决、最近结果与 IPC 日志
+            </div>
+          </div>
+          <button type="button" class="pill-tag" id="btnDevMode">关闭</button>
+        </div>
+        <div class="setting-row">
+          <div>
             <div style="font-size: 14.5px; font-weight: 700">版本</div>
             <div style="font-size: 12.5px; color: var(--ink-secondary)">MusicboxMC Desktop</div>
           </div>
@@ -2402,6 +2985,31 @@
         </div>
       </div>
     </div>
+
+    <!-- Developer mode: off by default, remembered per profile. -->
+    <button type="button" id="devToggle" class="dev-pill" hidden>DEV</button>
+    <aside id="devDock" class="dev-dock" hidden aria-label="开发者模式">
+      <div class="dev-dock-head">
+        <span class="dev-title">开发者模式</span>
+        <button type="button" id="btnDevRefresh" class="pill-tag dev-mini">刷新</button>
+        <button type="button" id="btnDevCopy" class="pill-tag dev-mini">复制</button>
+        <button type="button" id="btnDevSave" class="pill-tag dev-mini">保存 JSON</button>
+        <button type="button" id="btnDevClose" class="win-btn" aria-label="关闭诊断面板">×</button>
+      </div>
+      <nav class="dev-tabs" aria-label="诊断视图">
+        <button type="button" class="dev-tab active" data-dev-tab="state">状态</button>
+        <button type="button" class="dev-tab" data-dev-tab="smart">智能</button>
+        <button type="button" class="dev-tab" data-dev-tab="result">结果</button>
+        <button type="button" class="dev-tab" data-dev-tab="log">日志</button>
+      </nav>
+      <div class="dev-body"><pre id="devOutput" class="dev-pre"></pre></div>
+      <div class="dev-foot">
+        <button type="button" id="btnDevPlan" class="pill-tag dev-mini">重测智能</button>
+        <button type="button" id="btnDevCheck" class="pill-tag dev-mini">跑检查</button>
+        <span id="devStatus">0 条日志</span>
+        <span class="dev-hint">Ctrl+Shift+D 开关 · 数据只在本机</span>
+      </div>
+    </aside>
 
     <!-- Behaviour lives in app.js and reaches the main process only through window.musicbox. -->
     <script type="module" src="app.js"></script>

@@ -112,12 +112,12 @@ function showPackNudge() {
 /**
  * Called after an export that actually wrote a file.
  *
- * Gated on extended mode as well as on being the first time. Native mode plays each
- * instrument's own timbre; installing the pack there would also replace native bass,
- * guitar, flute and bell, so the nudge would be wrong.
+ * Gated on the generation result's recommendation as well as on being the first time.
+ * Smart selection can decide that a song needs no pack even when the current UI mode is
+ * extended, and can recommend it in a pure-harp song that crosses the single harp slot.
  */
-function maybePromptForPack(extendedMode) {
-  if (!extendedMode || wasPrompted()) return;
+function maybePromptForPack(recommended) {
+  if (!recommended || wasPrompted()) return;
   markPrompted();
   showPackNudge();
 }

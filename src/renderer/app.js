@@ -11,18 +11,21 @@
  * step than as a general renderer.
  */
 
+import { devLog, initDevMode, isDevMode, refreshDev, registerDev, setDevMode, wrapApi } from './devmode.js';
 import { instrumentName } from './instruments.js';
 import { maybePromptForPack, savePack } from './resourcepack.js';
 import { focusPreviewCell, panPreview, previewPosition, renderPreview } from './preview.js';
 import {
   locateWarning,
+  MERGE_MODE_TEXT,
   WARNING_DISPLAY_LIMIT,
   warnSeverity,
   warningText,
   warningTitle,
 } from './warningText.js';
 
-const api = window.musicbox;
+// Every call is logged for the developer panel; the wrapper rethrows unchanged.
+const api = wrapApi(window.musicbox);
 
 /** Elements are looked up once; the markup is static, so a missing one is a bug. */
 const $ = (id) => {
@@ -42,6 +45,22 @@ const state = {
   song: null,
   /** TrackSummary[] plus the user's selection. */
   tracks: [],
+  /** Source track index whose lane is kept closest to the listener. */
+  leadTrackIndex: null,
+  /** 'velocity' | 'balance' | 'manual' | null */
+  leadBasis: null,
+  /** Whether the smart recommendation is the one in force; any manual edit clears it. */
+  smartSelection: true,
+  /** The routing summary the last measurement produced, or null before one ran. */
+  smartMeasured: null,
+  /** What the measurement was run for; a changed track selection invalidates it. */
+  smartSignature: '',
+  /** Resource-pack advice from that measurement; null means "derive it from the mode". */
+  packRecommended: null,
+  /** Bumped per measurement so a slow answer cannot overwrite newer settings. */
+  smartToken: 0,
+  /** Last layout measurement shown by developer mode on the configuration step. */
+  devMeasure: null,
   /** Folder the schematic will be written into. The file name is kept separately. */
   outputDir: null,
   /** Main-process grant for `outputDir`; this is the only thing that authorizes a write. */
@@ -54,6 +73,15 @@ const state = {
   backend: 'redstone',
   /** 'off' | 'same' | 'force' - one value, because merge and force-merge conflict. */
   merge: 'off',
+  /** Fold sparse tracks onto neighbouring lanes. Independent of the merge choice. */
+  laneSharing: true,
+  /** A source track with fewer notes than this counts as sparse; mirrors the main default. */
+  laneShareSparseBelow: 50,
+  /** Center the lead lane in Z so the player stands on it. Can be the wider layout. */
+  centerLead: true,
+  /** Write lane signs into the schematic so the player can tell which lane is the lead. */
+  annotateLanes: true,
+  laneRide: true,
   author: 'MusicboxMC',
   commandBudget: 65536,
   baseTps: 20,
@@ -167,11 +195,18 @@ function goStep(target) {
 
   playNote(330 + next * 40, 'sine', 0.08);
 
+  // Entering the configuration step measures the smart routing once, so the values shown
+  // there are exactly the ones the generator will use. The measurement is a dry run of the
+  // whole pipeline, so it only runs again when the track selection changed.
+  if (next === 4 && state.smartSelection && state.smartSignature !== selectionSignature()) {
+    void applySmartSelection();
+  }
+  if (next === 4) scheduleDevMeasure(0);
+
   // The pack nudge belongs on the last step, not on the check step: arriving at the check
-  // step with a modal over it hides the very thing the user was sent there to read. It is
-  // shown once, and only for an export that actually wrote an extended-mode file.
+  // step with a modal over it hides the very thing the user was sent there to read.
   if (next === 8 && state.result?.outputPath) {
-    maybePromptForPack(state.instrumentMode === 'extended');
+    maybePromptForPack(state.packRecommended ?? state.instrumentMode === 'extended');
   }
 }
 
@@ -211,6 +246,14 @@ async function loadMidi(path) {
     state.tracks = result.tracks
       .filter((track) => track.noteCount > 0)
       .map((track) => ({ ...track, checked: true }));
+    state.leadTrackIndex = result.recommendedLeadTrackIndex ?? null;
+    state.leadBasis = result.recommendedLeadBasis ?? null;
+    // A new song starts from the recommendation again: the previous measurements were
+    // made for a different track list and cannot be reused.
+    state.smartSelection = true;
+    state.smartMeasured = null;
+    state.smartSignature = '';
+    state.packRecommended = null;
 
     $('midiFileTitle').textContent = result.file;
     $('valDuration').textContent = result.song.durationText;
@@ -284,7 +327,7 @@ function renderTracks(popIndex = -1) {
     name.textContent = kind ? `${heading}（${kind}）` : heading;
     const meta = document.createElement('div');
     meta.className = 'track-meta tnum';
-    meta.textContent = `${number(track.noteCount)} 个音符`;
+    meta.textContent = `${number(track.noteCount)} 个音符 · 平均力度 ${Math.round(track.meanVelocity * 100)}%`;
 
     const detected =
       track.detectedInstrument === 'drums' ? '打击乐' : instrumentName(track.detectedInstrument);
@@ -315,23 +358,264 @@ function renderTracks(popIndex = -1) {
       : '至少保留一条音轨才能生成';
   $('btnStep3Next').disabled = chosen.length === 0;
   $('btnToggleAllTracks').textContent = chosen.length === state.tracks.length ? '取消全选' : '全选';
+  syncLeadPicker();
+}
+
+/**
+ * The ordering the main process uses, repeated here so the picker cannot recommend one
+ * track while the layout stands the player somewhere else. Velocity alone decides it,
+ * drums included: the loudest track is what the listener hears as the centre.
+ */
+function preferredLead(tracks) {
+  const pool = tracks.filter((track) => track.checked && track.noteCount > 0);
+  const ranked = [...pool].sort((a, b) => {
+    const velocity = b.meanVelocity - a.meanVelocity;
+    if (velocity !== 0) return velocity;
+    const notes = b.noteCount - a.noteCount;
+    return notes !== 0 ? notes : a.index - b.index;
+  });
+  const first = ranked[0];
+  if (!first) return null;
+  return { track: first, basis: 'velocity' };
+}
+
+/** The sentence under the picker: which track, and why it is the centre. */
+function leadReasonText(selected) {
+  if (!selected) return '至少选择一条音轨后才能指定主音轨。';
+  const label = `轨 ${selected.index + 1}「${selected.name || selected.instrument}」`;
+  if (state.leadBasis === 'manual') return `${label}：手动指定，玩家会站在这一轨上。`;
+  return `${label}：平均 MIDI 力度最高，自动作为听感中心。`;
+}
+
+function syncLeadPicker() {
+  const chosen = state.tracks.filter((track) => track.checked && track.noteCount > 0);
+  let selected = chosen.find((track) => track.index === state.leadTrackIndex);
+  if (!selected) {
+    // A lead that was unchecked falls back to the next recommendation, rather than
+    // leaving the layout without a centre.
+    const fallback = preferredLead(chosen);
+    state.leadTrackIndex = fallback?.track.index ?? null;
+    state.leadBasis = fallback?.basis ?? null;
+    selected = fallback?.track;
+  }
+
+  const select = $('leadTrackSelect');
+  select.replaceChildren();
+  for (const track of chosen) {
+    const option = document.createElement('option');
+    option.value = String(track.index);
+    const name = track.name ? ` · ${track.name}` : '';
+    option.textContent = `轨 ${track.index + 1}${name}（力度 ${Math.round(track.meanVelocity * 100)}%）`;
+    select.append(option);
+  }
+  select.disabled = chosen.length === 0;
+  if (selected) select.value = String(selected.index);
+
+  const badge = $('leadBadge');
+  const manual = state.leadBasis === 'manual';
+  badge.textContent = !selected ? '未指定' : manual ? '手动指定' : '自动推荐';
+  badge.dataset.state = !selected || manual ? 'manual' : 'auto';
+  $('leadReason').textContent = leadReasonText(selected);
+}
+
+const FOLD_PADDING_BOTTOM = 18;
+
+/**
+ * Open or close one fold card.
+ *
+ * The panel is display:none while closed, so it cannot be transitioned in CSS. It is
+ * shown first and then animated from zero height; closing measures the rendered height
+ * and animates back before the class is removed. Height is cleared afterwards so a card
+ * that grows later (a longer summary line, a reflowed option box) is not clipped.
+ */
+function toggleFoldCard(id) {
+  const card = id ? document.getElementById(id) : null;
+  if (!card) return;
+  const content = card.querySelector('.fold-content');
+  const trigger = card.querySelector('.fold-trigger');
+  const open = !card.classList.contains('open');
+  if (trigger) trigger.setAttribute('aria-expanded', String(open));
+  if (!content || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    card.classList.toggle('open', open);
+    return;
+  }
+
+  if (open) {
+    card.classList.add('open');
+    const target = Math.max(0, content.scrollHeight - FOLD_PADDING_BOTTOM);
+    content.style.overflow = 'hidden';
+    const anim = content.animate(
+      [
+        { height: '0px', paddingBottom: '0px', opacity: 0.35 },
+        { height: `${target}px`, paddingBottom: `${FOLD_PADDING_BOTTOM}px`, opacity: 1 },
+      ],
+      { duration: 200, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)' },
+    );
+    anim.onfinish = () => {
+      content.style.height = '';
+      content.style.overflow = '';
+    };
+    return;
+  }
+
+  const current = content.getBoundingClientRect().height;
+  content.style.overflow = 'hidden';
+  const anim = content.animate(
+    [
+      {
+        height: `${Math.max(0, current - FOLD_PADDING_BOTTOM)}px`,
+        paddingBottom: `${FOLD_PADDING_BOTTOM}px`,
+        opacity: 1,
+      },
+      { height: '0px', paddingBottom: '0px', opacity: 0 },
+    ],
+    { duration: 160, easing: 'cubic-bezier(0.4, 0, 0.6, 1)' },
+  );
+  anim.onfinish = () => {
+    card.classList.remove('open');
+    content.style.height = '';
+    content.style.overflow = '';
+  };
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Step 4: configuration
  * ──────────────────────────────────────────────────────────────────────────── */
 
+/** What a measurement depends on; a different track list or lead needs a new measurement. */
+function selectionSignature() {
+  const excluded = state.tracks.filter((track) => !track.checked).map((track) => track.index);
+  const lead = state.leadBasis === 'manual' ? state.leadTrackIndex : '';
+  return `${state.midiPath}|${state.backend}|${excluded.join(',')}|${lead}`;
+}
+
+/** One line describing what the measurement decided. */
+function smartRoutingText(info) {
+  if (!info) return '';
+  const mode = info.instrumentMode === 'extended' ? '扩展竖琴音域（需资源包）' : '原版乐器';
+  if (state.backend === 'command') return `${mode} · 命令播放不判定听距、合并与借道`;
+  const merge = MERGE_MODE_TEXT[info.mergeMode] ?? MERGE_MODE_TEXT.off;
+  return `${mode} · ${merge} · 最远 ${info.radiusZ} 格`;
+}
+
+function syncSmartPanel() {
+  const badge = $('smartBadge');
+  const button = $('btnSmartApply');
+  if (state.smartSelection && state.smartMeasured) {
+    badge.textContent = '已应用';
+    badge.dataset.state = 'auto';
+    button.textContent = '重新计算智能推荐';
+    $('smartConfigHint').textContent =
+      '已按当前音轨选好乐器模式、合并方式与稀疏音轨借道，下面显示的数值就是生成时会用的；改动下面的设置会切回手动。';
+    $('smartApplyResult').textContent = smartRoutingText(state.smartMeasured);
+  } else if (state.smartSelection) {
+    badge.textContent = '待计算';
+    badge.dataset.state = 'busy';
+    button.textContent = '应用智能推荐';
+    $('smartConfigHint').textContent =
+      '按所选音轨自动判定乐器模式、合并方式与稀疏音轨借道，进入这一步就会算一次。';
+    $('smartApplyResult').textContent = '';
+  } else {
+    badge.textContent = '手动';
+    badge.dataset.state = 'manual';
+    button.textContent = '恢复智能推荐';
+    $('smartConfigHint').textContent =
+      '已切回手动：下面的乐器模式、合并方式、借道开关和资源包提示按当前设置执行。点按钮可以重新按音轨特征选一次。';
+    $('smartApplyResult').textContent = '';
+  }
+}
+
+/**
+ * Measure the smart routing and apply it.
+ *
+ * The result is written into the same state the manual controls write to, so there is one
+ * source of truth: if the shelf says "同乐器合并", that is what the generator will do.
+ * Writing the recommendation into a separate label was the earlier bug - the checkbox
+ * claimed smart mode while the summaries and the file followed the manual values.
+ */
+async function applySmartSelection() {
+  if (!state.midiPath) return;
+  const token = ++state.smartToken;
+  const signature = selectionSignature();
+  const button = $('btnSmartApply');
+  button.disabled = true;
+  $('smartBadge').textContent = '计算中…';
+  $('smartBadge').dataset.state = 'busy';
+  try {
+    const { info, error } = await api.plan(state.midiPath, generateOptions());
+    if (token !== state.smartToken) return;
+    if (!info) {
+      state.smartSelection = false;
+      state.smartMeasured = null;
+      syncSummary();
+      $('smartBadge').textContent = '无法计算';
+      $('smartBadge').dataset.state = 'error';
+      $('smartConfigHint').textContent =
+        `智能推荐没能算出结果：${error || '生成器没有给出原因'}。现在按下面的手动设置生成。`;
+      return;
+    }
+    state.smartMeasured = info;
+    state.smartSignature = signature;
+    state.smartSelection = true;
+    state.instrumentMode = info.instrumentMode;
+    // Merging and the Z span only exist for the redstone backend. Sharing is not one of the
+    // three merge boxes, and the generator re-derives it from the switch, so the boxes keep
+    // the unmerged choice rather than inventing a fourth selected state.
+    if (state.backend !== 'command') state.merge = info.mergeMode === 'share' ? 'off' : info.mergeMode;
+    state.packRecommended = info.resourcePackRecommended;
+    syncSummary();
+  } catch (failure) {
+    if (token !== state.smartToken) return;
+    state.smartSelection = false;
+    state.smartMeasured = null;
+    syncSummary();
+    $('smartBadge').textContent = '无法计算';
+    $('smartBadge').dataset.state = 'error';
+    $('smartConfigHint').textContent =
+      `智能推荐失败：${failure?.message || failure}。现在按下面的手动设置生成。`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+/**
+ * Paint the option boxes from the state.
+ *
+ * Applying the recommendation changes the mode and merge mode without a click, so the
+ * highlighted boxes have to follow the state; otherwise the fold keeps showing the value
+ * the user had before while the generator uses the recommended one.
+ */
+function syncOptionBoxes() {
+  const values = {
+    instrument: state.instrumentMode,
+    merge: state.merge,
+    range: state.outOfRange,
+    backend: state.backend,
+  };
+  for (const box of document.querySelectorAll('[data-cfg-group]')) {
+    const group = box.getAttribute('data-cfg-group');
+    box.classList.toggle('selected', values[group] === box.getAttribute('data-cfg-val'));
+  }
+}
+
 function syncSummary() {
+  syncSmartPanel();
+  syncOptionBoxes();
   const extended = state.instrumentMode === 'extended';
   $('sumPitch').textContent = extended
-    ? `扩展竖琴音域 · 钢琴 F#1–F#7 · 最多 ${state.dMax} 音同时`
+    ? `扩展竖琴音域（需配套资源包）· 钢琴 F#1–F#7 · 最多 ${state.dMax} 音同时`
     : `原版乐器 · 各乐器两个八度 · 最多 ${state.dMax} 音同时`;
-  $('packTitle').textContent = extended
-    ? '配套资源包（扩展竖琴音域建议安装）'
-    : '配套资源包（原版乐器模式不需要）';
-  $('packDescription').textContent = extended
-    ? '扩展竖琴音域的五种音色（bass、guitar、harp、flute、bell）各有一段钢琴采样；装包后它们听起来像同一架钢琴。'
-    : '原版乐器模式每条轨使用自己的音色；装了这个包反而会把原生 bass、guitar、flute、bell 也替换成钢琴，所以不建议安装。';
+  // A measurement knows whether the pack helps this song; without one, the instrument
+  // mode is the only evidence there is.
+  const packWanted = state.packRecommended ?? extended;
+  $('packTitle').textContent = packWanted
+    ? '配套资源包（可选，保存后自行安装）'
+    : '配套资源包（当前设置不需要）';
+  $('packDescription').textContent = packWanted
+    ? '只统一扩展竖琴那五个音色槽的钢琴采样：音域不变（F#1–F#7 来自五个扩展槽，不是这个包）；被占用的原生 bass/guitar/flute/bell 已改用替代表，不受它影响。保存后放进 .minecraft/resourcepacks/ 再自行启用。'
+    : extended
+      ? '当前设置用不到这个包：它只改竖琴那五个音色槽的采样，不改变音域，也不影响合并方式。'
+      : '原版乐器模式每条轨使用自己的音色；装了这个包反而会把原生 bass、guitar、flute、bell 也替换成钢琴。';
   $('sumRange').textContent = {
     warn: '提示并八度移调',
     octave: '自动八度移调',
@@ -345,9 +629,90 @@ function syncSummary() {
       same: '同乐器合并到一条主线',
       force: '全曲强制合并为一条主线',
     }[state.merge] ?? '每条音轨各自一条主线';
+  const shareSwitch = $('btnLaneSharing');
+  const command = state.backend === 'command';
+  shareSwitch.setAttribute('aria-checked', state.laneSharing ? 'true' : 'false');
+  // Command playback has no lanes, so a switch that changes nothing must not look usable.
+  shareSwitch.disabled = command;
+  shareSwitch.title = command ? '命令播放没有轨道排布，借道不适用' : '';
+  const sparseInput = $('laneShareSparse');
+  sparseInput.value = String(state.laneShareSparseBelow);
+  sparseInput.disabled = command || !state.laneSharing;
+  // A switch that is on but cannot do anything has to explain itself in place.
+  const shareHint = $('laneShareHint');
+  if (shareHint) {
+    if (command) {
+      shareHint.hidden = false;
+      shareHint.textContent = '命令播放没有轨道排布，借道不适用。';
+    } else if (state.merge === 'same') {
+      shareHint.hidden = false;
+      shareHint.textContent =
+        '当前是「同乐器合并」：合并之后还会在合并出来的轨道上再试一次，只有音符很少的轨道才会被折进相邻轨道。';
+    } else {
+      shareHint.hidden = true;
+      shareHint.textContent = '';
+    }
+  }
+  const centerSwitch = $('btnCenterLead');
+  if (centerSwitch) {
+    centerSwitch.setAttribute('aria-checked', state.centerLead ? 'true' : 'false');
+    centerSwitch.disabled = command;
+    centerSwitch.title = command ? '命令播放没有轨道排布，按主轨排序不适用' : '';
+    const centerHint = $('centerLeadHint');
+    if (centerHint) {
+      if (command) {
+        centerHint.hidden = false;
+        centerHint.textContent = '命令播放没有轨道排布，按主轨排序不适用。';
+      } else {
+        centerHint.hidden = true;
+        centerHint.textContent = '';
+      }
+    }
+  }
+  const annotateSwitch = $('btnAnnotateLanes');
+  if (annotateSwitch) {
+    annotateSwitch.setAttribute('aria-checked', state.annotateLanes ? 'true' : 'false');
+    annotateSwitch.disabled = command;
+    annotateSwitch.title = command ? '命令播放没有轨道排布，注释牌不适用' : '';
+    const annotateHint = $('annotateLanesHint');
+    if (annotateHint) {
+      annotateHint.hidden = !command;
+      annotateHint.textContent = command ? '命令播放没有轨道排布，注释牌不适用。' : '';
+    }
+  }
+  const rideSwitch = $('btnLaneRide');
+  if (rideSwitch) {
+    rideSwitch.setAttribute('aria-checked', state.laneRide ? 'true' : 'false');
+    rideSwitch.disabled = command;
+    rideSwitch.title = command ? '命令播放没有轨道排布，取电不适用' : '';
+    const rideHint = $('laneRideHint');
+    if (rideHint) {
+      if (command) {
+        rideHint.hidden = false;
+        rideHint.textContent = '命令播放没有轨道排布，取电不适用。';
+      } else {
+        rideHint.hidden = true;
+        rideHint.textContent = '';
+      }
+    }
+  }
+  // A forced merge leaves one spine: borrowing and riding have nothing to act on, so the
+  // cards step aside instead of sitting there greyed out.
+  const forced = state.merge === 'force';
+  const shareCard = $('laneShareCard');
+  if (shareCard) shareCard.hidden = forced;
+  const rideCard = $('laneRideCard');
+  if (rideCard) rideCard.hidden = forced;
+  const shareText = state.laneSharing ? ` · 借道 <${state.laneShareSparseBelow} 音` : ' · 不借道';
+  const centerText = state.centerLead ? ' · 按主轨排序' : ' · 按文件顺序';
+  const annotateText = state.annotateLanes ? ' · 注释牌' : ' · 无注释牌';
+  const rideText = state.laneRide ? ' · 轨道取电' : ' · 不取电';
   const tpsText = state.baseTps === 20 ? '' : ` · 基准 ${state.baseTps} TPS`;
-  $('sumMisc').textContent = `${mergeText}${tpsText} · 作者 ${state.author.trim() || 'MusicboxMC'}`;
+  $('sumMisc').textContent =
+    `${mergeText}${shareText}${rideText}${centerText}${annotateText}${tpsText} · 作者 ${state.author.trim() || 'MusicboxMC'}`;
   $('commandBudgetField').style.display = state.backend === 'command' ? 'flex' : 'none';
+  // The readout is dev-only and cheap to skip; every option change lands here.
+  scheduleDevMeasure();
 }
 
 /** Map the interface state onto the generator's options, and nothing more. */
@@ -363,7 +728,19 @@ function generateOptions() {
     commandPlayback: state.backend === 'command',
     mergeSameInstrument: state.merge === 'same',
     forceMergeSameInstrument: state.merge === 'force',
+    smartSelection: state.smartSelection,
+    // A visible switch, so it applies with or without smart routing.
+    laneSharing: state.laneSharing,
+    laneShareSparseBelow: state.laneShareSparseBelow,
+    centerLead: state.centerLead,
+    annotateLanes: state.annotateLanes,
+    laneRide: state.laneRide,
   };
+  // A lead the user picked by hand keeps centring the lanes after smart routing is off; an
+  // automatically chosen one only means something inside the smart recommendation.
+  if (state.leadTrackIndex !== null && (state.smartSelection || state.leadBasis === 'manual')) {
+    options.leadTrackIndex = state.leadTrackIndex;
+  }
   if (state.author.trim()) options.author = state.author.trim();
   if (state.backend === 'command') options.commandChainBudget = state.commandBudget;
   if (chosen.length === 0) options.excludeTracks = state.tracks.map((track) => track.index);
@@ -544,7 +921,7 @@ document.addEventListener('click', (event) => {
 
   const fold = target.closest('[data-fold]');
   if (fold) {
-    document.getElementById(fold.getAttribute('data-fold'))?.classList.toggle('open');
+    toggleFoldCard(fold.getAttribute('data-fold'));
     playNote(380, 'sine', 0.06);
     return;
   }
@@ -557,10 +934,26 @@ document.addEventListener('click', (event) => {
       .querySelectorAll(`[data-cfg-group="${group}"]`)
       .forEach((box) => box.classList.toggle('selected', box === option));
 
+    const previous =
+      group === 'instrument'
+        ? state.instrumentMode
+        : group === 'merge'
+          ? state.merge
+          : group === 'range'
+            ? state.outOfRange
+            : state.backend;
     if (group === 'instrument') state.instrumentMode = value;
     if (group === 'range') state.outOfRange = value;
     if (group === 'backend') state.backend = value;
     if (group === 'merge') state.merge = value;
+    if (previous !== value && (group === 'instrument' || group === 'merge')) {
+      // A manual choice wins, and the panel has to say so: a checkbox that still reads
+      // "smart" while the generator follows the manual value was the confusing part.
+      state.smartSelection = false;
+      // The pack only changes samples, so a merge choice says nothing about it; an
+      // instrument choice does.
+      if (group === 'instrument') state.packRecommended = null;
+    }
     syncSummary();
     // The notice invites the user to leave the defaults alone. Once they have not, it has
     // nothing left to say.
@@ -661,6 +1054,68 @@ $('btnToggleAllTracks').addEventListener('click', () => {
   playNote(allChecked ? 220 : 520, 'sine', 0.1);
 });
 
+$('btnSmartApply').addEventListener('click', () => {
+  playNote(520, 'sine', 0.07);
+  void applySmartSelection();
+});
+
+/** A layout switch is a manual choice, exactly like one of the merge boxes. */
+function markLayoutManual() {
+  state.smartSelection = false;
+  const notice = $('configNotice');
+  if (notice) notice.style.display = 'none';
+  syncSummary();
+}
+
+$('btnLaneSharing').addEventListener('click', () => {
+  if (state.backend === 'command') return;
+  state.laneSharing = !state.laneSharing;
+  markLayoutManual();
+  playNote(state.laneSharing ? 520 : 300, 'sine', 0.07);
+});
+
+$('laneShareSparse').addEventListener('change', (event) => {
+  const value = Number(event.target.value);
+  state.laneShareSparseBelow = Number.isFinite(value) ? Math.max(1, Math.min(500, Math.round(value))) : 50;
+  event.target.value = String(state.laneShareSparseBelow);
+  markLayoutManual();
+});
+
+$('btnCenterLead').addEventListener('click', () => {
+  if (state.backend === 'command') return;
+  state.centerLead = !state.centerLead;
+  markLayoutManual();
+  playNote(state.centerLead ? 500 : 320, 'sine', 0.07);
+});
+
+$('btnAnnotateLanes').addEventListener('click', () => {
+  if (state.backend === 'command') return;
+  state.annotateLanes = !state.annotateLanes;
+  // The signs never change the circuit, so this must not push smart routing into manual.
+  syncSummary();
+  playNote(state.annotateLanes ? 540 : 300, 'sine', 0.06);
+});
+
+$('btnLaneRide').addEventListener('click', () => {
+  if (state.backend === 'command') return;
+  state.laneRide = !state.laneRide;
+  // Borrowed power rewrites the circuit, so the recommendation no longer describes it.
+  markLayoutManual();
+  playNote(state.laneRide ? 560 : 300, 'sine', 0.07);
+});
+
+$('leadTrackSelect').addEventListener('change', (event) => {
+  const index = Number(event.target.value);
+  if (!Number.isSafeInteger(index)) return;
+  state.leadTrackIndex = index;
+  state.leadBasis = 'manual';
+  syncLeadPicker();
+  // Picking a lead is not a rejection of the instrument mode or the merge the recommendation
+  // chose, so smart selection stays on; the lead card and the check page both say "手动指定".
+  // The signature changes, so entering the next step measures again with this lead.
+  playNote(460, 'sine', 0.07);
+});
+
 $('dMaxInput').addEventListener('change', (event) => {
   const value = Number(event.target.value);
   state.dMax = Number.isFinite(value) ? Math.max(1, Math.min(14, Math.round(value))) : 14;
@@ -752,6 +1207,10 @@ $('btnCloseSettings').addEventListener('click', () => {
 });
 $('settingsModal').addEventListener('click', (event) => {
   if (event.target === $('settingsModal')) $('settingsModal').classList.remove('open');
+});
+
+$('btnDevMode').addEventListener('click', () => {
+  setDevMode(!isDevMode(), { openPanel: true });
 });
 
 $('btnToggleSound').addEventListener('click', () => {
@@ -882,6 +1341,105 @@ function appendIssuePage(result, container, items, from) {
   container.append(more);
 }
 
+/**
+ * Which sparse track ended up on which lane, in the words the user sees.
+ *
+ * The plan is reported twice - inside the smart summary and on its own field - because the
+ * switch also works with smart routing off, and the check step must explain the borrows in
+ * both cases.
+ */
+function laneSharingLines(sharing) {
+  const label = (index) => `轨${index + 1}`;
+  const byHost = new Map();
+  for (const { guest, host } of sharing.borrowed) {
+    if (!byHost.has(host)) byHost.set(host, []);
+    byHost.get(host).push(guest);
+  }
+  const lines = [];
+  for (const [host, guests] of byHost) {
+    lines.push(`借道：${guests.map(label).join('、')} → ${label(host)}`);
+  }
+  if (sharing.collector.length >= 2) {
+    lines.push(`借道：${sharing.collector.map(label).join('、')} 合成一条收集轨`);
+  }
+  if (sharing.kept.length > 0) {
+    lines.push(`借道：${sharing.kept.map(label).join('、')} 装不下，保持独立轨道`);
+  }
+  return lines;
+}
+
+function renderSmartResult(result) {
+  const panel = $('smartResult');
+  const smart = result.smartSelection;
+  if (!smart) {
+    panel.style.display = 'none';
+    $('smartResultDetail').textContent = '';
+    return;
+  }
+
+  const category = {
+    'pure-harp': '纯竖琴曲',
+    'single-instrument': '单乐器曲',
+    'multi-instrument': '多乐器多音轨曲',
+  }[smart.category];
+  const mode = smart.instrumentMode === 'extended' ? '扩展竖琴音域（需资源包）' : '原版乐器';
+  const mergeLabel = MERGE_MODE_TEXT;
+  const lead = state.tracks.find((track) => track.index === smart.leadTrackIndex);
+  const leadBasis =
+    {
+      manual: '手动指定',
+      velocity: '平均 MIDI 力度最高',
+      balance: '力度接近，综合活跃度与单音旋律',
+      fallback: '没有可用有音律轨，使用当前音轨',
+    }[smart.leadBasis] || '自动推荐';
+  // A forced merge leaves one spine, so naming a lead track would point at a lane that no
+  // longer exists on its own; the sign in the schematic says the same thing.
+  const singleLane = result.laneAnnotation?.singleLane ?? smart.mergeMode === 'force';
+  const leadLine = singleLane
+    ? '主音轨：全曲合并成一条主线，没有独立主音轨（站到主线那一行）'
+    : `主音轨：${lead ? `轨 ${lead.index + 1}「${lead.name || lead.instrument}」` : '未指定'} · ${leadBasis}`;
+
+  const lines = [`分类：${category}`, `乐器模式：${mode}`];
+  if (result.playbackMode === 'command') {
+    // Command playback has no lanes, no Z span and no merge, so none of those conclusions
+    // apply; printing a lead track there would suggest a layout that does not exist.
+    lines.push('主音轨 / 听距 / 合并方式：命令播放不适用');
+  } else {
+    lines.push(
+      `听距：最远的音符离你 ${smart.radiusZ} 格（阈值 ${smart.compactRadius} / ${smart.audibleRadius} 格）`,
+      `合并方式：${mergeLabel[smart.mergeMode] ?? smart.mergeMode}`,
+      leadLine,
+      `资源包：${smart.resourcePackRecommended ? '建议保存（需自行安装，不会自动装）' : '不需要'}`,
+    );
+    const sharing = result.laneSharing ?? smart.laneSharing;
+    if (sharing) lines.push(...laneSharingLines(sharing));
+    const ride = result.laneRide;
+    if (ride && ride.count > 0) {
+      const shown = ride.lanes
+        .slice(0, 6)
+        .map((lane) => `${lane.z}←${lane.hostZ}`)
+        .join('、');
+      const more = ride.count > 6 ? ` 等 ${ride.count} 条` : '';
+      const longest = Math.max(...ride.lanes.map((lane) => lane.rows ?? 1));
+      lines.push(
+        `轨道取电：${ride.count} 条轨道从相邻轨道取电（Z ${shown}${more}），最长跨 ${longest} 行，每行多 1 红石 tick 已计入`,
+      );
+    }
+    const candidates = smart.candidates
+      .map((candidate) => `${mergeLabel[candidate.mode] ?? candidate.mode} 最远 ${candidate.radiusZ} 格`)
+      .join(' · ');
+    if (candidates) lines.push(`候选布局：${candidates}`);
+    const annotation = result.laneAnnotation;
+    if (annotation) {
+      const spot = `(${annotation.player.x}, ${annotation.player.y}, ${annotation.player.z})`;
+      lines.push(`投影注释：${annotation.signs.length} 条牌 · 站 ${spot} · 听距 ${annotation.spreadZ} 格`);
+    }
+  }
+
+  $('smartResultDetail').textContent = lines.join('\n');
+  panel.style.display = 'flex';
+}
+
 function renderIssues(result) {
   const list = $('issueList');
   list.replaceChildren();
@@ -980,6 +1538,17 @@ function renderAssignmentTable(containerId, result) {
 
   const nameOf = (id) => (id === 'drums' ? '打击乐' : id === 'piano' ? '钢琴扩展' : instrumentName(id));
 
+  // Which source track shares a lane, and with whom. Absent whenever nothing shares.
+  const sharing = result.laneSharing ?? result.smartSelection?.laneSharing;
+  const hostOfGuest = new Map();
+  const guestsOfHost = new Map();
+  for (const { guest, host } of sharing?.borrowed ?? []) {
+    hostOfGuest.set(guest, host);
+    if (!guestsOfHost.has(host)) guestsOfHost.set(host, []);
+    guestsOfHost.get(host).push(guest);
+  }
+  const collectors = new Set(sharing?.collector ?? []);
+
   for (const info of rows) {
     const track = (result.tracks ?? []).find((entry) => entry.index === info.trackIndex);
     const native = nameOf(info.native);
@@ -992,6 +1561,10 @@ function renderAssignmentTable(containerId, result) {
     if (info.octaveOffset !== 0) notes.push(`整轨${info.octaveOffset > 0 ? '升' : '降'}八度`);
     if (info.outsideNotes > 0) notes.push(`${info.outsideNotes} 个音单独移调`);
     if (info.effective === 'drums') notes.push('鼓通道按音符映射');
+    if (hostOfGuest.has(info.trackIndex)) notes.push(`借轨到轨${hostOfGuest.get(info.trackIndex) + 1}`);
+    const guests = guestsOfHost.get(info.trackIndex);
+    if (guests) notes.push(`收拢轨${guests.map((index) => index + 1).join('、')}`);
+    if (collectors.has(info.trackIndex)) notes.push('合成收集轨');
     if (notes.length === 0) notes.push('原版音色');
 
     const row = document.createElement('div');
@@ -1011,10 +1584,12 @@ function renderAssignmentTable(containerId, result) {
 
   const substituted = rows.filter((row) => row.substituted).length;
   const shifted = rows.filter((row) => row.octaveOffset !== 0).length;
+  const shared = (sharing?.borrowed.length ?? 0) + (collectors.size >= 2 ? collectors.size : 0);
   $('sumAssignments').textContent =
     `${rows.length} 条轨` +
     (substituted > 0 ? ` · ${substituted} 条替代` : '') +
     (shifted > 0 ? ` · ${shifted} 条移八度` : '') +
+    (shared > 0 ? ` · 借道 ${shared} 条` : '') +
     ' · 点开看详情';
 }
 
@@ -1032,6 +1607,7 @@ async function runCheck() {
   try {
     const result = await api.generate(state.midiPath, generateOptions());
     if (!result.success) {
+      $('smartResult').style.display = 'none';
       $('checkSummary').textContent = '这一遍没能跑完。';
       const item = document.createElement('div');
       item.className = 'issue';
@@ -1057,6 +1633,7 @@ async function runCheck() {
         ? '没有发现问题，可以直接生成。'
         : `共 ${number(issues)} 处需要看一眼。点「在红石布线里定位」可以跳到对应位置；想改配置就点「上一步」。`;
     renderIssues(result);
+    renderSmartResult(result);
     renderTrackChips(result);
     renderAssignmentTable('assignmentTable', result);
     // The canvas measures its container, so this runs after the step is on screen.
@@ -1181,8 +1758,194 @@ window.addEventListener('resize', syncPreviewScroll);
   track.addEventListener('pointercancel', stop);
 })();
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * Developer mode
+ *
+ * The panel shows what the flow consumed, not a second opinion: the state, the routing
+ * measurement, the last result and every IPC call. Actions call the same functions the
+ * steps call, so testing through the panel exercises the real path.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** Everything the diagnostics drawer shows; each tab slices one key. */
+function devSnapshot() {
+  return {
+    state: {
+      step: state.step,
+      midiPath: state.midiPath,
+      song: state.song,
+      lead: { trackIndex: state.leadTrackIndex, basis: state.leadBasis },
+      smart: {
+        applied: state.smartSelection,
+        measured: state.smartMeasured,
+        signature: state.smartSignature,
+        packRecommended: state.packRecommended,
+      },
+      options: state.midiPath ? generateOptions() : null,
+      output: { dir: state.outputDir, hasToken: Boolean(state.outputDirToken) },
+      measure: state.devMeasure,
+    },
+    tracks: state.tracks.map((track) => ({
+      index: track.index,
+      name: track.name,
+      instrument: track.instrument,
+      detected: track.detectedInstrument,
+      detectionSource: track.detectionSource,
+      percussion: track.percussion,
+      checked: track.checked,
+      notes: track.noteCount,
+      meanVelocity: Number(track.meanVelocity.toFixed(3)),
+      activeSeconds: Number(track.activeSeconds.toFixed(2)),
+      polyphonicOnsetRatio: Number(track.polyphonicOnsetRatio.toFixed(3)),
+      melodicScore: Number(track.melodicScore.toFixed(3)),
+      prominenceScore: Number(track.prominenceScore.toFixed(3)),
+    })),
+    result: devResult(),
+  };
+}
+
+/** The last generation result, trimmed to what is worth reading in a drawer. */
+function devResult() {
+  const result = state.result;
+  if (!result) return null;
+  const warningCounts = {};
+  for (const warning of result.warnings ?? []) {
+    warningCounts[warning.code] = (warningCounts[warning.code] ?? 0) + 1;
+  }
+  return {
+    success: result.success,
+    error: result.error,
+    playbackMode: result.playbackMode,
+    stats: result.stats,
+    pitchRange: result.pitchRange,
+    smartSelection: result.smartSelection,
+    laneAnnotation: result.laneAnnotation,
+    laneRide: result.laneRide,
+    rangeShift: result.rangeShift,
+    warningCounts,
+    warnings: (result.warnings ?? []).slice(0, 40),
+    regions: (result.regions ?? []).map((region) => ({
+      name: region.name,
+      trackIndex: region.trackIndex,
+      position: region.position,
+      size: region.size,
+      blocks: region.blockCount,
+    })),
+    trackInstruments: result.trackInstruments,
+    commandPlayback: result.commandPlayback,
+  };
+}
+
+let devMeasureTimer = null;
+let devMeasureToken = 0;
+
+/**
+ * Measure the layout behind the current options, debounced.
+ *
+ * Changing an option twice in a row should measure once; the readout is a diagnostic, not
+ * part of the flow, so it must never slow down the click that caused it.
+ */
+function scheduleDevMeasure(delay = 320) {
+  clearTimeout(devMeasureTimer);
+  if (!isDevMode() || !state.midiPath) {
+    clearDevMeasure();
+    return;
+  }
+  devMeasureTimer = setTimeout(() => void runDevMeasure(), delay);
+}
+
+function clearDevMeasure(message = '') {
+  state.devMeasure = null;
+  const element = $('devMeasure');
+  if (element) element.textContent = message;
+}
+
+/** Why the last measurement borrowed no lane; a switch that changes nothing has to say why. */
+const SHARE_OUTCOME_TEXT = {
+  applied: '借道已应用',
+  outranked: '借道未采用（合并后听距更近）',
+  'not-narrower': '借道未生效（实测听距没有变近）',
+  merged: '借道未生效（已强制合并成一条主线）',
+  'no-sparse': '借道未尝试（合并后没有音符很少的轨道）',
+  'no-plan': '借道未尝试（没有可借的轨道）',
+  disabled: '借道已关闭',
+  failed: '借道失败',
+};
+
+/** One line: the box, how many Minecraft tracks it needs, and the cost of the song. */
+function measureText(measure) {
+  const merge = MERGE_MODE_TEXT[measure.mergeMode] ?? measure.mergeMode;
+  const parts = [
+    `X ${measure.size.x} × Y ${measure.size.y} × Z ${measure.size.z}`,
+    `MC 轨道 ${measure.trackCount} 条`,
+    `源音轨 ${measure.sourceTrackCount} 条`,
+    `站 Z ${measure.playerZ}`,
+    `最远 ${measure.hearingRadius} 格`,
+    `区域 ${measure.regionCount}`,
+    `音符盒 ${number(measure.noteBlockCount)}`,
+    `方块 ${number(measure.blockCount)}`,
+    `合并 ${merge}`,
+  ];
+  const shareOutcome = SHARE_OUTCOME_TEXT[measure.shareOutcome];
+  if (shareOutcome) {
+    parts.push(measure.sharedLanes > 0 ? `${shareOutcome}（${measure.sharedLanes} 组）` : shareOutcome);
+  } else if (measure.sharedLanes > 0) {
+    parts.push(`借道 ${measure.sharedLanes} 组`);
+  }
+  // The widths every candidate produced, so a surprising choice can be checked by eye.
+  if (Array.isArray(measure.candidates) && measure.candidates.length > 1) {
+    const widths = measure.candidates.map((c) => `${MERGE_MODE_TEXT[c.mode] ?? c.mode} ${c.radiusZ}`);
+    parts.push(`候选 ${widths.join(' / ')}`);
+  }
+  if (measure.riddenLanes > 0) {
+    parts.push(`取电 ${measure.riddenLanes} 条`);
+  }
+  if (measure.annotatedSigns > 0) {
+    parts.push(`注释 ${measure.annotatedSigns} 牌（+${measure.annotatedExtraX} X）`);
+  }
+  parts.push(`${measure.elapsedMs} ms`);
+  if (measure.warnings > 0) parts.push(`提示 ${measure.warnings} 条`);
+  return parts.join(' · ');
+}
+
+async function runDevMeasure() {
+  if (!isDevMode() || !state.midiPath) return;
+  if (state.backend === 'command') {
+    clearDevMeasure('命令播放后端：没有轨道排布，X / Y / Z 与轨道数不适用');
+    return;
+  }
+  const token = ++devMeasureToken;
+  const element = $('devMeasure');
+  if (element) element.textContent = '测量布局…';
+  try {
+    const measure = await api.measure(state.midiPath, generateOptions());
+    if (token !== devMeasureToken) return;
+    state.devMeasure = measure;
+    if (element) element.textContent = measureText(measure);
+    refreshDev();
+  } catch (error) {
+    if (token !== devMeasureToken) return;
+    clearDevMeasure(`布局测量失败：${error?.message || error}`);
+  }
+}
+
+window.addEventListener('devmode:changed', () => scheduleDevMeasure(0));
+
+registerDev({ snapshot: devSnapshot, actions: { remeasure: applySmartSelection, check: runCheck } });
+initDevMode(api);
+
+// A renderer failure is exactly what this mode exists to make visible.
+window.addEventListener('error', (event) => {
+  devLog('error', { where: 'renderer', message: event.message, source: event.filename, line: event.lineno });
+});
+window.addEventListener('unhandledrejection', (event) => {
+  devLog('error', { where: 'renderer', message: event.reason?.message || String(event.reason) });
+});
+
 /** Logs from the main process (uncaught exceptions) still deserve to be visible. */
-api.onLog((line) => notify(line));
+api.onLog((line) => {
+  notify(line);
+  devLog('main', line);
+});
 
 setImportView('empty');
 syncSummary();

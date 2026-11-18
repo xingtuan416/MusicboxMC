@@ -13,6 +13,19 @@ import { pitchName, pitchRangeLabel } from './pitch.js';
 
 const WARNING_DISPLAY_LIMIT = 500;
 
+/**
+ * Chinese label per routing mode.
+ *
+ * Shared with the interface: the summary line, the candidate list, the warning text and the
+ * check step all name the same four modes, and they had already drifted apart once.
+ */
+const MERGE_MODE_TEXT = {
+  off: '不合并',
+  share: '稀疏借道',
+  same: '同乐器合并',
+  force: '强制合并',
+};
+
 const WARN_TEXT = {
   COMMAND_PLAYBACK_REQUIREMENTS: (w) =>
     `命令播放：${w.chainLength} 个链步骤，预算 ${w.budget}。需要启用命令方块、保留方块实体 NBT，并加载整个结构；世界 maxCommandChainLength 必须大于链步骤数。`,
@@ -38,6 +51,14 @@ const WARN_TEXT = {
     `${ctx.label(w.trackIndex)} · z${w.z} 行 · ${ctx.at(w.tick)} 的音实际在 ` +
     `${ctx.at(w.actual)} 触发，偏移 ${w.actual - w.tick > 0 ? '+' : ''}${w.actual - w.tick} 游戏刻`,
   TRACK_SPLIT: (w) => `tick ${w.tick}：${w.notes} 个音密集放不下，已自动拆到新音轨`,
+  SMART_HEARING_UNREACHED: (w) =>
+    w.attempted
+      ? `智能分流后最远的音符仍在 ${w.radiusZ} 格外（听距 ${w.limit} 格）；已选择当前可用方案中听距最短的布局`
+      : `不合并：最远的音符在 ${w.radiusZ} 格外，超过 ${w.limit} 格听距。` +
+        `可以在配置里手动开启合并，或排除几条音轨。`,
+  SMART_MERGE_FAILED: (w) =>
+    `${MERGE_MODE_TEXT[w.mode] || w.mode}没能生成几何安全的布局，已改用` +
+    `${MERGE_MODE_TEXT[w.fallback] || w.fallback}的结果`,
   SPATIAL_DRIFT: (w, ctx) =>
     `${ctx.label(w.trackIndex)} · ${ctx.at(w.tick)}：该处空间偏差 ${w.drift} 格，超出多轨对齐容差`,
   INSTRUMENT_UNKNOWN: (w, ctx) =>
@@ -90,6 +111,8 @@ const WARN_TITLE = {
   OUT_OF_RANGE: '音符超出乐器音域',
   TIMING_ADJUSTED: '触发时刻被调整',
   TRACK_SPLIT: '音轨被拆分',
+  SMART_HEARING_UNREACHED: '智能分流后仍超出听距',
+  SMART_MERGE_FAILED: '合并方案不可用，已回退',
   SPATIAL_DRIFT: '多轨对齐出现偏差',
   INSTRUMENT_UNKNOWN: '乐器未能识别',
   INSTRUMENT_SUBSTITUTED: '扩展模式下换了相近音色',
@@ -104,6 +127,8 @@ function warnSeverity(code) {
     code === 'TRACK_SPLIT' ||
     code === 'POLYPHONY_EXCEEDED' ||
     code === 'SPATIAL_DRIFT' ||
+    code === 'SMART_HEARING_UNREACHED' ||
+    code === 'SMART_MERGE_FAILED' ||
     code === 'COMMAND_SOUND_PRESSURE' ||
     code === 'COMMAND_STRUCTURE_SIZE' ||
     code === 'COMMAND_PLAYBACK_REQUIREMENTS' ||
@@ -181,6 +206,7 @@ function warningText(result, warning) {
 }
 
 export {
+  MERGE_MODE_TEXT,
   WARNING_DISPLAY_LIMIT,
   WARN_TEXT,
   OUT_OF_RANGE_ACTION_TEXT,
