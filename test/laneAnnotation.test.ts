@@ -113,6 +113,21 @@ describe('lane annotation planner', () => {
   });
 });
 
+describe('standing spot column', () => {
+  it('uses the column the layout measured, not the first column', () => {
+    const plan = planLaneAnnotation({
+      ...planOptions([lane([0], 0), lane([1], 4)], 0),
+      playerX: 42,
+    })!;
+    expect(plan.player.x).toBe(42);
+  });
+
+  it('falls back to the column before the circuit when nothing measured one', () => {
+    const plan = planLaneAnnotation(planOptions([lane([0], 0)], null))!;
+    expect(plan.player.x).toBe(9);
+  });
+});
+
 describe('lane annotation in a generated schematic', () => {
   it('adds a legend region without touching a single music block', () => {
     // A picked lead is what gives the lanes an order to be centred and annotated around.
@@ -138,7 +153,16 @@ describe('lane annotation in a generated schematic', () => {
     // The sign column stays west of the circuit.
     expect(legendRegion!.position.x).toBeLessThan(circuitLeft);
     expect(legendRegion!.position.x + legendRegion!.size.x).toBeLessThanOrEqual(circuitLeft);
-    expect(info!.player.x).toBeLessThan(circuitLeft);
+    // "Stand here" names the average note column: a redstone song is walked, not stood
+    // still in, so naming the first column put the spot thousands of blocks away from
+    // most of the music. It therefore sits inside the circuit, not before it.
+    expect(info!.player.x).toBeGreaterThanOrEqual(circuitLeft);
+    const circuitRight = Math.max(
+      ...result.regions
+        .filter((region) => region.trackIndex !== -2)
+        .map((region) => region.position.x + region.size.x),
+    );
+    expect(info!.player.x).toBeLessThan(circuitRight);
 
     // The signs survive a real litematic round trip, text included.
     const parsed = parseLitematic(buffer!);

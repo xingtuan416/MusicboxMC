@@ -5,13 +5,17 @@ import {
   DETAIL_MIN_CELL,
   MAX_CELL,
   MIN_CELL,
+  TILE_SIZE,
   cellForScale,
+  cellRangeForView,
   clampView,
   dustSizes,
   fitCell,
   noteBlockSizes,
   repeaterSizes,
   scaleForCell,
+  tileCells,
+  tilesForView,
   viewGeometry,
   visibleCells,
 } from '../src/renderer/previewGeometry.js';
@@ -79,7 +83,9 @@ describe('preview viewport', () => {
     const visible = { cols: 10, rows: 5 };
     expect(clampView(grid, { x0: -5, z0: -5 }, visible)).toEqual({ x0: 0, z0: 0 });
     expect(clampView(grid, { x0: 500, z0: 500 }, visible)).toEqual({ x0: 90, z0: 15 });
-    expect(clampView(grid, { x0: 12.4, z0: 3.6 }, visible)).toEqual({ x0: 12, z0: 4 });
+    // A fractional offset is kept: rounding it here is what made a drag shorter than half
+    // a cell move nothing and a longer one jump a whole cell, on each axis separately.
+    expect(clampView(grid, { x0: 12.4, z0: 3.6 }, visible)).toEqual({ x0: 12.4, z0: 3.6 });
     // A grid smaller than the viewport cannot be scrolled away from its first cell.
     expect(clampView({ x: 4, z: 2 }, { x0: 9, z0: 9 }, visible)).toEqual({ x0: 0, z0: 0 });
   });
@@ -123,6 +129,15 @@ describe('preview viewport', () => {
     expect(repeaterSizes(BADGE_MIN_CELL).badgeFont).toBeGreaterThanOrEqual(7);
   });
 
+  it('keeps a fractional offset so a short drag still moves the picture', () => {
+    const grid = { x: 200, z: 40 };
+    const visible = { cols: 20, rows: 10 };
+    const before = clampView(grid, { x0: 10, z0: 5 }, visible);
+    const after = clampView(grid, { x0: 10 + 0.25, z0: 5 + 0.25 }, visible);
+    expect(after.x0 - before.x0).toBeCloseTo(0.25, 9);
+    expect(after.z0 - before.z0).toBeCloseTo(0.25, 9);
+  });
+
   it('reproduces the original full-size numbers exactly', () => {
     const cell = BASE_CELL;
 
@@ -154,5 +169,75 @@ describe('preview viewport', () => {
     expect(note.stripeHeight).toBeCloseTo(Math.max(7, cell * 0.18), 9);
     expect(note.stripeRadius).toBeCloseTo(Math.max(2, cell * 0.06), 9);
     expect(note.stripeInset).toBeCloseTo(3, 9);
+  });
+});
+
+/**
+ * The viewport is drawn by compositing cached tiles, so three things have to hold: the
+ * tiles cover everything on screen, they are anchored to the cell grid rather than to the
+ * viewport (otherwise a drag rebuilds every tile), and they never run past the grid.
+ */
+describe('cached tiles', () => {
+  const grid = { x: 640, z: 120 };
+  const size = { width: 1200, height: 700 };
+
+  it('spans a tile in whole cells at every zoom', () => {
+    for (const cell of [MIN_CELL, 12, 28, 72]) {
+      const span = tileCells(cell);
+      expect(span, `span at ${cell}`).toBeGreaterThanOrEqual(1);
+      expect(span * cell, `tile width at ${cell}`).toBeGreaterThanOrEqual(TILE_SIZE);
+      expect((span - 1) * cell, `no oversized tile at ${cell}`).toBeLessThan(TILE_SIZE);
+    }
+  });
+
+  it('covers every cell the viewport can show', () => {
+    const cell = 28;
+    const view = { x0: 10.3, z0: 4.7 };
+    const range = cellRangeForView({ view, ...size, cell, grid });
+    const { tiles } = tilesForView({ view, ...size, cell, grid });
+    const covered = new Set();
+    for (const tile of tiles) {
+      for (let gx = tile.x0; gx < tile.x1; gx += 1) {
+        for (let gz = tile.z0; gz < tile.z1; gz += 1) covered.add(gx + ',' + gz);
+      }
+    }
+    for (let gx = range.gx0; gx < range.gx1; gx += 1) {
+      for (let gz = range.gz0; gz < range.gz1; gz += 1) {
+        expect(covered.has(gx + ',' + gz), `cell ${gx},${gz} covered`).toBe(true);
+      }
+    }
+  });
+
+  it('anchors tiles to the cell grid, not to the viewport', () => {
+    const cell = 28;
+    const span = tileCells(cell);
+    const { tiles } = tilesForView({ view: { x0: 12.4, z0: 3.6 }, ...size, cell, grid });
+    for (const tile of tiles) {
+      expect(tile.x0 % span, `tile x ${tile.x0}`).toBe(0);
+      expect(tile.z0 % span, `tile z ${tile.z0}`).toBe(0);
+    }
+  });
+
+  it('reuses the same tiles when the view only shifts a fraction of a cell', () => {
+    const cell = 28;
+    const keys = (view: { x0: number; z0: number }) =>
+      tilesForView({ view, ...size, cell, grid })
+        .tiles.map((tile) => tile.x0 + ',' + tile.z0)
+        .sort();
+    const before = keys({ x0: 40, z0: 20 });
+    const after = keys({ x0: 40.3, z0: 20.3 });
+    expect(after).toEqual(before);
+  });
+
+  it('never builds a tile outside the grid', () => {
+    const cell = 28;
+    const { tiles } = tilesForView({ view: { x0: 630, z0: 116 }, ...size, cell, grid });
+    expect(tiles.length).toBeGreaterThan(0);
+    for (const tile of tiles) {
+      expect(tile.x1).toBeLessThanOrEqual(grid.x);
+      expect(tile.z1).toBeLessThanOrEqual(grid.z);
+      expect(tile.x1).toBeGreaterThan(tile.x0);
+      expect(tile.z1).toBeGreaterThan(tile.z0);
+    }
   });
 });

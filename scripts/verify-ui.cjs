@@ -49,6 +49,27 @@ function buildSource(directory) {
   return path;
 }
 
+/**
+ * A one-track file.
+ *
+ * A single track has nothing to order, merge with or ride on, so four cards and the merge
+ * switch have to leave the screen. They only went away when the user unticked a row by
+ * hand, because loading a file was not one of the steps that refreshed the summary.
+ */
+function buildSingleSource(directory) {
+  const midi = new Midi();
+  midi.header.setTempo(120);
+  const solo = midi.addTrack();
+  solo.name = 'Solo';
+  solo.instrument.name = 'acoustic grand piano';
+  [72, 74, 76, 79, 76, 74, 72, 69].forEach((pitch, index) =>
+    solo.addNote({ midi: pitch, time: index * 0.5, duration: 0.45 }),
+  );
+  const path = join(directory, 'ui-check-single.mid');
+  writeFileSync(path, Buffer.from(midi.toArray()));
+  return path;
+}
+
 (async () => {
   const directory = join(tmpdir(), `musicbox-ui-${Date.now()}`);
   mkdirSync(directory, { recursive: true });
@@ -68,6 +89,18 @@ function buildSource(directory) {
       `${result.stats.noteBlockCount + result.stats.circuitBlocks} blocks, ` +
       `${result.outOfRangeNotes} out of range`,
   );
+
+  const singleSource = buildSingleSource(directory);
+  const singleAnalyze = generate(singleSource, { dMax: 6, smartSelection: true });
+  if (!singleAnalyze.result.success) throw new Error(singleAnalyze.result.error);
+  const single = {
+    ...singleAnalyze.result,
+    path: singleSource,
+    outputPath: join(directory, 'ui-check-single.litematic'),
+    outputDir: directory,
+    appVersion: result.appVersion,
+  };
+  console.log(`one-track fixture: ${single.song.noteCount} notes, ${single.tracks.length} track`);
 
   // A real layout measurement, so the developer readout shows real numbers.
   const layoutMeasure = measureLayout(source, {});
@@ -90,12 +123,17 @@ function buildSource(directory) {
 
     await page.addInitScript(
       (payload) => {
-        const { fixture, layoutMeasure } = payload;
+        const { fixture, single, layoutMeasure } = payload;
         window.__calls = [];
+        // Which file the next import sees. Both fixtures go through the real generator,
+        // so a switch is the same thing as the user picking the other file.
+        window.__main = fixture;
+        window.__single = single;
+        window.__active = fixture;
         window.musicbox = {
           onLog() {},
-          chooseMidi: async () => fixture.path,
-          analyze: async () => fixture,
+          chooseMidi: async () => window.__active.path,
+          analyze: async () => window.__active,
           generate: async () => fixture,
           plan: async () => ({ info: fixture.smartSelection }),
           measure: async () => layoutMeasure,
@@ -128,11 +166,16 @@ function buildSource(directory) {
             window.__calls.push('reveal ' + p);
           },
           open: async () => {},
-          pathForFile: () => fixture.path,
+          getPreferences: async () => ({ lastOutputDir: null, packPromptMuted: false }),
+          setPreferences: async (patch) => {
+            window.__calls.push('setPreferences ' + JSON.stringify(patch));
+            return { lastOutputDir: null, packPromptMuted: false, ...patch };
+          },
+          pathForFile: () => window.__active.path,
           windowControl: async () => {},
         };
       },
-      { fixture: result, layoutMeasure },
+      { fixture: result, single, layoutMeasure },
     );
 
     await page.goto(site.url);
@@ -153,6 +196,53 @@ function buildSource(directory) {
     // `File.path` no longer exists, so the preload must resolve the path and the
     // renderer must listen for drop itself.
     await page.locator('#step-1 [data-goto="2"]').click();
+
+    // The question mark beside the drop hint explains what a MIDI file is. That explanation
+    // used to sit on the card as jargon ("支持标准 Format 0 / Format 1 MIDI 乐谱"), which
+    // nobody reads; it only works if it is behind a control and closes again.
+    await page.locator('#btnHelpMidi').click();
+    if (!(await page.locator('#helpMidi').isVisible())) problems.push('the MIDI help bubble did not open');
+    const helpText = await page.locator('#helpMidi').textContent();
+    if (!helpText.includes('MIDI')) problems.push(`the help bubble says nothing about MIDI: ${helpText}`);
+    // The bubble used to be a flow child of a fixed-height drop area: opening it pushed the
+    // title out of the box, and its translucent background let the text behind bleed through.
+    // "文字都飘起来了" was exactly that, so geometry is the assertion that matters.
+    const bubble = await page.evaluate(() => {
+      const pop = document.getElementById('helpMidi');
+      const box = pop.getBoundingClientRect();
+      const hint = document.querySelector('#importEmpty .drop-hint').getBoundingClientRect();
+      const title = document.querySelector('#importEmpty .drop-title').getBoundingClientRect();
+      const style = getComputedStyle(pop);
+      // Written without a pattern: an rgba() background is what let the hint read straight
+      // through the panel, and that depends only on the alpha channel.
+      const alpha = (() => {
+        const value = style.backgroundColor;
+        if (!value.startsWith('rgba')) return 1;
+        return Number(value.slice(value.lastIndexOf(',') + 1, -1).trim());
+      })();
+      return {
+        position: style.position,
+        alpha,
+        shadow: style.boxShadow,
+        clearsHint: box.top >= hint.bottom - 0.5,
+        belowTitle: box.top >= title.bottom - 0.5,
+        onScreen: box.left >= -1 && box.right <= window.innerWidth + 1,
+      };
+    });
+    // In flow the panel is a child of a 220px centred box, and its translucent white let the
+    // drop hint read through it - reported as "文字都飘起来了".
+    if (bubble.position !== 'absolute') {
+      problems.push(`the MIDI help bubble takes part in the layout (${bubble.position})`);
+    }
+    if (bubble.alpha !== 1) problems.push(`the MIDI help bubble is translucent (${bubble.alpha})`);
+    if (bubble.shadow === 'none') problems.push('the MIDI help bubble has no shadow to lift it off the card');
+    if (!bubble.clearsHint) problems.push('the MIDI help bubble covers the hint it belongs to');
+    if (!bubble.belowTitle) problems.push('the MIDI help bubble lands on the drop title');
+    if (!bubble.onScreen) problems.push('the MIDI help bubble runs off the window');
+    await shot('2-help-bubble');
+    await page.keyboard.press('Escape');
+    if (await page.locator('#helpMidi').isVisible()) problems.push('the MIDI help bubble ignores Escape');
+
     await page.evaluate(() => {
       const data = new DataTransfer();
       data.items.add(
@@ -191,6 +281,22 @@ function buildSource(directory) {
         .dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: data }));
     });
     await page.waitForFunction(() => document.getElementById('importError').style.display === 'flex');
+
+    // A failed import used to print the library's own words ("Bad MIDI file. Expected
+    // 'MHdr', got:"). The visible line is now a guess in plain Chinese and the raw text
+    // lives behind a collapsed 技术细节 summary.
+    const failure = await page.evaluate(() => ({
+      detail: document.getElementById('importErrDetail').textContent,
+      technical: document.getElementById('importErrTech').textContent,
+      open: document.querySelector('#importError details.error-tech').open,
+    }));
+    if (!failure.detail.trim()) problems.push('the import error shows no explanation at all');
+    if (/MHdr|MThd|Bad MIDI|TypeError|Error:/.test(failure.detail)) {
+      problems.push(`the import error leaks library wording: ${failure.detail}`);
+    }
+    if (!failure.technical.trim()) problems.push('the import error hides the underlying reason entirely');
+    if (failure.open) problems.push('the import error shows the technical detail expanded');
+
     await page.locator('#btnResetImport').click();
     await page.locator('#importEmpty').click();
     await page.waitForFunction(() => document.getElementById('importLoaded').style.display === 'flex');
@@ -204,6 +310,62 @@ function buildSource(directory) {
       problems.push(`imported note count shows ${shown.notes}`);
     }
 
+    // Tempo arrives as 60000000 / microsecondsPerBeat, so an exact 70 BPM reads as
+    // 70.000315... - digit noise that made the readout look untrustworthy.
+    const shownBpm = await page.locator('#valBpm').textContent();
+    if (!/^\d+ BPM$/.test(shownBpm.trim())) problems.push(`BPM is not a whole number: ${shownBpm}`);
+
+    // "MThd 校验通过 · 标准多轨序列" was jargon in a fixed sentence, also wrong for a
+    // single-track file. The subtitle now states the one fact a reader needs.
+    const subtitle = await page.locator('#midiFileSub').textContent();
+    if (!subtitle.includes('校验通过') || !subtitle.includes(String(result.tracks.length))) {
+      problems.push(`the import subtitle does not state the track count: ${subtitle}`);
+    }
+
+    // Importing a one-track file must take the cards away that cannot mean anything with one
+    // track. They used to stay, because only the controls that change the options refreshed
+    // the summary - and picking a file is not one of them.
+    await page.evaluate(() => {
+      window.__active = window.__single;
+    });
+    await page.locator('#btnChangeFile').click();
+    await page.waitForFunction(
+      () =>
+        document.getElementById('importLoaded').style.display === 'flex' &&
+        document.getElementById('valTracks').textContent === '1',
+    );
+    const solo = await page.evaluate(() => ({
+      tracks: document.getElementById('valTracks').textContent,
+      hidden: ['leadPanel', 'centerLeadCard', 'laneShareCard', 'laneRideCard', 'annotateCard'].filter(
+        (id) => document.getElementById(id)?.hidden !== false,
+      ),
+      mergeBoxes: [...document.querySelectorAll('.opt-box[data-cfg-group="merge"]')].filter(
+        (box) => box.hidden !== true,
+      ).length,
+    }));
+    if (solo.tracks !== '1') problems.push(`the one-track file reports ${solo.tracks} tracks`);
+    if (solo.hidden.length !== 4 || solo.hidden.includes('annotateCard')) {
+      problems.push(`one-track cards still on screen: ${solo.hidden.join(', ') || 'none hidden'}`);
+    }
+    if (solo.mergeBoxes !== 0) problems.push('the merge switch is still offered for a one-track file');
+    await shot('2-import-single');
+
+    // Back to the three-track file for the rest of the walk.
+    await page.evaluate(() => {
+      window.__active = window.__main;
+    });
+    await page.locator('#btnChangeFile').click();
+    await page.waitForFunction(
+      (count) =>
+        document.getElementById('importLoaded').style.display === 'flex' &&
+        document.getElementById('valTracks').textContent === String(count),
+      result.tracks.length,
+    );
+    const restoredTracks = await page.locator('#valTracks').textContent();
+    if (restoredTracks !== String(result.tracks.length)) {
+      problems.push(`re-importing the fixture reports ${restoredTracks} tracks`);
+    }
+
     await page.locator('#btnStep2Next').click();
     await page.waitForTimeout(200);
     const trackRows = await page.locator('[data-track-idx]').count();
@@ -214,18 +376,21 @@ function buildSource(directory) {
     if (!firstTrackText.includes('识别：')) {
       problems.push('track rows do not show the detected instrument');
     }
-    const leadOptions = await page.locator('#leadTrackSelect option').count();
+    const leadOptions = await page.locator('#leadTrackList .lead-row').count();
     if (leadOptions !== result.tracks.length) {
-      problems.push(`lead selector has ${leadOptions} options, expected ${result.tracks.length}`);
+      problems.push(`lead selector has ${leadOptions} rows, expected ${result.tracks.length}`);
     }
+    // "轨 7" told nobody anything: the rows name the instrument and the track's own name.
+    const firstLeadRow = await page.locator('#leadTrackList .lead-row').first().textContent();
+    if (!firstLeadRow.includes('：')) problems.push(`lead rows do not name the track: ${firstLeadRow}`);
     const leadReason = await page.locator('#leadReason').textContent();
-    if (!leadReason || !leadReason.includes('轨 ')) problems.push('lead recommendation has no reason');
+    if (!leadReason || !leadReason.includes('自动推荐')) problems.push('lead recommendation has no reason');
     // The card used to be a flex row whose label collapsed to one character per line while
     // the select (width:100% from .input-clean) pushed out past the card. Geometry is the
     // only thing that proves the fix: the text was still there, just unreadable.
     const leadBox = await page.evaluate(() => {
       const panel = document.getElementById('leadPanel').getBoundingClientRect();
-      const select = document.getElementById('leadTrackSelect').getBoundingClientRect();
+      const select = document.getElementById('leadTrackList').getBoundingClientRect();
       return {
         inside: select.left >= panel.left - 0.5 && select.right <= panel.right + 0.5,
         reason: document.getElementById('leadReason').getBoundingClientRect().width,
@@ -233,9 +398,37 @@ function buildSource(directory) {
     });
     if (!leadBox.inside) problems.push('the lead selector overflows its card');
     if (leadBox.reason < 200) problems.push(`the lead reason collapsed to ${leadBox.reason}px wide`);
-    await page.locator('#leadTrackSelect').selectOption({ index: leadOptions > 1 ? 1 : 0 });
-    const manualLead = await page.locator('#leadReason').textContent();
-    if (!manualLead.includes('手动指定')) problems.push('lead selector did not record a manual choice');
+    await page
+      .locator('#leadTrackList .lead-row')
+      .nth(leadOptions > 1 ? 1 : 0)
+      .click();
+    const manualLead = await page.locator('#leadBadge').textContent();
+    if (!manualLead.includes('手动指定')) problems.push('lead list did not record a manual choice');
+
+    // One track has nothing to order, merge with or ride on, so those cards step aside. Every
+    // row but the first is unticked, checked, then put back.
+    for (let index = 1; index < trackRows; index += 1) {
+      await page.locator('[data-track-idx]').nth(index).click();
+    }
+    // The property, not visibility: those cards live on later steps, which are not on screen
+    // now, so `isVisible` would answer "no" no matter what the summary decided.
+    const hiddenCards = () =>
+      page.evaluate(() =>
+        ['leadPanel', 'centerLeadCard', 'laneShareCard', 'laneRideCard', 'annotateCard'].filter(
+          (id) => document.getElementById(id)?.hidden !== false,
+        ),
+      );
+    const hiddenForOne = await hiddenCards();
+    if (hiddenForOne.length < 4) {
+      problems.push(`single-track cards still shown: ${hiddenForOne.join(', ') || 'none hidden'}`);
+    }
+    for (let index = 1; index < trackRows; index += 1) {
+      await page.locator('[data-track-idx]').nth(index).click();
+    }
+    const hiddenAfter = await hiddenCards();
+    if (hiddenAfter.includes('laneShareCard') || hiddenAfter.includes('leadPanel')) {
+      problems.push(`cards stayed hidden after the tracks were restored: ${hiddenAfter.join(', ')}`);
+    }
     await shot('3-tracks');
 
     await page.locator('#btnStep3Next').click();
@@ -255,9 +448,9 @@ function buildSource(directory) {
     if (!smartPitch.includes('原版乐器')) {
       problems.push(`the applied recommendation is not shown in the summary: ${smartPitch}`);
     }
-    const smartPack = await page.locator('#packDescription').textContent();
-    if (!smartPack.includes('替换成钢琴')) {
-      problems.push(`a multi-instrument song still recommends the pack: ${smartPack}`);
+    // A pack this song cannot use is not an option: the card is removed, not greyed.
+    if (await page.locator('#packCard').isVisible()) {
+      problems.push('the pack card is shown for a song that does not need the pack');
     }
     await shot('4-config-smart');
 
@@ -273,9 +466,22 @@ function buildSource(directory) {
     }
     const manualBadge = await appliedBadge();
     if (!manualBadge.includes('手动')) problems.push(`manual choice left the badge at ${manualBadge}`);
+    if (!(await page.locator('#packCard').isVisible())) {
+      problems.push('extended mode does not offer the pack');
+    }
     const extendedPack = await page.locator('#packDescription').textContent();
     if (!extendedPack.includes('统一扩展竖琴')) {
       problems.push(`extended mode does not recommend the pack: ${extendedPack}`);
+    }
+    // The save button lives in the export step, which is off screen here, so the click is
+    // dispatched directly - it still goes through the real listener and the real preload.
+    await page.evaluate(() => document.getElementById('btnSavePack').click());
+    const packCalls = await page.evaluate(() => window.__calls);
+    if (!packCalls.includes('saveResourcePack')) {
+      problems.push('保存资源包 did not call saveResourcePack');
+    }
+    if (!packCalls.some((call) => call.startsWith('reveal '))) {
+      problems.push('保存资源包 did not reveal the saved file');
     }
     if (await page.locator('#smartSelectionInput').count()) {
       problems.push('the smart checkbox is back; the recommendation is an action now');
@@ -292,6 +498,30 @@ function buildSource(directory) {
     }
     // Developer mode also measures the layout behind the options on this step.
     await page.locator('#btnOpenSettings').click();
+    // The repository line is the long one. Without a shrinkable text column it pushed the
+    // 打开 button past the dialog's padding, where it was clipped out of the rounded box.
+    const dialogBox = await page.evaluate(() => {
+      const dialog = document.querySelector('.settings-dialog');
+      const box = dialog.getBoundingClientRect();
+      return {
+        scrolls: dialog.scrollWidth > dialog.clientWidth + 1,
+        button: document.getElementById('btnOpenRepo').getBoundingClientRect().right,
+        edge: box.right - 8,
+        repoInside: (() => {
+          const repo = document.getElementById('aboutRepo').getBoundingClientRect();
+          const button = document.getElementById('btnOpenRepo').getBoundingClientRect();
+          return repo.right <= button.left + 0.5;
+        })(),
+      };
+    });
+    if (dialogBox.scrolls) problems.push('the settings dialog scrolls sideways');
+    if (dialogBox.button > dialogBox.edge + 0.5) {
+      problems.push(
+        `the settings dialog clips the repository button (${Math.round(dialogBox.button)} > ${Math.round(dialogBox.edge)})`,
+      );
+    }
+    if (!dialogBox.repoInside) problems.push('the repository URL runs into the repository button');
+    await shot('4-settings');
     await page.locator('#btnDevMode').click();
     await page.locator('#btnCloseSettings').click();
     await page.locator('#btnDevClose').click();
@@ -332,6 +562,13 @@ function buildSource(directory) {
     if (!(await appliedBadge()).includes('手动')) {
       problems.push('a manual merge did not switch the badge to 手动');
     }
+    // The folded title states the merge mode and nothing else. It used to append the author
+    // and four switch states into one run-on sentence, which is what got reported as
+    // "上面的小字". Only the merge boxes may rewrite it now.
+    const miscTitle = () => page.locator('#sumMisc').textContent();
+    if ((await miscTitle()).includes('·')) {
+      problems.push(`the misc fold title is a run-on sentence: ${await miscTitle()}`);
+    }
 
     // A forced merge leaves one spine, so borrowing and riding have nothing to act on: the
     // cards step aside instead of sitting there inert.
@@ -358,17 +595,13 @@ function buildSource(directory) {
     if ((await shareSwitch.getAttribute('aria-checked')) !== 'true') {
       problems.push('lane sharing is off by default');
     }
-    const shareOnSummary = await page.locator('#sumMisc').textContent();
-    if (!shareOnSummary.includes('借道 <50 音')) {
-      problems.push(`sharing summary is missing while sharing is on: ${shareOnSummary}`);
-    }
+    const titleWithSharing = await miscTitle();
     await shareSwitch.click();
     if ((await shareSwitch.getAttribute('aria-checked')) !== 'false') {
       problems.push('the sharing switch did not turn off');
     }
-    const shareOffSummary = await page.locator('#sumMisc').textContent();
-    if (!shareOffSummary.includes('不借道')) {
-      problems.push(`sharing summary did not follow the switch: ${shareOffSummary}`);
+    if ((await miscTitle()) !== titleWithSharing) {
+      problems.push(`a switch rewrote the misc fold title: ${await miscTitle()}`);
     }
     if (!(await page.locator('#laneShareSparse').isDisabled())) {
       problems.push('the sparse threshold stays editable while sharing is off');
@@ -377,12 +610,11 @@ function buildSource(directory) {
     if (await page.locator('#laneShareSparse').isDisabled()) {
       problems.push('the sparse threshold stays disabled after sharing is turned back on');
     }
-    // The threshold is the definition of "sparse", so it has to reach the summary.
+    // The threshold defines "sparse"; it belongs to its own input, not to the folded title.
     await page.locator('#laneShareSparse').fill('24');
     await page.locator('#laneShareSparse').press('Tab');
-    const shareThresholdSummary = await page.locator('#sumMisc').textContent();
-    if (!shareThresholdSummary.includes('借道 <24 音')) {
-      problems.push(`the sparse threshold did not reach the summary: ${shareThresholdSummary}`);
+    if ((await miscTitle()) !== titleWithSharing) {
+      problems.push(`the sparse threshold rewrote the fold title: ${await miscTitle()}`);
     }
     if ((await page.locator('#laneShareSparse').inputValue()) !== '24') {
       problems.push('the sparse threshold input lost the typed value');
@@ -416,17 +648,12 @@ function buildSource(directory) {
     if ((await centerSwitch.getAttribute('aria-checked')) !== 'true') {
       problems.push('lead centring is off by default');
     }
-    const centerOnSummary = await page.locator('#sumMisc').textContent();
-    if (!centerOnSummary.includes('按主轨排序')) {
-      problems.push(`centring summary is missing while centring is on: ${centerOnSummary}`);
-    }
     await centerSwitch.click();
     if ((await centerSwitch.getAttribute('aria-checked')) !== 'false') {
       problems.push('the centring switch did not turn off');
     }
-    const centerOffSummary = await page.locator('#sumMisc').textContent();
-    if (!centerOffSummary.includes('按文件顺序')) {
-      problems.push(`centring summary did not follow the switch: ${centerOffSummary}`);
+    if ((await miscTitle()) !== titleWithSharing) {
+      problems.push(`the centring switch rewrote the fold title: ${await miscTitle()}`);
     }
     await centerSwitch.click();
     const centerGeometry = await page.evaluate(() => {
@@ -455,17 +682,12 @@ function buildSource(directory) {
     if ((await rideSwitch.getAttribute('aria-checked')) !== 'true') {
       problems.push('lane riding is off by default');
     }
-    const rideOnSummary = await page.locator('#sumMisc').textContent();
-    if (!rideOnSummary.includes('轨道取电')) {
-      problems.push(`riding summary is missing while riding is on: ${rideOnSummary}`);
-    }
     await rideSwitch.click();
     if ((await rideSwitch.getAttribute('aria-checked')) !== 'false') {
       problems.push('the riding switch did not turn off');
     }
-    const rideOffSummary = await page.locator('#sumMisc').textContent();
-    if (!rideOffSummary.includes('不取电')) {
-      problems.push(`riding summary did not follow the switch: ${rideOffSummary}`);
+    if ((await miscTitle()) !== titleWithSharing) {
+      problems.push(`the riding switch rewrote the fold title: ${await miscTitle()}`);
     }
     await rideSwitch.click();
     const rideGeometry = await page.evaluate(() => {
@@ -492,17 +714,12 @@ function buildSource(directory) {
     if ((await annotateSwitch.getAttribute('aria-checked')) !== 'true') {
       problems.push('lane annotation is off by default');
     }
-    const annotateOnSummary = await page.locator('#sumMisc').textContent();
-    if (!annotateOnSummary.includes('注释牌')) {
-      problems.push(`annotation summary is missing while annotation is on: ${annotateOnSummary}`);
-    }
     await annotateSwitch.click();
     if ((await annotateSwitch.getAttribute('aria-checked')) !== 'false') {
       problems.push('the annotation switch did not turn off');
     }
-    const annotateOffSummary = await page.locator('#sumMisc').textContent();
-    if (!annotateOffSummary.includes('无注释牌')) {
-      problems.push(`annotation summary did not follow the switch: ${annotateOffSummary}`);
+    if ((await miscTitle()) !== titleWithSharing) {
+      problems.push(`the annotation switch rewrote the fold title: ${await miscTitle()}`);
     }
     // Signs never change the circuit, so switching them must not touch the routing state.
     const badgeAfterAnnotate = await page.locator('#smartBadge').textContent();
@@ -513,9 +730,14 @@ function buildSource(directory) {
     }
     await annotateSwitch.click();
     await page.locator('#authorInput').fill('UI check');
-    const authorSummary = await page.locator('#sumMisc').textContent();
-    if (!authorSummary.includes('UI check')) {
-      problems.push(`author summary did not update: ${authorSummary}`);
+    // The fold title states one thing: how the tracks are merged. It used to append the
+    // author and four other switch states into a sentence nobody read.
+    const miscAfterAuthor = await page.locator('#sumMisc').textContent();
+    if (miscAfterAuthor.includes('UI check') || miscAfterAuthor.includes('作者')) {
+      problems.push(`the misc summary still repeats the author line: ${miscAfterAuthor}`);
+    }
+    if (!miscAfterAuthor.includes('每条音轨各自一条主线')) {
+      problems.push(`the misc summary lost the merge mode: ${miscAfterAuthor}`);
     }
     await shot('4-config');
 
@@ -558,14 +780,10 @@ function buildSource(directory) {
       problems.push('step 5 keeps 开始生成投影 disabled after a location is chosen');
     }
 
-    // The resource pack is offered here, at the export step, and has to reach the API.
-    await page.locator('#btnSavePack').click();
-    const calls = await page.evaluate(() => window.__calls);
-    if (!calls.includes('saveResourcePack')) {
-      problems.push('保存资源包 did not call saveResourcePack');
-    }
-    if (!calls.some((call) => call.startsWith('reveal '))) {
-      problems.push('保存资源包 did not reveal the saved file');
+    // This song came back from smart selection in the original-instrument mode, which has no
+    // use for the pack: the card is gone from the export step rather than sitting there.
+    if (await page.locator('#packCard').isVisible()) {
+      problems.push('the export step offers the pack for a song that does not need it');
     }
     await shot('5-output');
 
@@ -617,6 +835,62 @@ function buildSource(directory) {
     await page.waitForTimeout(260);
     const panAfter = await page.evaluate(() => document.getElementById('previewHint').textContent);
     if (panBefore === panAfter) problems.push('the wheel did not pan the preview');
+
+    // Dragging has to move the picture by the distance dragged. The offset used to be
+    // rounded to whole cells, so a drag shorter than half a cell moved nothing and the two
+    // axes rounded separately, which is what made a diagonal drag look axis-locked.
+    // A short window is used for this: the fixture is twelve rows tall, and a viewport that
+    // already shows all twelve cannot pan vertically no matter how the drag is handled.
+    await page.setViewportSize({ width: 1180, height: 560 });
+    await page.waitForTimeout(400);
+    await page.locator('#canvasWrap').scrollIntoViewIfNeeded();
+    await page.waitForTimeout(200);
+    const beforeDrag = await page.evaluate(() => window.__preview.diagnostics().view);
+    const box = await page.locator('#canvasWrap').boundingBox();
+    const startX = Math.round(box.x + box.width / 2);
+    const startY = Math.round(box.y + box.height / 2);
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX - 7, startY - 7, { steps: 4 });
+    await page.mouse.up();
+    await page.waitForTimeout(180);
+    const afterDrag = await page.evaluate(() => window.__preview.diagnostics().view);
+    const movedX = afterDrag.x0 - beforeDrag.x0;
+    const movedZ = afterDrag.z0 - beforeDrag.z0;
+    if (!(movedX > 0) || !(movedZ > 0)) {
+      problems.push(`a diagonal drag moved (${movedX}, ${movedZ}); both axes have to follow`);
+    }
+    if (Math.abs(movedX - 0.25) > 0.03) {
+      problems.push(`a 7 px drag moved ${movedX.toFixed(3)} cells; it has to follow the pointer`);
+    }
+
+    // The point of drawing into tiles is that panning reuses them. A whole redraw per frame
+    // is what made dragging heavy, so a short pan may not build new art.
+    const buildsBefore = await page.evaluate(() => window.__preview.diagnostics().builds);
+    for (let step = 0; step < 4; step += 1) {
+      await page.mouse.move(startX, startY);
+      await page.mouse.down();
+      await page.mouse.move(startX - 6, startY, { steps: 3 });
+      await page.mouse.up();
+      await page.waitForTimeout(120);
+    }
+    const buildsAfter = await page.evaluate(() => window.__preview.diagnostics().builds);
+    if (buildsAfter > buildsBefore + 2) {
+      problems.push(`a short pan rebuilt tiles (${buildsBefore} -> ${buildsAfter}); the cache is not reused`);
+    }
+    // And a jump far enough to leave the cached tiles does have to build the new ones,
+    // otherwise the counter could be stuck at zero and prove nothing.
+    await page.locator('#canvasWrap').hover();
+    await page.mouse.wheel(0, 900);
+    await page.waitForTimeout(240);
+    const buildsJump = await page.evaluate(() => window.__preview.diagnostics().builds);
+    if (buildsJump <= buildsAfter) {
+      problems.push(`a 900 px pan built no tiles (${buildsAfter} -> ${buildsJump}); the counter is not real`);
+    }
+    await page.setViewportSize({ width: 1440, height: 940 });
+    await page.waitForTimeout(400);
+    await shot('6-canvas-drag');
+
     // A chip per track, and it has to actually reach the row: dragging to find a track is
     // what this replaced.
     const chips = await page.locator('#previewTrackChips .pill-tag').count();
@@ -758,6 +1032,8 @@ function buildSource(directory) {
     await shot('7-done-narrow');
 
     console.log(problems.length ? `PROBLEMS:\n${problems.join('\n')}` : 'no console errors, no overflow');
+    // A list of problems that still exits 0 is a list nobody reads: the gate has to fail.
+    if (problems.length) process.exitCode = 1;
   } finally {
     site.close();
     await browser.close();
