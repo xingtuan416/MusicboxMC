@@ -6,6 +6,10 @@
  * budget any more, which is what used to cap long songs at two or three pixels per cell
  * and put everything past Chromium's dimension limit out of reach.
  *
+ * The view offset is fractional: a drag of a few pixels moves the drawing by a few
+ * pixels instead of being rounded away, and the renderer composites cached tiles at that
+ * offset rather than redrawing every cell.
+ *
  * The detailed cell art has two levels. Its parts used to be sized with
  * `Math.max(minimum, CELL * fraction)` alone, and the minimums were picked for the
  * default 38 px cell, so at 8-24 px a 22 px delay badge and two terminal dots 8 px in
@@ -87,9 +91,68 @@ export function clampView({ x, z }, view, { cols, rows }) {
   const limitX = Math.max(0, Math.ceil(x) - Math.max(1, cols));
   const limitZ = Math.max(0, Math.ceil(z) - Math.max(1, rows));
   return {
-    x0: Math.min(Math.max(0, Math.round(view.x0)), limitX),
-    z0: Math.min(Math.max(0, Math.round(view.z0)), limitZ),
+    // The offset stays fractional. Rounding it here meant a drag shorter than half a
+    // cell moved nothing and a longer one jumped a whole cell, on each axis
+    // separately, which is what made dragging look laggy and axis-locked.
+    x0: Math.min(Math.max(0, view.x0), limitX),
+    z0: Math.min(Math.max(0, view.z0), limitZ),
   };
+}
+
+/** Size of one cached tile, in CSS pixels. */
+export const TILE_SIZE = 384;
+
+/** How many cells a tile spans on one axis at this zoom. */
+export function tileCells(cell) {
+  return Math.max(1, Math.ceil(TILE_SIZE / cell));
+}
+
+/**
+ * The cells that can appear on screen, as a half-open range.
+ *
+ * The left and bottom edges are fractional, so the first cell is partly scrolled off and
+ * the range has to start one cell before the rounded offset and cover one extra cell at
+ * the end; the grid bounds still win.
+ */
+export function cellRangeForView({ view, width, height, cell, grid }) {
+  const across = Math.ceil((width - GUTTER) / cell) + 1;
+  const down = Math.ceil((height - RULER) / cell) + 1;
+  const gx0 = Math.max(0, Math.min(grid.x, Math.floor(view.x0)));
+  const gz0 = Math.max(0, Math.min(grid.z, Math.floor(view.z0)));
+  return {
+    gx0,
+    gz0,
+    gx1: Math.min(grid.x, Math.ceil(view.x0) + across),
+    gz1: Math.min(grid.z, Math.ceil(view.z0) + down),
+  };
+}
+
+/**
+ * The tiles a viewport needs, anchored to whole multiples of the tile size in cells.
+ *
+ * Anchoring to the cell grid rather than to the viewport is what makes the cache work:
+ * panning changes which tiles are visible and where they land, but never what is inside
+ * a tile, so a drag only builds the tiles that scroll in.
+ */
+export function tilesForView({ view, width, height, cell, grid }) {
+  const span = tileCells(cell);
+  const { gx0, gz0, gx1, gz1 } = cellRangeForView({ view, width, height, cell, grid });
+  const tiles = [];
+  for (let tz = Math.floor(gz0 / span); tz <= Math.floor(Math.max(gz0, gz1 - 1) / span); tz += 1) {
+    for (let tx = Math.floor(gx0 / span); tx <= Math.floor(Math.max(gx0, gx1 - 1) / span); tx += 1) {
+      const x0 = tx * span;
+      const z0 = tz * span;
+      tiles.push({
+        tx,
+        tz,
+        x0,
+        z0,
+        x1: Math.min(grid.x, x0 + span),
+        z1: Math.min(grid.z, z0 + span),
+      });
+    }
+  }
+  return { span, tiles };
 }
 
 /**
