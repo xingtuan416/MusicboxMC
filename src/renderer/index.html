@@ -626,8 +626,93 @@
       }
 
       .drop-hint {
+        position: relative;
         font-size: 13.5px;
         color: var(--ink-secondary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+
+      /* A round question mark instead of three paragraphs in the drop zone: the format
+         details only matter to the one person who is unsure, and everyone else reads them
+         as noise. */
+      .help-dot {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        padding: 0;
+        border-radius: 50%;
+        border: 1px solid rgba(20, 20, 19, 0.28);
+        background: transparent;
+        color: var(--ink-secondary);
+        font: inherit;
+        font-size: 11.5px;
+        font-weight: 700;
+        line-height: 1;
+        cursor: pointer;
+      }
+
+      .help-dot:hover,
+      .help-dot[aria-expanded='true'] {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      /* Floats above the card instead of taking part in the layout: the drop zone is a
+         centred 220px box, so an in-flow panel pushed the title and the hint up out of it
+         and left them showing through the panel. */
+      .help-pop {
+        position: absolute;
+        top: calc(100% + 10px);
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 40;
+        width: 520px;
+        max-width: 74vw;
+        padding: 14px 16px;
+        border-radius: 14px;
+        border: 1px solid rgba(20, 20, 19, 0.12);
+        background: #fdfcf8;
+        box-shadow: 0 16px 40px rgba(20, 20, 19, 0.18);
+        text-align: left;
+        font-size: 12.5px;
+        line-height: 1.7;
+        color: var(--ink-secondary);
+      }
+
+      .help-pop p {
+        margin: 0;
+      }
+
+      .help-pop p + p {
+        margin-top: 8px;
+      }
+
+      .error-tech {
+        font-size: 12.5px;
+        color: var(--ink-secondary);
+      }
+
+      .error-tech summary {
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .error-tech pre {
+        margin: 8px 0 0;
+        padding: 10px 12px;
+        max-height: 160px;
+        overflow: auto;
+        border-radius: 10px;
+        background: rgba(20, 20, 19, 0.06);
+        font-size: 11.5px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        word-break: break-word;
       }
 
       .state-box {
@@ -841,12 +926,64 @@
         color: var(--ink-muted);
       }
 
-      .lead-select {
+      /* The picker is a list, not a <select>: every row can carry the instrument, the
+         track's own name and a warning tag, which an option cannot. Rows are ordered by
+         how loud the track is, so the first one is the recommendation. */
+      .lead-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        max-height: 244px;
+        overflow-y: auto;
+      }
+
+      .lead-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
         width: 100%;
         min-width: 0;
-        height: 44px;
-        flex: none;
+        padding: 9px 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(20, 20, 19, 0.12);
+        background: rgba(255, 255, 255, 0.72);
+        color: var(--ink);
+        font: inherit;
+        font-size: 13px;
+        text-align: left;
+        cursor: pointer;
+        transition:
+          border-color 0.15s ease,
+          background 0.15s ease;
+      }
+
+      .lead-row:hover {
+        border-color: rgba(20, 20, 19, 0.3);
+      }
+
+      .lead-row.selected {
+        border-color: var(--accent);
+        background: rgba(52, 120, 246, 0.08);
+        box-shadow: inset 0 0 0 1px var(--accent);
+      }
+
+      /* Drums can still be picked, but the row says what it is. */
+      .lead-row.is-dim .lead-row-name {
+        color: var(--ink-secondary);
+      }
+
+      .lead-row-name {
+        overflow: hidden;
         text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 700;
+      }
+
+      .lead-row-tag {
+        flex: none;
+        font-size: 11.5px;
+        color: var(--ink-muted);
       }
 
       .smart-actions {
@@ -1051,10 +1188,11 @@
         background: rgba(255, 255, 255, 0.6);
       }
 
-      /* A forced merge leaves one spine, so the borrowing and riding cards are removed from
-         the grid entirely; display: grid would otherwise override the hidden attribute. */
-      .switch-card[hidden] {
-        display: none;
+      /* Cards that step aside (a forced merge, a single track, command playback) set the
+         hidden attribute. Every one of them sets its own display, which would otherwise win
+         over the attribute, so the rule lives here once instead of per card. */
+      [hidden] {
+        display: none !important;
       }
 
       .switch-copy {
@@ -1280,8 +1418,23 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: 16px;
         padding: 12px 0;
         border-bottom: 1px solid rgba(20, 20, 19, 0.07);
+      }
+
+      /* The repository row is the long one: without a shrinkable text column the button
+         was pushed past the dialog's padding and clipped. */
+      .setting-row > div {
+        min-width: 0;
+      }
+
+      .setting-row > :last-child {
+        flex: 0 0 auto;
+      }
+
+      #aboutRepo {
+        overflow-wrap: anywhere;
       }
 
       /* ==========================================================================
@@ -2057,14 +2210,36 @@
                 <polyline points="17 8 12 3 7 8" />
                 <line x1="12" y1="3" x2="12" y2="15" />
               </svg>
-              <div class="drop-title">拖拽或点击选择 .mid 文件</div>
-              <div class="drop-hint">支持标准 Format 0 / Format 1 MIDI 乐谱</div>
+              <div class="drop-title">选择导入 MIDI 文件</div>
+              <div class="drop-hint">
+                <span>请勿导入由音频转换来的 .mid 文件</span>
+                <button
+                  type="button"
+                  class="help-dot"
+                  id="btnHelpMidi"
+                  aria-label="什么样的文件可以导入"
+                  aria-expanded="false"
+                >
+                  ?
+                </button>
+                <div class="help-pop" id="helpMidi" hidden>
+                  <p>
+                    MIDI 是乐谱：它记录“第几拍按下哪个音、多大力”，不是声音本身。所以同一个 MIDI
+                    可以换成任何乐器来演奏，投影也能精确还原时间。
+                  </p>
+                  <p>
+                    音频（mp3、wav、flac 等）是声音本身，没有音符信息。有些工具能把音频“转成
+                    MIDI”，但那是猜出来的，节拍、音高和时值都会漂；本软件按乐谱逐音摆放红石，猜错的部分会原样变成错音。
+                  </p>
+                  <p>标准 MIDI 有两种排法（Format 0 单轨、Format 1 多轨），两种都能导入。</p>
+                </div>
+              </div>
             </div>
 
             <!-- Parsing. -->
             <div id="importLoading" class="state-box" style="display: none">
-              <div style="font-size: 18px; font-weight: 700">正在解析音轨与时间轴签名...</div>
-              <div style="font-size: 14px; color: var(--ink-secondary)">校验 MThd 头部块与拍速映射</div>
+              <div style="font-size: 18px; font-weight: 700">正在读取乐谱…</div>
+              <div style="font-size: 14px; color: var(--ink-secondary)">检查文件格式并统计音轨与音符</div>
             </div>
 
             <!-- Failure. -->
@@ -2073,6 +2248,10 @@
                 文件读不了
               </div>
               <div id="importErrDetail" style="font-size: 14px; color: var(--ink-secondary)"></div>
+              <details class="error-tech">
+                <summary>技术细节</summary>
+                <pre id="importErrTech"></pre>
+              </details>
               <div>
                 <button
                   type="button"
@@ -2090,8 +2269,8 @@
               <div style="display: flex; justify-content: space-between; align-items: center">
                 <div>
                   <div id="midiFileTitle" style="font-size: 20px; font-weight: 800">C418 - Sweden.mid</div>
-                  <div style="font-size: 13px; color: var(--ink-secondary); margin-top: 2px">
-                    MThd 校验通过 · 标准多轨序列
+                  <div id="midiFileSub" style="font-size: 13px; color: var(--ink-secondary); margin-top: 2px">
+                    校验通过
                   </div>
                 </div>
                 <button
@@ -2160,13 +2339,18 @@
 
             <div class="smart-card" id="leadPanel">
               <div class="smart-card-head">
-                <span class="smart-title">主音轨 · 听感中心</span>
+                <span class="smart-title">主音轨 · 站在哪一条上</span>
                 <span class="smart-badge" id="leadBadge">自动推荐</span>
               </div>
-              <p class="smart-note" id="leadReason">根据 MIDI 力度、活跃时长和单音旋律自动推荐。</p>
-              <select id="leadTrackSelect" class="input-clean lead-select" aria-label="主音轨"></select>
+              <p class="smart-note" id="leadReason">按力度自动推荐。</p>
+              <div
+                id="leadTrackList"
+                class="lead-list"
+                role="listbox"
+                aria-label="主音轨（最响的排在最前）"
+              ></div>
               <p class="smart-foot" id="leadFoot">
-                玩家默认站在主音轨上；力度只决定选哪条轨，红石音符盒的音量固定，听感差异来自距离。
+                选整首曲子里最响、最突出的那条轨——比如钢琴曲里的钢琴，而不是伴奏。玩家会站在主音轨上，其余轨道按远近排在两侧；离得越远听起来越轻，所以主音轨决定了全曲的“中心”在哪。
               </p>
             </div>
 
@@ -2345,7 +2529,7 @@
                 <button type="button" class="fold-trigger" data-fold="fold-misc">
                   <div>
                     <div class="fold-title">其它</div>
-                    <div class="fold-val" id="sumMisc">每条音轨各自一条主线 · 作者 MusicboxMC</div>
+                    <div class="fold-val" id="sumMisc">不合并</div>
                   </div>
                   <svg
                     width="16"
@@ -2441,12 +2625,11 @@
                     </div>
                     <p class="switch-hint" id="laneRideHint" hidden></p>
                   </div>
-                  <div class="switch-card">
+                  <div class="switch-card" id="annotateCard">
                     <div class="switch-copy">
                       <div class="switch-title">投影注释</div>
                       <div class="switch-desc">
-                        每条轨道前立一块牌，写明主音轨、副轨与它的力度：金色底座是主音轨，铜色是副轨，牌面「站这里」就是玩家该站的位置。全曲合并成一条主线时不再宣称主音轨，牌上改标「全曲主线」并提示站到
-                        主线那一行。注释是独立区域，不想要可以在投影里单独删掉。
+                        每条轨道前立一块牌，写清角色与力度：金色底座是主音轨，铜色是副轨。注释是独立区域，可以在投影里单独删掉。
                       </div>
                     </div>
                     <div class="switch-side">
@@ -2506,7 +2689,7 @@
                       for="authorInput"
                       style="font-size: 13px; font-weight: 700; color: var(--ink-secondary)"
                     >
-                      作者（写进投影元数据，Litematica 里会显示）
+                      作者
                     </label>
                     <input id="authorInput" class="input-clean" type="text" value="MusicboxMC" />
                   </div>
@@ -2523,7 +2706,7 @@
                       for="baseTpsInput"
                       style="font-size: 13px; font-weight: 700; color: var(--ink-secondary)"
                     >
-                      基准 TPS（每秒游戏刻数；只有服务端改过才需要动）
+                      基准 TPS
                     </label>
                     <input
                       id="baseTpsInput"
@@ -2661,6 +2844,7 @@
               this feature exists to correct.
             -->
             <div
+              id="packCard"
               style="
                 display: flex;
                 align-items: center;
@@ -2950,6 +3134,15 @@
             </div>
           </div>
           <button type="button" class="pill-tag" id="btnDevMode">关闭</button>
+        </div>
+        <div class="setting-row">
+          <div>
+            <div style="font-size: 14.5px; font-weight: 700">资源包提醒</div>
+            <div style="font-size: 12.5px; color: var(--ink-secondary)">
+              需要配套资源包时，每次生成完提醒一次；关掉后不再提醒
+            </div>
+          </div>
+          <button type="button" class="pill-tag" id="btnPackReminder">提醒开</button>
         </div>
         <div class="setting-row">
           <div>

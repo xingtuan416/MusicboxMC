@@ -8,6 +8,7 @@ import type {
   OutputTarget,
   SmartPlanResult,
 } from '../main/service';
+import type { Preferences } from '../main/preferences';
 
 /** Facts the About section states about this build. */
 export interface AppInfo {
@@ -69,6 +70,10 @@ export interface MusicboxApi {
   pathForFile(file: File): string;
   /** Choose the folder a schematic will be written into; the token authorizes that folder. */
   chooseDirectory(): Promise<DirectoryGrant | null>;
+  /** Remembered choices: the last output folder and whether the pack reminder was muted. */
+  getPreferences(): Promise<Preferences>;
+  /** Change one remembered choice and get the whole record back. */
+  setPreferences(patch: Partial<Preferences>): Promise<Preferences>;
   /** Version, licence and repository, for the About section. */
   appInfo(): Promise<AppInfo>;
   /** Runtime versions and paths, for the developer panel. */
@@ -94,6 +99,8 @@ const api: MusicboxApi = {
   pathForFile: (file) => webUtils.getPathForFile(file),
   windowControl: (action) => ipcRenderer.invoke('window:control', action),
   chooseDirectory: () => ipcRenderer.invoke('dialog:choose-directory'),
+  getPreferences: () => ipcRenderer.invoke('prefs:get'),
+  setPreferences: (patch) => ipcRenderer.invoke('prefs:set', patch),
   appInfo: () => ipcRenderer.invoke('app:info'),
   versions: () => ipcRenderer.invoke('app:versions'),
   saveReport: (content, suggestedName) => ipcRenderer.invoke('dev:save-report', content, suggestedName),

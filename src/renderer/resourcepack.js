@@ -2,8 +2,15 @@
  * The companion resource pack.
  *
  * It ships inside the application rather than behind a download link, so saving it is one
- * dialog and no network. It is offered in two places: a button in the export step, which is
- * always there, and a one-time nudge the first time an extended-mode schematic is exported.
+ * dialog and no network. It is offered in two places: a button in the export step, and a
+ * reminder after an export that actually needed it.
+ *
+ * The reminder used to be shown once per installation and then never again, which was
+ * wrong in both directions: a user who dismissed it before understanding the pack had no
+ * way to see it again, and a user who reinstalled the window's storage saw it again for no
+ * reason. It is now shown after every export that needs the pack, unless the user ticks
+ * "don't ask again" - and that choice lives in the application settings, so it can be
+ * undone there.
  *
  * The wording has to hold two facts at once, and the earlier version only held the first.
  *
@@ -15,26 +22,6 @@
  * other direction. Both sentences belong there.
  */
 
-/** Remembers that the nudge has been shown, so it is shown once. */
-const PROMPTED_KEY = 'musicboxmc.resourcePackPrompted';
-
-function wasPrompted() {
-  try {
-    return localStorage.getItem(PROMPTED_KEY) === '1';
-  } catch {
-    // Storage unavailable or blocked. Stay quiet rather than nag on every export.
-    return true;
-  }
-}
-
-function markPrompted() {
-  try {
-    localStorage.setItem(PROMPTED_KEY, '1');
-  } catch {
-    // Ignored; the worst case is one extra nudge.
-  }
-}
-
 /**
  * Ask the main process to write a copy of the bundled pack where the user chooses.
  *
@@ -44,8 +31,14 @@ async function savePack() {
   return window.musicbox.saveResourcePack();
 }
 
-/** The one-time nudge, with the save action inside it. */
-function showPackNudge() {
+/**
+ * The reminder, with the save action and a "don't ask again" checkbox inside it.
+ *
+ * @param {{ onMute?: () => void }} [options] called once when the dialog closes with the
+ *   checkbox ticked; the caller stores the choice, this module holds no state.
+ */
+function showPackNudge(options = {}) {
+  const { onMute } = options;
   const backdrop = document.createElement('div');
   // `open` is what the stylesheet uses to display the backdrop; without it the nudge is
   // in the DOM and invisible.
@@ -71,6 +64,15 @@ function showPackNudge() {
     '配套资源包把这五段统一成钢琴采样，约 50 KB，就在应用里，' +
     '之后也可以在导出这一步随时取。';
 
+  const muteRow = document.createElement('label');
+  muteRow.style.cssText =
+    'display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-secondary);cursor:pointer;';
+  const muteBox = document.createElement('input');
+  muteBox.type = 'checkbox';
+  const muteText = document.createElement('span');
+  muteText.textContent = '以后不再提醒（可以在应用设置里重新打开）';
+  muteRow.append(muteBox, muteText);
+
   const actions = document.createElement('div');
   actions.style.cssText = 'display:flex;gap:12px;justify-content:flex-end;';
 
@@ -87,6 +89,7 @@ function showPackNudge() {
   const close = () => {
     document.removeEventListener('keydown', onKey);
     backdrop.remove();
+    if (muteBox.checked && onMute) onMute();
   };
   function onKey(event) {
     if (event.key === 'Escape') close();
@@ -103,23 +106,10 @@ function showPackNudge() {
   document.addEventListener('keydown', onKey);
 
   actions.append(later, save);
-  dialog.append(heading, body, actions);
+  dialog.append(heading, body, muteRow, actions);
   backdrop.append(dialog);
   document.body.append(backdrop);
   save.focus();
 }
 
-/**
- * Called after an export that actually wrote a file.
- *
- * Gated on the generation result's recommendation as well as on being the first time.
- * Smart selection can decide that a song needs no pack even when the current UI mode is
- * extended, and can recommend it in a pure-harp song that crosses the single harp slot.
- */
-function maybePromptForPack(recommended) {
-  if (!recommended || wasPrompted()) return;
-  markPrompted();
-  showPackNudge();
-}
-
-export { savePack, maybePromptForPack, showPackNudge };
+export { savePack, showPackNudge };

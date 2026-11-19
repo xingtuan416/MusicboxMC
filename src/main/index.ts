@@ -15,6 +15,7 @@ import { describeCoreError } from './messages';
 import { resolveRendererPath } from './rendererPath';
 import { grantDirectory, resolveOutputPath } from './outputPaths';
 import { handleFatalException } from './fatal';
+import { mergePreferences, readPreferences, writePreferences, type Preferences } from './preferences';
 
 /**
  * Where the app keeps its profile (cache, local storage, session data).
@@ -54,6 +55,26 @@ const PRELOAD_FILE = join(__dirname, '..', 'preload', 'index.js');
 const ICON_FILE = existsSync(join(__dirname, 'icon.png'))
   ? join(__dirname, 'icon.png')
   : join(__dirname, '..', '..', '..', 'icon.png');
+
+/**
+ * Remembered settings, read once and written back on change.
+ *
+ * The file sits in `userData`, which the block above may have redirected to a
+ * development profile, so the path is resolved on first use rather than at import time.
+ */
+let cachedPreferences: Preferences | null = null;
+
+function preferences(): Preferences {
+  cachedPreferences ??= readPreferences(join(app.getPath('userData'), 'preferences.json'));
+  return cachedPreferences;
+}
+
+function savePreferences(patch: unknown): Preferences {
+  const next = mergePreferences(preferences(), patch);
+  cachedPreferences = next;
+  writePreferences(join(app.getPath('userData'), 'preferences.json'), next);
+  return next;
+}
 
 /**
  * The renderer is served over a custom `app://` scheme instead of `file://`.
@@ -195,12 +216,29 @@ function registerIpc(): void {
   // Where the schematic goes, without writing it: the file is produced by the next step.
   ipcMain.handle('dialog:choose-directory', async () => {
     if (!win) return null;
+    const remembered = preferences().lastOutputDir;
     const picked = await dialog.showOpenDialog(win, {
       title: '选择保存文件夹',
+      ...(remembered ? { defaultPath: remembered } : {}),
       properties: ['openDirectory', 'createDirectory'],
     });
-    return picked.canceled || picked.filePaths.length === 0 ? null : grantDirectory(picked.filePaths[0]!);
+    if (picked.canceled || picked.filePaths.length === 0) return null;
+    const grant = grantDirectory(picked.filePaths[0]!);
+    // Remembered here rather than after generation: the folder was chosen deliberately,
+    // and a cancelled generation should still leave the next dialog in the right place.
+    savePreferences({ lastOutputDir: grant.path });
+    return grant;
   });
+
+  /**
+   * The two remembered settings.
+   *
+   * Kept out of the window's local storage because the main process needs the folder
+   * before the renderer exists, and because the resource-pack reminder has to survive a
+   * reinstall of the window's storage.
+   */
+  ipcMain.handle('prefs:get', () => preferences());
+  ipcMain.handle('prefs:set', (_e, patch: unknown) => savePreferences(patch));
 
   /**
    * The application's own version.

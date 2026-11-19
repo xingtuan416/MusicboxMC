@@ -13,8 +13,14 @@
 
 import { devLog, initDevMode, isDevMode, refreshDev, registerDev, setDevMode, wrapApi } from './devmode.js';
 import { instrumentName } from './instruments.js';
-import { maybePromptForPack, savePack } from './resourcepack.js';
-import { focusPreviewCell, panPreview, previewPosition, renderPreview } from './preview.js';
+import { savePack, showPackNudge } from './resourcepack.js';
+import {
+  focusPreviewCell,
+  panPreview,
+  previewDiagnostics,
+  previewPosition,
+  renderPreview,
+} from './preview.js';
 import {
   locateWarning,
   MERGE_MODE_TEXT,
@@ -65,6 +71,11 @@ const state = {
   outputDir: null,
   /** Main-process grant for `outputDir`; this is the only thing that authorizes a write. */
   outputDirToken: null,
+  /**
+   * Remembered between launches by the main process: the folder last written to, and
+   * whether the resource-pack reminder was muted for good.
+   */
+  prefs: { lastOutputDir: null, packPromptMuted: false },
   result: null,
   /** 'extended' keeps the five-slot piano range; 'native' follows every MIDI instrument. */
   instrumentMode: 'extended',
@@ -178,6 +189,31 @@ function unionSize(regions) {
   return { x: max.x - min.x + 1, y: max.y - min.y + 1, z: max.z - min.z + 1 };
 }
 
+/**
+ * Remember a choice the main process keeps for the next launch.
+ *
+ * The patch is applied locally first so the interface reacts even if the write fails; the
+ * answer from the main process then replaces it, because it is the copy that will be read
+ * on the next start.
+ */
+async function savePrefs(patch) {
+  state.prefs = { ...state.prefs, ...patch };
+  syncPackReminderButton();
+  try {
+    state.prefs = await api.setPreferences(patch);
+  } catch (error) {
+    devLog('prefs', { error: error?.message || String(error) });
+  }
+  syncPackReminderButton();
+}
+
+/** The settings row that holds the reminder choice. */
+function syncPackReminderButton() {
+  const button = document.getElementById('btnPackReminder');
+  if (!button) return;
+  button.textContent = state.prefs.packPromptMuted ? '提醒关' : '提醒开';
+}
+
 /* ────────────────────────────────────────────────────────────────────────────
  * Step navigation
  * ──────────────────────────────────────────────────────────────────────────── */
@@ -206,7 +242,13 @@ function goStep(target) {
   // The pack nudge belongs on the last step, not on the check step: arriving at the check
   // step with a modal over it hides the very thing the user was sent there to read.
   if (next === 8 && state.result?.outputPath) {
-    maybePromptForPack(state.packRecommended ?? state.instrumentMode === 'extended');
+    const packWanted = state.packRecommended ?? state.instrumentMode === 'extended';
+    // Shown after every export that needs it, not once per installation: the reminder is
+    // only useful to someone who is about to install the pack. "Don't ask again" is the
+    // way out, and the setting that holds it can be undone.
+    if (packWanted && !state.prefs.packPromptMuted) {
+      showPackNudge({ onMute: () => void savePrefs({ packPromptMuted: true }) });
+    }
   }
 }
 
@@ -223,12 +265,37 @@ function setImportView(mode) {
   $('btnStep2Next').disabled = mode !== 'loaded';
 }
 
+/**
+ * Read the failure the way a musician would, not the way a parser reports it.
+ *
+ * The main process names the real problem ("Bad MIDI file. Expected 'MHdr', got: …"), which
+ * is the wrong sentence to put in front of someone who just picked a file: it states a fact
+ * about a header instead of what to do next. The raw text is kept, but folded away - for a
+ * corrupt file it carries the byte offset, which is the only way to tell two broken files
+ * apart when one does report it.
+ */
+function describeImportFailure(raw) {
+  const text = String(raw ?? '');
+  const lower = text.toLowerCase();
+  if (/mhdr|mthd|bad midi|not a midi|invalid midi|truncated|unexpected end/.test(lower)) {
+    return '这看起来不是 MIDI 乐谱，或者文件没有下载完整。扩展名是 .mid 不代表内容也是——有些工具会把音频直接改名成 .mid。';
+  }
+  if (lower.includes('smpte')) {
+    return '这个文件按秒计时（SMPTE 时间码），目前只支持按拍计时的乐谱。';
+  }
+  if (/文件不存在|enoent/.test(lower)) {
+    return '这个文件已经不在了，可能被移动、重命名或清理掉了。重新选一次试试。';
+  }
+  if (/eacces|eperm|permission|拒绝访问/.test(lower)) {
+    return '系统不允许读取这个文件。把它复制到桌面再导入通常就好了。';
+  }
+  return '文件读取失败了。如果它来自别的软件，换一个导出设置重新导出一次往往能解决。';
+}
+
 function showImportError(message) {
-  // The reason comes from the main process, which names the actual problem - a corrupt
-  // header, an SMPTE timebase, unsupported timing. Guessing it here would be a lie half
-  // the time.
   $('importErrHeading').textContent = '这个文件读不了';
-  $('importErrDetail').textContent = message;
+  $('importErrDetail').textContent = describeImportFailure(message);
+  $('importErrTech').textContent = String(message ?? '');
   setImportView('error');
   playFailure();
 }
@@ -257,8 +324,14 @@ async function loadMidi(path) {
 
     $('midiFileTitle').textContent = result.file;
     $('valDuration').textContent = result.song.durationText;
-    $('valBpm').textContent = `${result.song.baseBpm} BPM`;
+    // Tempo comes back as 60000000 / microsecondsPerBeat, so an exact 70 BPM reads as
+    // 70.000315… - a rounding artefact of the file format, not information. Nobody sets a
+    // song to 70.0003 BPM, and the digit noise makes the number look untrustworthy.
+    $('valBpm').textContent = `${Math.round(result.song.baseBpm)} BPM`;
     $('valTracks').textContent = String(state.tracks.length);
+    // "MThd passed, standard multi-track sequence" was jargon in a fixed sentence that was
+    // also wrong for single-track files. What the reader actually needs is one plain fact.
+    $('midiFileSub').textContent = `校验通过 · ${state.tracks.length} 条音轨`;
     $('valNotes').textContent = number(result.song.noteCount);
 
     $('fileNameInput').value = suggestedName(path, result.song.name);
@@ -269,6 +342,9 @@ async function loadMidi(path) {
       dropped > 0 ? `已过滤 ${dropped} 条不含音符的音轨（指挥轨，或从未使用的通道）。` : '';
 
     renderTracks();
+    // The step summary decides which cards apply to this song (a single track hides the lead
+    // picker), and importing is not one of the steps that used to refresh it.
+    syncSummary();
     syncOutputText();
     setImportView('loaded');
     playNote(660, 'triangle', 0.12);
@@ -379,12 +455,14 @@ function preferredLead(tracks) {
   return { track: first, basis: 'velocity' };
 }
 
-/** The sentence under the picker: which track, and why it is the centre. */
+/** One line naming the track that was picked, and what picking it does. */
 function leadReasonText(selected) {
   if (!selected) return '至少选择一条音轨后才能指定主音轨。';
-  const label = `轨 ${selected.index + 1}「${selected.name || selected.instrument}」`;
-  if (state.leadBasis === 'manual') return `${label}：手动指定，玩家会站在这一轨上。`;
-  return `${label}：平均 MIDI 力度最高，自动作为听感中心。`;
+  const label = selected.name ? `${selected.instrument} · ${selected.name}` : selected.instrument;
+  if (state.leadBasis === 'manual') {
+    return `已选「${label}」：玩家会站在这一条轨上，其余轨道按远近排在两侧。`;
+  }
+  return `自动推荐「${label}」：它是这几条轨里平均力度最高的一条，也就是全曲最响的那条。`;
 }
 
 function syncLeadPicker() {
@@ -399,17 +477,43 @@ function syncLeadPicker() {
     selected = fallback?.track;
   }
 
-  const select = $('leadTrackSelect');
-  select.replaceChildren();
-  for (const track of chosen) {
-    const option = document.createElement('option');
-    option.value = String(track.index);
-    const name = track.name ? ` · ${track.name}` : '';
-    option.textContent = `轨 ${track.index + 1}${name}（力度 ${Math.round(track.meanVelocity * 100)}%）`;
-    select.append(option);
+  // Loudest first, so the top row is the recommendation: the list answers "which one
+  // should I pick" by its order instead of asking the user to read a velocity percentage
+  // and translate it. Rows carry the instrument and the track's own name, which is what
+  // the file calls it - "轨 7" tells nobody anything.
+  const ranked = [...chosen].sort((left, right) => {
+    const velocity = right.meanVelocity - left.meanVelocity;
+    if (velocity !== 0) return velocity;
+    const notes = right.noteCount - left.noteCount;
+    return notes !== 0 ? notes : left.index - right.index;
+  });
+  const list = $('leadTrackList');
+  list.replaceChildren();
+  for (const track of ranked) {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'lead-row';
+    row.setAttribute('role', 'option');
+    row.dataset.trackIndex = String(track.index);
+    const current = track.index === selected?.index;
+    row.classList.toggle('selected', current);
+    // Drums stay selectable but dimmed and labelled: a drum track is rarely what carries
+    // the tune, yet hiding it outright would be wrong for the song where it does.
+    row.classList.toggle('is-dim', Boolean(track.percussion));
+    row.setAttribute('aria-selected', current ? 'true' : 'false');
+
+    const name = document.createElement('span');
+    name.className = 'lead-row-name';
+    const label = track.name ? `${track.instrument} · ${track.name}` : track.instrument;
+    name.textContent = `音轨 ${track.index + 1}：${label}`;
+
+    const tag = document.createElement('span');
+    tag.className = 'lead-row-tag';
+    tag.textContent = track.percussion ? '打击乐 · 通常不是主音轨' : `${number(track.noteCount)} 个音符`;
+
+    row.append(name, tag);
+    list.append(row);
   }
-  select.disabled = chosen.length === 0;
-  if (selected) select.value = String(selected.index);
 
   const badge = $('leadBadge');
   const manual = state.leadBasis === 'manual';
@@ -598,6 +702,12 @@ function syncOptionBoxes() {
   }
 }
 
+/** Hide a card by id without throwing when the markup does not have it. */
+function setCardHidden(id, hidden) {
+  const card = document.getElementById(id);
+  if (card) card.hidden = hidden;
+}
+
 function syncSummary() {
   syncSmartPanel();
   syncOptionBoxes();
@@ -611,11 +721,13 @@ function syncSummary() {
   $('packTitle').textContent = packWanted
     ? '配套资源包（可选，保存后自行安装）'
     : '配套资源包（当前设置不需要）';
-  $('packDescription').textContent = packWanted
-    ? '只统一扩展竖琴那五个音色槽的钢琴采样：音域不变（F#1–F#7 来自五个扩展槽，不是这个包）；被占用的原生 bass/guitar/flute/bell 已改用替代表，不受它影响。保存后放进 .minecraft/resourcepacks/ 再自行启用。'
-    : extended
-      ? '当前设置用不到这个包：它只改竖琴那五个音色槽的采样，不改变音域，也不影响合并方式。'
-      : '原版乐器模式每条轨使用自己的音色；装了这个包反而会把原生 bass、guitar、flute、bell 也替换成钢琴。';
+  // A pack that this song does not need is not an option worth a card: it only changes the
+  // five extended harp slots.
+  $('packCard').hidden = !packWanted;
+  if (packWanted) {
+    $('packDescription').textContent =
+      '只统一扩展竖琴那五个音色槽的钢琴采样：音域不变（F#1–F#7 来自五个扩展槽，不是这个包）；被占用的原生 bass/guitar/flute/bell 已改用替代表，不受它影响。保存后放进 .minecraft/resourcepacks/ 再自行启用。';
+  }
   $('sumRange').textContent = {
     warn: '提示并八度移调',
     octave: '自动八度移调',
@@ -696,20 +808,26 @@ function syncSummary() {
       }
     }
   }
-  // A forced merge leaves one spine: borrowing and riding have nothing to act on, so the
-  // cards step aside instead of sitting there greyed out.
+  // Several cards cannot change the file in some configurations, and a switch that is
+  // merely disabled still reads as "on" - which was reported as a bug. They are removed
+  // instead: a forced merge leaves one spine (nothing to borrow or ride on), a single
+  // track has nothing to order or merge with, and command playback has no lanes at all.
   const forced = state.merge === 'force';
-  const shareCard = $('laneShareCard');
-  if (shareCard) shareCard.hidden = forced;
-  const rideCard = $('laneRideCard');
-  if (rideCard) rideCard.hidden = forced;
-  const shareText = state.laneSharing ? ` · 借道 <${state.laneShareSparseBelow} 音` : ' · 不借道';
-  const centerText = state.centerLead ? ' · 按主轨排序' : ' · 按文件顺序';
-  const annotateText = state.annotateLanes ? ' · 注释牌' : ' · 无注释牌';
-  const rideText = state.laneRide ? ' · 轨道取电' : ' · 不取电';
-  const tpsText = state.baseTps === 20 ? '' : ` · 基准 ${state.baseTps} TPS`;
-  $('sumMisc').textContent =
-    `${mergeText}${shareText}${rideText}${centerText}${annotateText}${tpsText} · 作者 ${state.author.trim() || 'MusicboxMC'}`;
+  // Exactly one, not "at most one": before a song is loaded there are no tracks at all, and
+  // hiding the cards then left them hidden after the import (the summary only runs on the
+  // steps that change it, and loading a file is not one of them).
+  const singleTrack = state.tracks.filter((track) => track.checked).length === 1;
+  setCardHidden('leadPanel', singleTrack);
+  setCardHidden('annotateCard', command);
+  setCardHidden('centerLeadCard', singleTrack || command);
+  setCardHidden('laneShareCard', singleTrack || command || forced);
+  setCardHidden('laneRideCard', singleTrack || command || forced);
+  for (const box of document.querySelectorAll('.opt-box[data-cfg-group="merge"]')) {
+    box.hidden = singleTrack || command;
+  }
+  // The fold reads like a card title, not a status line: the switches below it already
+  // show their own state, so repeating five of them in one run-on sentence was noise.
+  $('sumMisc').textContent = mergeText;
   $('commandBudgetField').style.display = state.backend === 'command' ? 'flex' : 'none';
   // The readout is dev-only and cheap to skip; every option change lands here.
   scheduleDevMeasure();
@@ -914,6 +1032,9 @@ document.addEventListener('click', (event) => {
     if (entry) {
       entry.checked = !entry.checked;
       renderTracks(index);
+      // Unticking down to one track removes the cards that need several, so the summary has
+      // to run here rather than waiting for the next step change.
+      syncSummary();
       playNote(entry.checked ? 440 : 260, 'sine', 0.08);
     }
     return;
@@ -971,7 +1092,33 @@ $('realFileInput').addEventListener('change', (event) => {
   if (file) void loadMidi(api.pathForFile(file));
 });
 
-$('importEmpty').addEventListener('click', () => void chooseMidiFile());
+$('importEmpty').addEventListener('click', (event) => {
+  // The question mark sits inside the drop zone; opening the file dialog from it would
+  // cover the explanation the user just asked for.
+  if (event.target.closest('.help-dot, .help-pop')) return;
+  void chooseMidiFile();
+});
+
+/** The "what is a MIDI file" bubble: opened by the question mark, closed by anything else. */
+function setMidiHelp(open) {
+  $('helpMidi').hidden = !open;
+  $('btnHelpMidi').setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+$('btnHelpMidi').addEventListener('click', (event) => {
+  event.stopPropagation();
+  setMidiHelp($('helpMidi').hidden);
+});
+
+document.addEventListener('click', (event) => {
+  if ($('helpMidi').hidden) return;
+  if (event.target.closest('#helpMidi, #btnHelpMidi')) return;
+  setMidiHelp(false);
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !$('helpMidi').hidden) setMidiHelp(false);
+});
 
 /* ── Step 2: drag and drop ───────────────────────────────────────────────────
  * Electron 32 removed `File.path`, so the renderer cannot read the dropped file
@@ -1104,8 +1251,10 @@ $('btnLaneRide').addEventListener('click', () => {
   playNote(state.laneRide ? 560 : 300, 'sine', 0.07);
 });
 
-$('leadTrackSelect').addEventListener('change', (event) => {
-  const index = Number(event.target.value);
+$('leadTrackList').addEventListener('click', (event) => {
+  const row = event.target.closest('.lead-row');
+  if (!row) return;
+  const index = Number(row.dataset.trackIndex);
   if (!Number.isSafeInteger(index)) return;
   state.leadTrackIndex = index;
   state.leadBasis = 'manual';
@@ -1197,6 +1346,11 @@ async function loadAbout() {
     notify(`无法读取版本信息：${error?.message || error}`);
   }
 }
+
+$('btnPackReminder').addEventListener('click', () => {
+  void savePrefs({ packPromptMuted: !state.prefs.packPromptMuted });
+  playNote(state.prefs.packPromptMuted ? 320 : 520, 'sine', 0.06);
+});
 
 $('btnOpenSettings').addEventListener('click', () => {
   void loadAbout();
@@ -1691,15 +1845,37 @@ for (const id of ['showGrid', 'showNotes']) {
   // The wheel scrolls the drawing sideways, which is the useful axis now that there is no
   // zoom to spend it on and songs are long rather than tall. A horizontal wheel, or a
   // trackpad's two-finger swipe, arrives as deltaX and is used as it comes.
+  // A wheel or a trackpad swipe arrives many times per frame, and each pan used to redraw
+  // the whole schematic synchronously. The deltas are accumulated and one draw is made per
+  // frame, the same way the drag is handled.
+  let wheelPending = 0;
+  let wheelFrame = 0;
+  const flushWheel = () => {
+    wheelFrame = 0;
+    if (!wheelPending) return;
+    const pixels = wheelPending;
+    wheelPending = 0;
+    panPreview(pixels, 0);
+  };
   wrap.addEventListener(
     'wheel',
     (event) => {
       event.preventDefault();
-      panPreview(event.deltaX !== 0 ? event.deltaX : event.deltaY, 0);
+      wheelPending += event.deltaX !== 0 ? event.deltaX : event.deltaY;
+      if (!wheelFrame) wheelFrame = requestAnimationFrame(flushWheel);
     },
     { passive: false },
   );
 })();
+
+// The interface check drives the drawing from the outside: it needs to see the view move a
+// fraction of a cell, and to prove a pan reuses cached tiles instead of rebuilding them.
+// The view lives in the drawing module's state, not in this file's, so it is read back
+// from there rather than copied here.
+window.__preview = {
+  view: () => previewDiagnostics().view,
+  diagnostics: () => previewDiagnostics(),
+};
 
 /* ────────────────────────────────────────────────────────────────────────────
  * The position indicator under the canvas
@@ -1950,4 +2126,17 @@ api.onLog((line) => {
 setImportView('empty');
 syncSummary();
 syncOutputText();
+syncPackReminderButton();
 goStep(1);
+
+// Remembered choices arrive after the first paint: neither one changes the first screen,
+// and waiting for them would delay the window for a file read.
+if (typeof api.getPreferences === 'function') {
+  void api
+    .getPreferences()
+    .then((preferences) => {
+      state.prefs = preferences;
+      syncPackReminderButton();
+    })
+    .catch((error) => devLog('prefs', { error: error?.message || String(error) }));
+}
