@@ -80,6 +80,14 @@ export interface AnnotationOptions {
   playerZ?: number;
   /** Farthest note block from that row; the number the 48-block rule judges. */
   spreadZ?: number;
+  /**
+   * Column to name as the standing spot, from the average note column of the song.
+   *
+   * A redstone song is walked, not stood still in: the player starts at the first note and
+   * keeps moving east. Naming the first column put the spot thousands of blocks away from
+   * most of the music, so the mean note column is the honest answer. Absent means "start".
+   */
+  playerX?: number;
 }
 
 /**
@@ -171,7 +179,7 @@ export function planLaneAnnotation(opts: AnnotationOptions): LaneAnnotation | nu
   return {
     signs,
     blocks,
-    player: { x: opts.minX - 1, y: opts.y, z: playerZ },
+    player: { x: opts.playerX ?? opts.minX - 1, y: opts.y, z: playerZ },
     singleLane,
     spreadZ,
   };

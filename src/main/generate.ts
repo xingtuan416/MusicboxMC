@@ -401,10 +401,21 @@ function laneLegend(
     lanes.length > 1 && leadTrackIndex !== null
       ? lanes.findIndex((lane) => lane.sourceTracks.includes(leadTrackIndex))
       : -1;
+  // A redstone song is walked, not stood still in: the player starts at the first note and
+  // keeps moving east, so naming the first column put "stand here" thousands of blocks
+  // away from most of the music. The mean note column is the honest answer, and it is
+  // fine for it to be approximate - the player is walking anyway.
+  const noteXs = result.tracks.flatMap((track) =>
+    track.placements.filter((p) => p.block === 'minecraft:note_block').map((p) => p.pos.x),
+  );
+  const playerX =
+    noteXs.length === 0 ? result.min.x : Math.round(noteXs.reduce((sum, x) => sum + x, 0) / noteXs.length);
+
   const annotation = planLaneAnnotation({
     lanes,
     leadLane: leadLane >= 0 ? leadLane : null,
     minX: result.min.x,
+    playerX,
     // The routing decision and the sign must name the same row, so both read the layout.
     playerZ: result.playerZ,
     spreadZ: result.hearingRadius,

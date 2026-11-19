@@ -313,15 +313,12 @@ export function buildTrack(opts: BuildTrackOptions): {
         z: opts.zBase,
       });
     }
-    const padSlots = new Array<number>(slots).fill(0);
-    // Fill the last slot up to its own limit, then put the rest ahead of the pre-group
-    // repeaters, where no lateral branch follows and the full run is available.
-    padSlots[slots - 1] = Math.min(pad, lastSlotCap);
-    let toPlace = pad - padSlots[slots - 1]!;
-    for (let i = 0; i < slots - 1 && toPlace > 0; i++) {
-      padSlots[i] = Math.min(MAX_PAD_RUN, toPlace);
-      toPlace -= padSlots[i]!;
-    }
+    // Spread the padding over every slot, keeping the last slot inside its own limit and
+    // giving the surplus to the others. The total is fixed by alignment, so this cannot
+    // make a track longer - it only decides where the dust sits between repeaters.
+    const padCaps = new Array<number>(slots).fill(MAX_PAD_RUN);
+    padCaps[slots - 1] = lastSlotCap;
+    const padSlots = distributePad(pad, padCaps);
 
     // When the first group has repeaters ahead of it, lay one starting dust cell as
     // the power connection point. With rest = 0 the branch column is itself the first
@@ -440,4 +437,31 @@ export function buildTrack(opts: BuildTrackOptions): {
     placed,
     rangeShift,
   };
+}
+
+/**
+ * Spread `pad` dust cells over the slots between repeaters, one cell per slot per pass.
+ *
+ * Filling the earliest slots first (the previous behaviour) put a run of thirteen dust
+ * behind one repeater at the start of a track and then hundreds of bare repeaters packed
+ * one cell apart at the end. The total length is identical either way, because padding is
+ * dust and dust costs no time - but the front-loaded shape reads as a broken wire in game
+ * and was reported as exactly that. Round-robin keeps every gap within one cell of every
+ * other, subject to each slot's own cap.
+ */
+export function distributePad(pad: number, caps: readonly number[]): number[] {
+  const out = caps.map(() => 0);
+  let left = pad;
+  while (left > 0) {
+    let placed = false;
+    for (let i = 0; i < out.length && left > 0; i++) {
+      const room = (caps[i] ?? 0) - (out[i] ?? 0);
+      if (room <= 0) continue;
+      out[i] = (out[i] ?? 0) + 1;
+      left -= 1;
+      placed = true;
+    }
+    if (!placed) break;
+  }
+  return out;
 }
