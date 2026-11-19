@@ -7,6 +7,92 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-11-19
+
+Every card on the configuration screen now explains itself or steps out of the way: the lead-track
+card is a ranked list that asks for the loudest, most prominent track, a one-track song hides the five
+switches that cannot change it, and a command-block layout hides the five it cannot use instead of
+greying them out. Repeaters are spread evenly through the padding, so the wire no longer looks broken
+between them, and the wiring view finally follows the pointer because it is drawn from cached tiles
+with a fractional offset instead of being repainted whole on every frame.
+
+### Added
+
+- A preferences file next to the app data (`userData/preferences.json`, `src/main/preferences.ts`) that
+  remembers the last output directory and whether the resource-pack reminder was muted. It is a plain
+  JSON document read and written by the main process through `prefs:get` / `prefs:set`, because the
+  output directory has to be validated and granted in the main process anyway; local storage in the
+  renderer cannot do that, and an unreadable file falls back to defaults instead of failing to start.
+- The output directory dialog opens at the last chosen directory, and saving the pack or the schematic
+  updates it, so a second export no longer starts from the default folder
+  (`src/main/index.ts`, `src/preload/index.ts`).
+
+### Changed
+
+- The tempo readout is a whole number. It comes from `60000000 / microsecondsPerBeat`, so an exact
+  70 BPM file showed `70.0003150014175` and the digits read like a defect
+  (`src/renderer/app.js`).
+- The import card says 选择导入 MIDI 文件 and keeps what a MIDI file is, why an audio-to-MIDI conversion
+  makes a redstone-unfriendly score, and which formats are accepted behind a question-mark popover
+  instead of printing them as body text (`src/renderer/index.html`, `src/renderer/app.js`).
+- The import subtitle states the fact a reader wants ("校验通过 · 3 条音轨") instead of the fixed
+  "MThd 校验通过 · 标准多轨序列", which also claimed a multi-track file for a single-track one
+  (`src/renderer/app.js`).
+- A failed import explains itself in plain Chinese and guesses at the cause (not a MIDI file, cut off
+  download, no permission); the library's own wording sits behind a collapsed 技术细节 summary
+  (`src/renderer/app.js`).
+- The lead-track card is now a ranked list, not a dropdown: tracks are ordered by mean velocity, each
+  row reads 音轨 N：乐器 · 名字, percussion is dimmed but still selectable and tagged
+  打击乐 · 通常不是主音轨, and the velocity percentage is gone. The card says 主音轨 · 站在哪一条上 and
+  asks for the loudest, most prominent track (the piano, not its accompaniment)
+  (`src/renderer/index.html`, `src/renderer/app.js`).
+- Single-track songs no longer show the lead-track card, 按主轨排序, 稀疏音轨借道 or 相邻轨道取电: none
+  of them can change a one-track layout, and offering them only invites a wrong turn
+  (`src/renderer/app.js`).
+- A command-block layout hides the five switches it cannot use (ordering, sharing, riding, lane signs,
+  instrument merge) instead of greying them out, because a disabled pill still reads as switched on
+  (`src/renderer/app.js`).
+- Padding is spread evenly between the repeaters of a track. The cell count is unchanged, so no note
+  moves in time or space, but an old run of 300 cells put thirteen dust cells before every repeater and
+  then left hundreds of bare repeaters in a row, which in game looks like the wire broke between them
+  (`src/core/layout/track.ts`).
+- The lane signs and the smart-selection readout give the standing spot's X as the mean X of every note
+  block instead of the first cell of the circuit: a player follows the music along X, so "stand at the
+  start" pointed thousands of cells away from most of the song (`src/main/generate.ts`,
+  `src/core/layout/annotation.ts`).
+- The resource-pack card only appears when a pack is recommended, and the reminder fires on every
+  generation that needs one until 以后不再提醒 is ticked; the tick lives in the preferences file and the
+  settings dialog can turn the reminder back on (`src/renderer/resourcepack.js`,
+  `src/renderer/app.js`).
+- The wiring view draws its blocks into cached tiles and composites them with a fractional
+  offset, instead of repainting every visible block on every frame. Tiles are anchored to the cell grid
+  rather than to the viewport, so panning only builds the tiles scrolling in
+  (`src/renderer/preview.js`, `src/renderer/previewGeometry.js`).
+- Repeaters and note blocks are lifted by a one-pixel lip instead of a per-block shadow blur, which was
+  the most expensive call in the drawing pass and would bleed past a tile edge (`src/renderer/preview.js`).
+- The wheel accumulates its deltas and redraws once per frame, the way a drag already did, instead of
+  queueing a full redraw for every wheel event (`src/renderer/app.js`).
+
+### Fixed
+
+- Dragging the wiring view follows the pointer. The view offset was rounded to whole cells on each axis,
+  so a drag shorter than half a cell moved nothing and a longer one jumped a cell, and because the two
+  axes rounded independently a diagonal drag looked locked to one of them
+  (`src/renderer/previewGeometry.js`).
+- The legend and the readouts are rewritten only when the song changes, not on every frame of a pan
+  (`src/renderer/preview.js`).
+- The MIDI help popover floats over the import card instead of pushing its own text around: it was an
+  in-flow child of a centred flex column with a translucent background, so the hint behind it showed
+  through and the heading above it moved when it opened (`src/renderer/index.html`).
+- A one-track file no longer shows the lead-track card, 按主轨排序, 稀疏音轨借道, 相邻轨道取电 or the
+  merge choice: the rules only ran when a switch changed, never right after the import finished, so a
+  re-imported single-track file kept every card (`src/renderer/app.js`).
+- The collapsed 其它 summary only reports the merge mode. It used to concatenate every switch, the
+  annotation note, the author and the TPS into one run-on line, which said nothing the switch rows do
+  not already say (`src/renderer/app.js`, `src/renderer/index.html`).
+- The settings dialog keeps its 打开 button inside the panel. The repository URL could not shrink, so on
+  a narrower window the row pushed the button past the edge (`src/renderer/index.html`).
+
 ## [0.4.0] - 2026-11-18
 
 This release makes a layout something a player can stand in. Listening distance is now measured from
@@ -367,7 +453,11 @@ First release. Windows x64, Electron 33.
 - Pure TypeScript NBT codec and Litematica bit packing; output is a Java 1.20.4
   `.litematic` that Litematica loads directly.
 
-[Unreleased]: https://github.com/xingtuan416/MusicboxMC/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/xingtuan416/MusicboxMC/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.4.5
+[0.4.0]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.4.0
+[0.3.0]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.3.0
+[0.2.5]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.5
 [0.2.4]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.4
 [0.2.3]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.3
 [0.2.2]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.2.2

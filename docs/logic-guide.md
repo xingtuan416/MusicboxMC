@@ -52,6 +52,7 @@
 - 只在落后超过容差时才补：**同步点**（≥2 条独立轨道同时有音）容差 0，其它地方 12 格（`src/core/layout/track.ts:279-293`）。
 - 补齐只用红石粉，单段 ≤13 格（信号强度 15 留 1 格余量）；补不够就报 `SPATIAL_DRIFT`，**绝不为了几何改时间**（`src/core/layout/track.ts:294-315`、`src/core/layout/model.ts:88-96`）。
 - 宽和弦的最后一格槽位还要给分支列留电，所以那一段的补齐上限更小（`src/core/layout/track.ts:295-305`）。这是历史上「宽和弦外圈没电」的修复。
+- **补齐要均分到各组之间**：一段补齐的总格数不变（所以音符位置、时间轴一个都不动），但分配方式是轮询式地每个槽 +1（`distributePad()`，`src/core/layout/track.ts`）。早期实现先把最后一槽塞满、其余从前往后各吃满 13 格，结果是「13 格粉 + 一个中继器」重复几十次，随后几百个裸中继器连排——游戏里看着像红石断了。现在同一段补齐里连续裸中继器最多 3–4 个（`test/relaySpacing.test.ts`）。
 
 ## 5. Z 方向怎么分层
 
@@ -109,6 +110,7 @@
 - 每条轨道前（电路西侧 3 格）立一块朝 -X 的墙牌加一块底座：金块 = 主音轨 / 全曲主线，铜块 = 副轨 / 未指定主轨（`src/core/layout/annotation.ts:83-94`、`119-152`）。
 - 牌面四行：角色（主音轨 / 副轨 / 音轨 / 全曲主线）+ 轨号（≤3 条源音轨写「轨 3+7」，否则「共 N 轨」）+ 力度（该轨道最强源音轨的平均力度百分比）+ 站位或距离（主轨「站这里」；副轨「距主轨 N」；全曲主线「站这里 / 主线行」）（`src/main/generate.ts:406-413`、`src/core/layout/annotation.ts:135-142`）。
 - 玩家站位：主音轨的红石粉那一行（布局里固定 z = 0，`LayoutResult.playerZ`）；全曲一条主线时站 spine 那一行。第十一轮之前是“没有主音轨取 Z 中点”，那条路已经不存在——主音轨永远都有（`src/core/layout/hearing.ts`、`src/core/layout/annotation.ts:112-117`）。
+- 站位的 X 不是起点：玩家会跟着音乐沿 X 往前走，所以注释牌记的是**全部音符盒的平均 X**（`src/core/layout/annotation.ts` 的 `playerX`，由 `src/main/generate.ts:411` 求均值取整；没有音符盒时退回电路最左）。界面在智能选择面板里显示「站 (x, y, z)」。
 - `spreadZ` 现在就是听距半径：`generate()` 把 `result.hearingRadius` 传给注释牌（`src/main/generate.ts` 的 `laneLegend`），界面显示「最远 N 格」；不传时注释牌退回按各轨道 zMin/zMax 估一个值（`src/core/layout/annotation.ts:154-169`）。
 - 注释牌是独立 region，可以在 Litematica 里单独删掉或搬走（`src/core/layout/annotation.ts:14-16`）。
 

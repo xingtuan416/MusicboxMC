@@ -52,6 +52,7 @@
 | 对齐容差（同步时刻）   | 0 格                                                | [实现选择]      | `src/core/layout/track.ts:292`     |
 | 单段补齐上限           | 13 格（信号 15 留 1 格余量；只能用红石粉）          | [游戏事实] 推导 | `src/core/layout/model.ts:96`      |
 | 补齐不够时             | 报 `SPATIAL_DRIFT`，不改时间                        | [仓库约定]      | `src/core/layout/track.ts:306-315` |
+| 补齐格的分配           | 各槽轮询均分（每槽差 ≤1），最后一槽守分支列余量     | [实现选择]      | `src/core/layout/track.ts`         |
 
 ## 四、智能分流（30 / 48 阈值）
 
@@ -201,9 +202,11 @@
 | 预览左槽 / 标尺               | 150 px / 28 px | `src/renderer/previewGeometry.js:18`、`:20` |
 | 格宽范围                      | 4–72 px        | `src/renderer/previewGeometry.js:28-29`     |
 | 细节层最小格宽 / 徽标最小格宽 | 24 / 26 px     | `src/renderer/previewGeometry.js:38`、`:41` |
-| 可读字号对应格宽              | 28 px          | `src/renderer/preview.js:24`                |
-| 画布最小尺寸                  | 320 × 200 px   | `src/renderer/preview.js:31-32`             |
-| 区域配色数                    | 7              | `src/renderer/preview.js:35`                |
+| 可读字号对应格宽              | 28 px          | `src/renderer/preview.js:26`                |
+| 画布最小尺寸                  | 320 × 200 px   | `src/renderer/preview.js:35-36`             |
+| 区域配色数                    | 7              | `src/renderer/preview.js:39`                |
+| 预览瓦片边长                  | 384 px         | `src/renderer/previewGeometry.js:103`       |
+| 瓦片缓存张数                  | 16（LRU）      | `src/renderer/preview.js:48`                |
 | 提示条数显示上限              | 500            | `src/renderer/warningText.js:14`            |
 | 开发者日志上限                | 400 条         | `src/renderer/devmode.js:13`                |
 | 单页问题数                    | 4              | `src/renderer/app.js:1299`                  |

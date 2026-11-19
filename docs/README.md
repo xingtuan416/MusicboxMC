@@ -29,3 +29,5 @@ History:
 - [0.4.0 implementation plan](0.4.0-plan.md) — the round-by-round record of the
   0.4.0 work (read as history: later rounds supersede earlier sections, and the
   banner at the top lists what changed).
+- [0.4.5 fix plan](0.4.5-plan.md) — the UI and layout fixes requested for 0.4.5,
+  each with its current code location, the intended change and the open questions.
