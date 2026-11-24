@@ -1,7 +1,7 @@
 # MusicboxMC
 
 <p align="center">
-  <img src="icon.png" alt="MusicboxMC" width="120" height="120" />
+  <img src="assets/icon.png" alt="MusicboxMC" width="120" height="120" />
 </p>
 
 <p align="center">
@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <strong>简体中文</strong>　·　<a href="README.en.md">English</a>
+  <strong>简体中文</strong>　·　<a href="docs/README.en.md">English</a>
 </p>
 
 <p align="center">
@@ -190,7 +190,7 @@ npm run dist:dir   # 只出免安装目录，用于快速验证
 - [红石模型](docs/redstone-model.md) —— 拓扑、时序、对齐，以及**故意不做**的仿真
 - [命令方块播放](docs/command-playback.md) —— 时刻表、命令链、预算与游戏内要求
 - [Litematic 格式](docs/litematic-format.md) —— 位打包、索引顺序、区域规则
-- [贡献指南](CONTRIBUTING.md) · [更新日志](CHANGELOG.md) · [安全策略](SECURITY.md)
+- [贡献指南](.github/CONTRIBUTING.md) · [更新日志](docs/CHANGELOG.md) · [安全策略](.github/SECURITY.md)
 
 ## 许可证
 

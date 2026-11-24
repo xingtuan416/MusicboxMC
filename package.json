@@ -78,7 +78,7 @@
       "!**/*.map"
     ],
     "win": {
-      "icon": "icon.png",
+      "icon": "assets/icon.png",
       "target": [
         {
           "target": "nsis",

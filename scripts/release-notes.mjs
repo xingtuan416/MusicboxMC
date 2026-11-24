@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 /**
  * Build the Release body from the two maintained sources.
  *
- * `CHANGELOG.md` owns what changed; `docs/known-issues.md` owns the product limitations.
+ * `docs/CHANGELOG.md` owns what changed; `docs/known-issues.md` owns the product limitations.
  * This avoids hand-copying both into a fourth document on every release. Download tables
  * and checksums still depend on built artifacts and are appended by the release step.
  */
@@ -20,7 +20,7 @@ function section(text, start, stop) {
   return (end < 0 ? rest : rest.slice(0, end)).trim();
 }
 
-const changelog = readFileSync(resolve('CHANGELOG.md'), 'utf8');
+const changelog = readFileSync(resolve('docs/CHANGELOG.md'), 'utf8');
 const knownIssues = readFileSync(resolve('docs/known-issues.md'), 'utf8');
 
 const changes = section(changelog, `## [${version}]`, /\n## \[/);

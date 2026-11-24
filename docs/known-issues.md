@@ -266,7 +266,7 @@
 
 - `.github/ISSUE_TEMPLATE/bug_report.yml` 的版本占位仍是 `0.1.0`。
 - `.github/PULL_REQUEST_TEMPLATE.md` 只列 `lint`、`typecheck`、`test`、`build`。
-- `CONTRIBUTING.md` 和 CI 的统一闸门已经是 `npm run check`，其中还包含 `format:check`。
+- `.github/CONTRIBUTING.md` 和 CI 的统一闸门已经是 `npm run check`，其中还包含 `format:check`。
 
 **影响**：贡献者按模板操作会漏掉格式检查；Issue 示例版本落后五个补丁版本。
 
@@ -277,11 +277,11 @@
 **级别**：P3  
 **状态**：已处理（0.3.0 增加 `release:notes`）
 
-**现象**：同一个修复会同时写进 `CHANGELOG.md`、`docs/status.md` 的“已完成”和 GitHub Release body；Release 的已知限制又是第四份手工副本。`docs/status.md` 还把 GitHub 数据库 ID 写成 `run #43563003877`，与真正的 run number 不是一回事。
+**现象**：同一个修复会同时写进 `docs/CHANGELOG.md`、`docs/status.md` 的“已完成”和 GitHub Release body；Release 的已知限制又是第四份手工副本。`docs/status.md` 还把 GitHub 数据库 ID 写成 `run #43563003877`，与真正的 run number 不是一回事。
 
 **影响**：内容容易漂移，发布时需要人工同步多处。这次的已知限制已集中到本文，但状态文档与 Release body 仍可能重复。
 
-**0.3.0 结果**：新增 `npm run release:notes`，从 `CHANGELOG.md` 与本文的限制章节生成 Release body 草稿。下载表、文件大小和校验和仍由发布步骤追加，因为它们依赖实际构建产物。
+**0.3.0 结果**：新增 `npm run release:notes`，从 `docs/CHANGELOG.md` 与本文的限制章节生成 Release body 草稿。下载表、文件大小和校验和仍由发布步骤追加，因为它们依赖实际构建产物。
 
 ### OPS-09：本地产物目录膨胀且部分本地文件未纳入忽略规则
 

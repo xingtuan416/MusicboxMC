@@ -10,7 +10,7 @@ import { join } from 'node:path';
  */
 
 const DOC_DIR = 'docs';
-const ROOT_DOCS = ['README.md', 'README.en.md', 'AGENTS.md', 'CHANGELOG.md'];
+const ROOT_DOCS = ['README.md', 'AGENTS.md'];
 
 // Documents that describe how the project behaves *today*. History documents
 // (status, known-issues, the 0.4.0 plan, the changelog) may quote a removed name
@@ -20,7 +20,7 @@ const CURRENT_DOCS = [
   'docs/constants.md',
   'docs/README.md',
   'README.md',
-  'README.en.md',
+  'docs/README.en.md',
 ];
 
 function docFiles(): string[] {

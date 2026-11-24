@@ -433,9 +433,9 @@ note = midi + 12 * transpose + 12 * k - A
 ### 6.6 文档与规则
 
 - `docs/redstone-model.md`：乐器表扩到 16 种；加「MC 没有钢琴音色」说明；资源包只服务五槽。
-- `README.md` / `README.en.md`：两种模式、16 种乐器、识别规则、资源包注意事项。
+- `README.md` / `docs/README.en.md`：两种模式、16 种乐器、识别规则、资源包注意事项。
 - `docs/status.md`：记录本次改动。
-- `CHANGELOG.md`：加一条未发布记录。
+- `docs/CHANGELOG.md`：加一条未发布记录。
 - `.opencodereview/rule.json`：更新 palette 规则（16 种锚点、固定鼓、GM/名称优先级、替代表、无钢琴音色）。
 - `AGENTS.md`：补一条「乐器识别/锚点」不变量和测试夹具说明。
 

@@ -43,6 +43,7 @@ if (userDataOverride) {
  * i.e. __dirname = <root>/dist/src/main, so a single ".." goes back to <root>/dist/src.
  */
 const RENDERER_DIR = join(__dirname, '..', 'renderer');
+const ASSETS_DIR = join(__dirname, '..', 'assets');
 
 /**
  * The companion resource pack, bundled so the user never has to find it online.
@@ -50,11 +51,12 @@ const RENDERER_DIR = join(__dirname, '..', 'renderer');
  * It is small (about 50 KB) and the app only copies it out on request; the generator
  * itself does not read it.
  */
-const RESOURCE_PACK_FILE = join(__dirname, '..', 'assets', 'musicboxmc-piano-pack-1.20.4.zip');
+const RESOURCE_PACK_FILE = join(ASSETS_DIR, 'musicboxmc-piano-pack-1.20.4.zip');
 const PRELOAD_FILE = join(__dirname, '..', 'preload', 'index.js');
-const ICON_FILE = existsSync(join(__dirname, 'icon.png'))
-  ? join(__dirname, 'icon.png')
-  : join(__dirname, '..', '..', '..', 'icon.png');
+const BUNDLED_ICON_FILE = join(ASSETS_DIR, 'icon.png');
+const ICON_FILE = existsSync(BUNDLED_ICON_FILE)
+  ? BUNDLED_ICON_FILE
+  : join(__dirname, '..', '..', '..', 'assets', 'icon.png');
 
 /**
  * Remembered settings, read once and written back on change.

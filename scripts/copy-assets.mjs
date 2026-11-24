@@ -25,19 +25,12 @@ function copyIntoDist(from, to, label) {
 
 copyIntoDist(join(root, 'src', 'renderer'), join(root, 'dist', 'src', 'renderer'), 'renderer');
 
-// The resource pack ships inside the app, so the user never has to go looking for it.
+// Bundle the icon and resource pack for the main process.
 copyIntoDist(join(root, 'assets'), join(root, 'dist', 'src', 'assets'), 'assets');
 
-const iconFrom = join(root, 'icon.png');
-if (existsSync(iconFrom)) {
-  const iconTo = join(root, 'dist', 'src', 'main', 'icon.png');
-  mkdirSync(dirname(iconTo), { recursive: true });
-  cpSync(iconFrom, iconTo);
-  // The renderer shows the same icon in its title bar, and it cannot reach outside its
-  // own directory: the app:// handler treats anything that leaves the renderer root as a
-  // path escape and refuses it. So the icon is copied in alongside the markup.
-  const iconForRenderer = join(root, 'dist', 'src', 'renderer', 'icon.png');
-  mkdirSync(dirname(iconForRenderer), { recursive: true });
-  cpSync(iconFrom, iconForRenderer);
-  console.log(`[copy-assets] icon: ${iconFrom} → ${iconTo} + renderer/icon.png`);
-}
+// The renderer's app:// root is isolated, so it needs its own copy of the icon.
+copyIntoDist(
+  join(root, 'assets', 'icon.png'),
+  join(root, 'dist', 'src', 'renderer', 'icon.png'),
+  'renderer icon',
+);

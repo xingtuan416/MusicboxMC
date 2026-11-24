@@ -2,6 +2,7 @@
 
 Start here:
 
+- [English project guide](README.en.md)
 - [Logic guide](logic-guide.md) — how the converter works, in plain language and
   without code: pipeline, one track's topology, timing, alignment, Z layout, lead
   track, merging, borrowing, riding, signs, command playback (Chinese).
@@ -26,6 +27,7 @@ Reference:
 
 History:
 
+- [Changelog](CHANGELOG.md)
 - [0.4.0 implementation plan](0.4.0-plan.md) — the round-by-round record of the
   0.4.0 work (read as history: later rounds supersede earlier sections, and the
   banner at the top lists what changed).

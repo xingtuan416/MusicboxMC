@@ -1,7 +1,7 @@
 # MusicboxMC
 
 <p align="center">
-  <img src="icon.png" alt="MusicboxMC" width="120" height="120" />
+  <img src="../assets/icon.png" alt="MusicboxMC" width="120" height="120" />
 </p>
 
 <p align="center">
@@ -10,20 +10,20 @@
 </p>
 
 <p align="center">
-  <a href="README.md">简体中文</a>　·　<strong>English</strong>
+  <a href="../README.md">简体中文</a>　·　<strong>English</strong>
 </p>
 
 <p align="center">
   <a href="https://github.com/xingtuan416/MusicboxMC/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/xingtuan416/MusicboxMC?color=2ea44f"></a>
   <a href="https://github.com/xingtuan416/MusicboxMC/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/xingtuan416/MusicboxMC/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="LICENSE"><img alt="License: GPL-3.0-only" src="https://img.shields.io/badge/license-GPL--3.0--only-blue"></a>
+  <a href="../LICENSE"><img alt="License: GPL-3.0-only" src="https://img.shields.io/badge/license-GPL--3.0--only-blue"></a>
 </p>
 
 <p align="center">
   Website: <a href="https://xingtuan.dpdns.org/">xingtuan.dpdns.org</a> (Chinese)
 </p>
 
-![The MusicboxMC interface](docs/images/interface.png)
+![The MusicboxMC interface](images/interface.png)
 
 MusicboxMC reads a MIDI file, compiles it into a redstone circuit, and writes that
 circuit as a Litematica `.litematic` schematic. Paste it into a world, apply
@@ -73,7 +73,7 @@ what it generates.
    to pan, at a fixed, readable cell size. When it looks right, **generate** writes
    the file.
 
-   ![The redstone wiring view](docs/images/preview.png)
+   ![The redstone wiring view](images/preview.png)
 
 4. **Paste.** Put the `.litematic` in `.minecraft/schematics/`, load it with
    Litematica in game, then connect redstone to the start of the main line and drive it with a
@@ -126,7 +126,7 @@ schedule as a small table and replays it through a bounded number of reused
 commands, which keeps the same song at 798 blocks, 764 chain steps and **27.9 KB**.
 
 Requirements and limitations are in
-[docs/command-playback.md](docs/command-playback.md); read it before planning
+[docs/command-playback.md](command-playback.md); read it before planning
 anything long.
 
 ## Instruments, range, and what the resource pack is for
@@ -134,7 +134,7 @@ anything long.
 A note block has two octaves on its own. Vanilla has **16 classic note-block
 instruments** — 13 pitched and 3 fixed-pitch drums — each starting at its own F#
 anchor. The full table, GM map and detection rules are in
-[the multi-instrument design](docs/multi-instrument.md).
+[the multi-instrument design](multi-instrument.md).
 
 **Minecraft has no piano instrument.** Dirt and most other blocks play the **harp**
 sample, which is the closest thing and is what tutorials usually call piano. This
@@ -211,16 +211,16 @@ code lives, and the part worth reading if you want to change how a circuit is bu
 
 ## Documentation
 
-- [Documentation index](docs/README.md) — every design document in one place
-- [Architecture](docs/architecture.md) — layering, data flow, where to change what
-- [The redstone model](docs/redstone-model.md) — topology, timing, alignment, and
+- [Documentation index](README.md) — every design document in one place
+- [Architecture](architecture.md) — layering, data flow, where to change what
+- [The redstone model](redstone-model.md) — topology, timing, alignment, and
   what is deliberately not simulated
-- [Command playback](docs/command-playback.md) — the schedule, the chain, the
+- [Command playback](command-playback.md) — the schedule, the chain, the
   budgets, and the in-game requirements
-- [Litematic format](docs/litematic-format.md) — bit packing, index order, region
+- [Litematic format](litematic-format.md) — bit packing, index order, region
   rules
-- [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Security](SECURITY.md)
+- [Contributing](../.github/CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Security](../.github/SECURITY.md)
 
 ## License
 
-[GNU General Public License v3.0](LICENSE).
+[GNU General Public License v3.0](../LICENSE).

@@ -2,7 +2,7 @@
   "$comment": "Review rules for MusicboxMC. Paths are globs relative to the repository root; the first matching rule wins. Written to tell a reviewer what this project can actually get wrong, instead of asking it to look for bugs in general.",
 
   "$includeComment": "Markdown is excluded by default as an unsupported extension, but the docs are where a project's false claims live - this one had four that contradicted the code and the licence. Listing them here overrides that default; sensitive-path protection still runs first.",
-  "include": ["docs/**/*.md", "README.md", "README.en.md", "CONTRIBUTING.md"],
+  "include": ["docs/**/*.md", "README.md", ".github/CONTRIBUTING.md"],
 
   "exclude": [
     "dist/**",
