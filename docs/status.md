@@ -1,22 +1,24 @@
 # 项目状态
 
 > 每次有实质进展就更新这个文件。**写法见 `AGENTS.md` 的「状态文档」一节。**
-> 最后更新：2026-11-19（第十六轮：0.4.5 已发布——A 批界面与文案、B 批中继器均分与站位 X、C 批预览重写、四处界面返工都进了 `v0.4.5`，待你实测）
+> 最后更新：2026-11-24
 
 ## 一句话
 
-`0.4.5` 已就绪（第十六轮）：配置页 11 条文案与交互修复、中继器密度均匀、站位 X 改成音符盒平均 X、画布预览改成瓦片缓存 + 小数偏移 + rAF 节流，全部通过闸门待发布；`0.4.0` 此前完成声部识别、主轨居中、智能分流、稀疏音轨借道、投影注释和外层 UI 打磨；第五轮加了“相邻轨道取电”（首音很晚的轨道不再自己铺几千格中继器车头），并照 vanilla 源移植了一个红石模拟器，用它在同 tick 多轨上验证时序。第六轮修掉开发版与别的 Electron 应用共用 `%APPDATA%\Electron` 造成的启动缓存报错，并加了单实例锁；第七轮把取电从“只借相邻两行”改成跨行走廊；第八轮让同乐器合并之后也能借道（合并出的轨道再折一次，27 轨曲目 Z 49 → 45）；第九轮查清“主轨居中让 Z 变宽”是 `place()` 与 `PlacedNote.notePos` 共享同一个坐标对象、居中时被平移两次的 bug，修完后居中与不居中的宽度完全相同。第十一轮按用户“玩家站中间、左右各 40 格都听得见”的指出，把听距判据从“整条 Z 跨度”改成“玩家到最远音符的半径”（`LayoutResult.playerZ` / `hearingRadius`，`src/core/layout/hearing.ts`）：主音轨永远存在且只按力度排序、玩家固定站在主音轨的红石粉那一行、其余轨道按优先级对称铺到两侧，force 合并时界面直接隐藏借道与取电卡，并新增 `test/smartEquivalence.test.ts` 13 条证明“智能只挑选项、选项一致时结果逐字节相同”。第十三轮试过「用一根总线给所有轨道供电」的方案，用户看过实际效果后否决，代码与文档已整条删除，接线回到每条轨道自己在起点接红石线。第十四轮按用户实测反馈修掉投影分区互相重叠的问题：借道走廊会穿过中间轨道，而带深和弦的轨道包围盒很高，于是同一条走廊的坐标在一个 region 里是空气、在另一个 region 里是中继器，Litematica 只认其中一份——用户文件里有 7610 处这种矛盾，正好复现「x=190 的九格走廊只剩两格中继器」。现在分区改成按列归属切带，普通歌曲仍是一条轨道一个 region。第十五轮做发布准备：`CHANGELOG.md` 的 Unreleased 提为 `0.4.0 - 2026-11-18`（并加了一段本版摘要），`npm run release:notes` 改成只列仍未关闭的限制（已修复的 KI 条目不再出现在 Release 说明的「已知限制」里），修掉 `docs/known-issues.md` 里重复的 REL-03 编号（第二条改为 REL-08 并按第十一轮口径改写），清理 `out/` 与 `release/` 的历史产物，全量闸门重跑通过后提交并发布 `v0.4.0`；用户重启电脑后在游戏内确认投影可用，残留在 `release/`、`out/` 里的解包目录也随重启删除。
+`0.4.5` 已发布，等待用户实测，GitHub 默认分支 `main` 已启用保护，新提交使用所有者账号的 GitHub noreply 邮箱。
 
 ## 位置
 
-| 项       | 值                                                                                                                         |
-| -------- | -------------------------------------------------------------------------------------------------------------------------- |
-| 版本     | `0.4.5`（待打 tag `v0.4.5`）；`v0.4.0` 是上一个发布                                                                        |
-| 分支     | `main`（0.4.5 已提交并发布，tag `v0.4.5` → `2143c7b`）                                                                     |
-| 最新发布 | `v0.4.5`：安装包 119.0 MB、免安装 149.5 MB、资源包 51 KB；Release 见 github.com/xingtuan416/MusicboxMC/releases/tag/v0.4.5 |
-| 备份     | 分支 `backup/before-ui-integration`、标签 `backup-before-ui-integration`、`v0.1.0` —— 不要删                               |
+| 项       | 值                                                                                                                                     |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 版本     | `0.4.5`，发布标签 `v0.4.5` 指向 `2143c7b`                                                                                              |
+| 分支     | 本地开发与 GitHub 默认分支均为 `main`，远端另有 5 条关联开放 PR 的 Dependabot 分支                                                     |
+| 最新发布 | `v0.4.5`：安装包 119.0 MB、免安装 149.5 MB、资源包 51 KB；Release 见 github.com/xingtuan416/MusicboxMC/releases/tag/v0.4.5             |
+| 备份     | 本地备份分支 `backup/before-ui-integration` 与标签 `backup-before-ui-integration` 均指向 `89b5575`，这两项及发布标签 `v0.1.0` 均须保留 |
 
-## 质量闸门（最近一次实测，2026-11-19）
+## 质量闸门
+
+本地验证记录于 2026-11-19。
 
 | 项                         | 结果                                                                                                                                                                                                                                                                                                                                                       |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -32,9 +34,13 @@
 | Node 26 Windows 打包       | 通过（`electron-builder --win --x64`，Electron 45.3.2）。打包时 `release/win-unpacked` 被系统占用（`EBUSY`），因此输出写到 `out/dist-out` 再复制回 `release/`；这些解包目录已在重启后删除                                                                                                                                                                  |
 | 打包应用                   | 0.3.0 期间验证过 `release/win-unpacked` 可启动、`app.getVersion()` 与关于页一致；0.4.5 的 asar 已由 `verify:about` 读回（版本 0.4.5、许可 GPL-3.0-only、作者 xingtuan416）                                                                                                                                                                                 |
 | 用户实测                   | 0.3.0、0.4.0 均已实测：0.4.0 由用户重启后在游戏内确认投影粘贴正常、借道走廊红石连通；0.4.5 待实测                                                                                                                                                                                                                                                          |
-| CI                         | 绿：run #62 与 #63（提交 `2143c7b`，0.4.5 发布提交）。0.4.0 首轮 run `44331479568` 曾因 `docs/status.md` 未格式化失败                                                                                                                                                                                                                                      |
+| CI                         | 2026-11-19 的 CI #64 通过，提交 `8b60f83`。[运行记录](https://github.com/xingtuan416/MusicboxMC/actions/runs/44558726905)                                                                                                                                                                                                                                  |
 
 ## 已完成（按时间倒序，只留结论）
+
+- **Git 提交归属（2026-11-24）**。仓库使用所有者账号的 GitHub noreply 邮箱署名，`git var GIT_AUTHOR_IDENT` 已验证生效。
+
+- **Git 仓库维护（2026-11-24）**。GitHub `main` 禁止强推和删除，管理员也适用。常规快进推送仍可用。GitHub API 的 `branches/main` 返回 `protected: true`。`git remote prune origin` 清理了 0 条过期引用，远端 5 条 Dependabot 分支分别对应仍开放的 PR #3 至 #7。
 
 - **0.4.5 发布准备（2026-11-19，第十六轮）**：A/B/C 三批与四处界面返工完成后准备发布。①`package.json` / `package-lock.json` 版本改 `0.4.5`；②`CHANGELOG.md` 的 `## [Unreleased]` 提为 `## [0.4.5] - 2026-11-19` 并加一段本版摘要（界面每张卡要么说清自己要么消失、中继器均匀铺开、画布跟手），顺手补齐文末链接表（原来只列到 `0.2.4`，现在有 `0.4.5`/`0.4.0`/`0.3.0`/`0.2.5`，`[Unreleased]` 的比较基准改成 `v0.4.5`）；③打包 `MusicboxMC-Setup-0.4.5-win-x64.exe` 124,787,348 字节 sha256 `65fafad8caf141fed0153eea125c6c76cc7f351245289004028d174201932876`、`MusicboxMC-0.4.5-win-x64.zip` 156,757,694 字节 sha256 `48e7c66eb5a4bbbfd5fec0816ac1bad670fc728db048a8cfb2f260064b376e2e`、资源包沿用 51,562 字节；④闸门：`npm run check` EXIT=0（55 文件 / 407 用例）、`verify:litematic` / `smoke` / `verify:about`（读回版本 0.4.5）/ `verify:ui`（no console errors, no overflow）全部通过；⑤发布说明按你第十六轮的答复不再带「已知限制」段（那些限制下次发布也不列）。⑥2026-11-19 推送 `main` 并打 `v0.4.5`（指向 `2143c7b`），GitHub Release id `451554453`（github.com/xingtuan416/MusicboxMC/releases/tag/v0.4.5）上传三个附件成功；CI run #62、#63 均绿。
 - **0.4.5 的 C 批：预览重写（2026-11-19，第十六轮）**：用户说画布「卡手、不能斜向拖动、横向不跟手」。根因不是显卡也不是数据量：`src/renderer/preview.js` 把 `clampView` 的结果写回状态，而 `previewGeometry.js` 的 `clampView` 把偏移四舍五入成整格——28 px/格时位移不到 14 px 画面不动、超过就整格跳，两轴各自取整于是斜拖像锁轴；另外每帧五趟全量重绘 + 中继器 `shadowBlur` + 两次 `getComputedStyle`。改法：①`src/renderer/previewGeometry.js` 不再取整，新增 `TILE_SIZE = 384` / `tileCells()` / `cellRangeForView()` / `tilesForView()`，瓦片锚定在「格数 = span 的整数倍」上，与视口无关；②`src/renderer/preview.js` 把格子层画进 16 张 LRU 缓存瓦片（`TILE_LIMIT`），按设备像素对齐拼回（`baseX + gx × step` 保留小数，这就是跟手的来源），标尺/左槽/边框/焦点框每帧原位重画，图例只在乐曲变化时重建，读数用 `setText` 比对后写，padding 用 `WeakMap` 缓存；③`shadowBlur` 换成 1 px 硬边 `drawTileLip`；④`src/renderer/app.js` 的滚轮改成和拖动一样按 `requestAnimationFrame` 聚合；⑤新增 `previewDiagnostics()` 与 `window.__preview` 供验证脚本读 `{ tiles, builds, lastDrawMs, view }`。`test/previewGeometry.test.ts` 16 条（小数偏移、瓦片跨格数、覆盖视口、锚定网格、平移复用、不越界）；`scripts/verify-ui.cjs` 新增：7 px 斜向拖动后两轴各移动 0.25 格、连续 4 次 6 px 平移 `builds` 不增长、滚轮 900 px 才建新瓦片。两次实测「改回去会红」：`clampView` 改回四舍五入报「7 px 拖动移动 0.000 格」、`TILE_LIMIT` 改 0 报「短平移重建了瓦片（17 → 53）」。闸门：`npm test` 55 文件 / 407 用例、`npm run check` EXIT=0、`npm run verify:ui` 通过（no console errors, no overflow）。
@@ -126,6 +132,8 @@
 7. `KI-13`：~~同乐器合并后借道不跑、提示还谎称“已合并成一条主线”~~ —— 0.4.0 第八轮已改成“合并出的轨道上再借一次”，见 `known-issues.md`。
 8. `KI-14`：~~手动布局超过 48 格听距时完全没有提示~~ —— 0.4.0 第九轮已在非智能分支补判定（`attempted: false`），第十一轮改名为 `SMART_HEARING_UNREACHED` 并按半径比较，见 `known-issues.md`。
 9. `KI-15`：~~听距拿整条 Z 跨度比 48~~ —— 0.4.0 第十一轮已改成“玩家到最远音符的半径”，见 `known-issues.md`。
+
+10. 主分支的 140 条历史提交使用已不再使用的作者邮箱，GitHub 尚未将这些提交归到仓库所有者账号。仓库使用 GitHub noreply 邮箱为新提交建立归属。
 
 Node 26 是开发/构建要求；打包后的 Electron 应用仍自带自己的 Node 运行时，用户不需要安装 Node。
 
