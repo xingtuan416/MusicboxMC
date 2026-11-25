@@ -73,6 +73,7 @@
       "output": "release"
     },
     "electronDist": "node_modules/electron/dist",
+    "disableAsarIntegrity": true,
     "files": [
       "dist/**/*",
       "package.json",
@@ -80,6 +81,7 @@
     ],
     "win": {
       "icon": "assets/icon.png",
+      "signAndEditExecutable": false,
       "target": [
         {
           "target": "nsis",

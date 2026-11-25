@@ -27,6 +27,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Redstone alignment uses the notes that survive pitch mapping and the actual power taps of borrowing tracks. Layout statistics report the actual trigger ticks and exported block count.
 - Separately exported command players have distinct scoreboards and storage. Stopping one clears its own queued notes.
 - The check screen validates NBT metadata and oversized layouts earlier. Warning counts, preview locations and import error handling match the current selection.
+- Windows packages retain the original Electron executable to prevent a verified sandboxed startup crash after resource editing. The app and installer still report the MusicboxMC version.
 - Grid and note-label toggles redraw the checked layout before the first export.
 - The progress bar only opens available screens, and going back from completion skips the finished progress screen. The export location button names the check it opens, and save notifications stay clear of the step label.
 

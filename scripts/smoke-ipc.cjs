@@ -51,18 +51,35 @@ const { join, resolve } = require('node:path');
   const profile = join(work, 'profile');
   env.MUSICBOXMC_USER_DATA = profile;
 
-  const app = await _electron.launch({ args: [resolve('dist/src/main/index.js')], env });
+  const executable = env.MUSICBOXMC_SMOKE_EXE;
+  const app = await _electron.launch(
+    executable
+      ? { executablePath: resolve(executable), env }
+      : { args: [resolve('dist/src/main/index.js')], env },
+  );
   try {
     const usedProfile = await app.evaluate(({ app: electronApp }) => electronApp.getPath('userData'));
     check(usedProfile === profile, 'runs on the profile the script asked for: ' + usedProfile);
-    const page = await app.firstWindow();
+    const page = await app.firstWindow({ timeout: 10000 });
     // Registered before anything is driven, so an error thrown by an early call is caught
     // rather than happening before the listener exists.
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
     page.on('crash', () => errors.push('renderer crashed'));
 
-    await page.waitForLoadState('domcontentloaded');
+    await page.waitForLoadState('domcontentloaded', { timeout: 10000 });
+    if (executable) {
+      const details = await app.evaluate(({ app }) => ({
+        packaged: app.isPackaged,
+        version: app.getVersion(),
+        sandboxDisabled: app.commandLine.hasSwitch('no-sandbox'),
+      }));
+      const { version } = JSON.parse(readFileSync(resolve('package.json'), 'utf8'));
+      check(
+        details.packaged && details.version === version && !details.sandboxDisabled,
+        'launches the packaged executable with default sandboxing and version ' + details.version,
+      );
+    }
     await page.waitForTimeout(500);
 
     // 1. The bridge exists and exposes the documented surface.

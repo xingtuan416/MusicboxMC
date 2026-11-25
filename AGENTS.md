@@ -113,6 +113,7 @@ CI 在 Node 26 上跑 `npm run check`、`verify:litematic` 与 `resourcepack:che
 13. **MUST** 选轨、推荐、检查和导出使用导入时的同一 MIDI 版本。原路径的文件变化时提示重新导入，避免把旧的音轨下标套到新文件。
 14. **MUST** 命令播放器的新实例使用独立计分板和 storage。停止时只清理自身的时钟和待播帧，禁止输出会影响其它播放器的 `stopsound @a`。
 15. **MUST** 投影覆盖确认由原生「另存为」处理。只写对话框确认的完整路径。目标在写入前发生变化时，要求重新选择。
+16. **MUST** Windows 打包保留原始 Electron EXE。当前工具链重写 EXE 资源会在已复现的 Windows 11 26300 环境中导致沙箱渲染进程退出。发布前可用 `$env:MUSICBOXMC_SMOKE_EXE = 'release/win-unpacked/MusicboxMC.exe'; npm run smoke` 从成品复验。
 
 ## 常见故障
 
