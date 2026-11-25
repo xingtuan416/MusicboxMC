@@ -7,6 +7,29 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-11-25
+
+### Added
+
+- Save the bundled piano resource pack directly from the completion screen.
+- The completion screen lists independent redstone inputs and shows the matching `/tick rate` command for a non-default base TPS.
+
+### Changed
+
+- Choose the complete output path in the system Save As dialog. Windows handles same-name confirmation there, before generation. A file that changes before writing requires a fresh selection.
+- Layout checks and smart recommendations run in the background. Export can reuse the checked layout and supports cancellation before writing.
+
+### Fixed
+
+- The bundled resource pack now replaces only the five extended piano sound events. Both playback backends base the recommendation on the piano slots the song actually uses.
+- MIDI notes that span a program change keep their pitch, duration and attack instrument. Split tracks retain the source name, and Format 2 is rejected with an explanation.
+- Replacing a MIDI after import requires a fresh import, so an old track selection cannot be applied to the new file.
+- Redstone alignment uses the notes that survive pitch mapping and the actual power taps of borrowing tracks. Layout statistics report the actual trigger ticks and exported block count.
+- Separately exported command players have distinct scoreboards and storage. Stopping one clears its own queued notes.
+- The check screen validates NBT metadata and oversized layouts earlier. Warning counts, preview locations and import error handling match the current selection.
+- Grid and note-label toggles redraw the checked layout before the first export.
+- The progress bar only opens available screens, and going back from completion skips the finished progress screen. The export location button names the check it opens, and save notifications stay clear of the step label.
+
 ## [0.4.5] - 2026-11-19
 
 Every card on the configuration screen now explains itself or steps out of the way: the lead-track
@@ -453,7 +476,8 @@ First release. Windows x64, Electron 33.
 - Pure TypeScript NBT codec and Litematica bit packing; output is a Java 1.20.4
   `.litematic` that Litematica loads directly.
 
-[Unreleased]: https://github.com/xingtuan416/MusicboxMC/compare/v0.4.5...HEAD
+[Unreleased]: https://github.com/xingtuan416/MusicboxMC/compare/v0.4.6...HEAD
+[0.4.6]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.4.6
 [0.4.5]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.4.5
 [0.4.0]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.4.0
 [0.3.0]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.3.0
