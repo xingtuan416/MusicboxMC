@@ -32,6 +32,8 @@ jobs:
         run: npm ci
       - name: Verify
         run: npm run check
+      - name: Verify bundled piano sound replacements
+        run: npm run resourcepack:check
       - name: Verify the litematic writer with the independent Java reader
         run: npm run verify:litematic
 

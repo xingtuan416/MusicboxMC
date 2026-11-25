@@ -16,12 +16,7 @@ const REQUIRED_FILES = [
   ...Object.values(EXPECTED_SOUNDS).map((name) => `assets/minecraft/sounds/${name}.ogg`),
 ];
 
-function usage() {
-  console.error('用法：node scripts/check-piano-pack.mjs <resource-pack.zip>');
-  process.exit(2);
-}
-
-function readZipEntries(buffer) {
+export function readZipEntries(buffer) {
   const eocd = findSignature(
     buffer,
     0x06054b50,
@@ -86,58 +81,64 @@ function soundName(value) {
   if (typeof value === 'string') return value;
   if (!value || typeof value !== 'object') return null;
   const sounds = value.sounds;
-  if (!Array.isArray(sounds) || sounds.length === 0) return null;
+  if (!Array.isArray(sounds) || sounds.length !== 1) return null;
   const first = sounds[0];
   return typeof first === 'string' ? first : (first?.name ?? null);
 }
 
-const input = process.argv[2];
-if (!input) usage();
+export function inspectPack(entries) {
+  const missing = REQUIRED_FILES.filter((name) => !entries.has(name));
+  const mcmeta = readJson(entries, 'pack.mcmeta');
+  const sounds = readJson(entries, 'assets/minecraft/sounds.json');
+  const unexpectedNoteBlockEvents = Object.keys(sounds).filter(
+    (event) => event.startsWith('block.note_block.') && !Object.hasOwn(EXPECTED_SOUNDS, event),
+  );
+  const mappings = Object.fromEntries(
+    Object.entries(EXPECTED_SOUNDS).map(([event, expected]) => {
+      const actual = soundName(sounds[event]);
+      return [event, { expected, actual, ok: actual === expected && sounds[event]?.replace === true }];
+    }),
+  );
+  const sampleFiles = [...entries.keys()]
+    .filter((name) => name.startsWith('assets/minecraft/sounds/') && name.endsWith('.ogg'))
+    .sort();
+  const packFormat = mcmeta?.pack?.pack_format;
+  const supportedFormats = mcmeta?.pack?.supported_formats;
+  const packFormatIsInteger = Number.isInteger(packFormat);
+  const supportedFormatsAreIntegers =
+    supportedFormats === undefined ||
+    (Array.isArray(supportedFormats) && supportedFormats.every((value) => Number.isInteger(value)));
 
-const file = resolve(input);
-const entries = readZipEntries(readFileSync(file));
-const missing = REQUIRED_FILES.filter((name) => !entries.has(name));
-const mcmeta = readJson(entries, 'pack.mcmeta');
-const sounds = readJson(entries, 'assets/minecraft/sounds.json');
-const mappings = Object.fromEntries(
-  Object.entries(EXPECTED_SOUNDS).map(([event, expected]) => {
-    const actual = soundName(sounds[event]);
-    return [event, { expected, actual, ok: actual === expected && sounds[event]?.replace === true }];
-  }),
-);
-const sampleFiles = [...entries.keys()]
-  .filter((name) => name.startsWith('assets/minecraft/sounds/') && name.endsWith('.ogg'))
-  .sort();
-const packFormat = mcmeta?.pack?.pack_format;
-const supportedFormats = mcmeta?.pack?.supported_formats;
-const packFormatIsInteger = Number.isInteger(packFormat);
-const supportedFormatsAreIntegers =
-  supportedFormats === undefined ||
-  (Array.isArray(supportedFormats) && supportedFormats.every((value) => Number.isInteger(value)));
-
-const report = {
-  file,
-  entryCount: entries.size,
-  packFormat,
-  projectTarget: { minecraft: '1.20.4', resourcePackFormat: 22 },
-  versionCompatibleWithProject: packFormat === 22,
-  packFormatIsInteger,
-  supportedFormatsAreIntegers,
-  metadataWarnings: [
-    ...(packFormatIsInteger ? [] : ['pack.pack_format 不是整数；26.2 源码的 PackFormat codec 不接受小数']),
-    ...(supportedFormatsAreIntegers
-      ? []
-      : ['pack.supported_formats 含非整数；请按目标版本的 pack.mcmeta schema 修正']),
-  ],
-  missing,
-  samples: sampleFiles,
-  mappings,
-  complete:
-    missing.length === 0 &&
-    Object.values(mappings).every((item) => item.ok) &&
-    packFormatIsInteger &&
+  return {
+    entryCount: entries.size,
+    packFormat,
+    projectTarget: { minecraft: '1.20.4', resourcePackFormat: 22 },
+    versionCompatibleWithProject: packFormat === 22,
+    packFormatIsInteger,
     supportedFormatsAreIntegers,
-};
+    metadataWarnings: [
+      ...(packFormatIsInteger ? [] : ['pack.pack_format 不是整数；26.2 源码的 PackFormat codec 不接受小数']),
+      ...(supportedFormatsAreIntegers
+        ? []
+        : ['pack.supported_formats 含非整数；请按目标版本的 pack.mcmeta schema 修正']),
+    ],
+    missing,
+    samples: sampleFiles,
+    mappings,
+    unexpectedNoteBlockEvents,
+    complete:
+      missing.length === 0 &&
+      unexpectedNoteBlockEvents.length === 0 &&
+      packFormat === 22 &&
+      Object.values(mappings).every((item) => item.ok) &&
+      packFormatIsInteger &&
+      supportedFormatsAreIntegers,
+  };
+}
 
-console.log(JSON.stringify(report, null, 2));
-if (!report.complete) process.exitCode = 1;
+if (import.meta.main) {
+  const file = resolve(process.argv[2] ?? 'assets/musicboxmc-piano-pack-1.20.4.zip');
+  const report = inspectPack(readZipEntries(readFileSync(file)));
+  console.log(JSON.stringify({ file, ...report }, null, 2));
+  if (!report.complete) process.exitCode = 1;
+}
