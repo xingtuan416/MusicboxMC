@@ -3,7 +3,7 @@ const { mkdirSync, readFileSync, writeFileSync, rmSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 const { Midi } = require('@tonejs/midi');
-const { generate, measureLayout } = require('./fresh-dist.cjs').requireFreshService();
+const { generate, measureLayout, planSmartSelection } = require('./fresh-dist.cjs').requireFreshService();
 const { serveRenderer } = require('./serve-renderer.cjs');
 
 /**
@@ -81,7 +81,6 @@ function buildSingleSource(directory) {
     ...analyze.result,
     path: source,
     outputPath: join(directory, 'ui-check.litematic'),
-    outputDir: directory,
     appVersion: JSON.parse(readFileSync(resolve('package.json'), 'utf8')).version,
   };
   console.log(
@@ -97,13 +96,17 @@ function buildSingleSource(directory) {
     ...singleAnalyze.result,
     path: singleSource,
     outputPath: join(directory, 'ui-check-single.litematic'),
-    outputDir: directory,
     appVersion: result.appVersion,
   };
   console.log(`one-track fixture: ${single.song.noteCount} notes, ${single.tracks.length} track`);
 
   // A real layout measurement, so the developer readout shows real numbers.
   const layoutMeasure = measureLayout(source, {});
+  const slowerPlan = planSmartSelection(source, { baseTps: 1, dMax: 14 });
+  if (!slowerPlan.info) throw new Error(slowerPlan.error);
+  const exported = generate(source, { baseTps: 40, dMax: 6, smartSelection: true }).result;
+  if (!exported.success) throw new Error(exported.error);
+  const exportFixture = { ...exported, outputPath: result.outputPath };
 
   mkdirSync(resolve('out/ui-shots'), { recursive: true });
   const browser = await chromium.launch({ channel: 'msedge', headless: true });
@@ -123,7 +126,7 @@ function buildSingleSource(directory) {
 
     await page.addInitScript(
       (payload) => {
-        const { fixture, single, layoutMeasure } = payload;
+        const { fixture, single, layoutMeasure, slowerPlan, exportFixture } = payload;
         window.__calls = [];
         // Which file the next import sees. Both fixtures go through the real generator,
         // so a switch is the same thing as the user picking the other file.
@@ -133,11 +136,58 @@ function buildSingleSource(directory) {
         window.musicbox = {
           onLog() {},
           chooseMidi: async () => window.__active.path,
-          analyze: async () => window.__active,
-          generate: async () => fixture,
-          plan: async () => ({ info: fixture.smartSelection }),
+          analyze: async (path) => {
+            if (!window.__holdImports) return window.__active;
+            return new Promise((resolve) => {
+              window.__holdImports[path] = resolve;
+            });
+          },
+          generate: async (_path, _options, output, id) => {
+            if (output) {
+              if (output !== 'ui-verification-token') throw new Error('missing Save As token');
+              if (!window.__holdExport) return exportFixture;
+              window.__generationProgress(id, 'encode');
+              return new Promise((_resolve, reject) => {
+                window.__cancelExport = reject;
+              });
+            }
+            const located = fixture.placed.find((entry) => entry.zBase !== 0);
+            const warning = {
+              code: 'SPATIAL_DRIFT',
+              trackIndex: located.trackIndex,
+              tick: located.tick,
+              x: located.x,
+              z: located.zBase,
+              drift: 1,
+            };
+            const warnings = [...fixture.warnings];
+            while (warnings.length < 800) warnings.push({ code: 'STARTUP_LEAD_IN', ticks: 2 });
+            warnings.push(warning);
+            window.__located = warning;
+            window.__generationProgress?.(id, 'preview');
+            return { ...fixture, warnings };
+          },
+          onGenerationProgress: (handler) => {
+            window.__generationProgress = handler;
+          },
+          cancelGeneration: async () => {
+            window.__holdExport = false;
+            window.__cancelExport(new Error('任务已取消'));
+          },
+          plan: async (_path, options) => {
+            if (options.baseTps !== 1) return { info: fixture.smartSelection };
+            await new Promise((resolve) => {
+              window.__finishTpsPlan = resolve;
+            });
+            return slowerPlan;
+          },
           measure: async () => layoutMeasure,
-          chooseDirectory: async () => ({ path: fixture.outputDir, token: 'ui-verification-token' }),
+          chooseOutput: async (name) => {
+            window.__calls.push(`chooseOutput ${name}`);
+            return window.__cancelSaveDialog
+              ? null
+              : { path: fixture.outputPath, token: 'ui-verification-token' };
+          },
           saveResourcePack: async () => {
             window.__calls.push('saveResourcePack');
             return 'C:/tmp/musicboxmc-piano-pack.zip';
@@ -175,7 +225,7 @@ function buildSingleSource(directory) {
           windowControl: async () => {},
         };
       },
-      { fixture: result, single, layoutMeasure },
+      { fixture: result, single, layoutMeasure, slowerPlan, exportFixture },
     );
 
     await page.goto(site.url);
@@ -191,6 +241,10 @@ function buildSingleSource(directory) {
     };
 
     await shot('1-start');
+    const completionStep = page.locator('[data-target="8"]');
+    if (!(await completionStep.isDisabled())) {
+      problems.push('the progress bar lets an empty session show the completion page');
+    }
 
     // Step 1 -> 2, then drop a file on the step. This is the path Electron 32 broke:
     // `File.path` no longer exists, so the preload must resolve the path and the
@@ -454,6 +508,29 @@ function buildSingleSource(directory) {
     }
     await shot('4-config-smart');
 
+    await page.locator('#baseTpsInput').evaluate((input) => {
+      input.value = '1';
+      input.dispatchEvent(new Event('change'));
+    });
+    if ((await appliedBadge()) === '已应用' || (await page.locator('#smartApplyResult').textContent())) {
+      problems.push('setting TPS left the previous recommendation on screen');
+    }
+    await page.waitForFunction(() => typeof window.__finishTpsPlan === 'function', null, { timeout: 5000 });
+    await page.evaluate(() => window.__finishTpsPlan());
+    await page.waitForFunction(() => document.getElementById('smartBadge').textContent === '已应用');
+    const changedRouting = await page.locator('#smartApplyResult').textContent();
+    if (!changedRouting.includes(`最远 ${slowerPlan.info.radiusZ} 格`)) {
+      problems.push(`TPS change did not refresh the measured distance: ${changedRouting}`);
+    }
+    await page.locator('#baseTpsInput').evaluate((input) => {
+      input.value = '20';
+      input.dispatchEvent(new Event('change'));
+    });
+    await page.waitForFunction(() => document.getElementById('smartBadge').textContent === '已应用');
+    if (!(await page.locator('#sumPitch').textContent()).includes('单列最多 29 音')) {
+      problems.push('redstone capacity does not include both sides and the inline note');
+    }
+
     await page.locator('[data-fold="fold-pitch"]').click();
     const modeBoxes = await page.locator('[data-cfg-group="instrument"]').count();
     if (modeBoxes !== 2) problems.push(`expected two instrument modes, found ${modeBoxes}`);
@@ -470,7 +547,7 @@ function buildSingleSource(directory) {
       problems.push('extended mode does not offer the pack');
     }
     const extendedPack = await page.locator('#packDescription').textContent();
-    if (!extendedPack.includes('统一扩展竖琴')) {
+    if (!extendedPack.includes('统一为钢琴采样')) {
       problems.push(`extended mode does not recommend the pack: ${extendedPack}`);
     }
     // The save button lives in the export step, which is off screen here, so the click is
@@ -771,13 +848,35 @@ function buildSingleSource(directory) {
 
     await page.locator('#step-4 [data-goto="5"]').click();
 
+    if ((await page.locator('#btnStartGen').textContent()).trim() !== '检查投影') {
+      problems.push('step 5 promises to generate even though it only opens the check step');
+    }
     // Exporting needs somewhere to export to, so the button waits for a location.
     if (!(await page.locator('#btnStartGen').isDisabled())) {
       problems.push('step 5 lets the user generate before choosing a location');
     }
+    await page.evaluate(() => {
+      window.__cancelSaveDialog = true;
+    });
     await page.locator('#btnChooseOutput').click();
+    if (!(await page.locator('#btnStartGen').isDisabled())) {
+      problems.push('cancelling Save As enabled export');
+    }
+    await page.evaluate(() => {
+      window.__cancelSaveDialog = false;
+    });
+    await page.locator('#btnChooseOutput').click();
+    if ((await page.locator('#outputPathText').textContent()) !== result.outputPath) {
+      problems.push('step 5 does not show the full path accepted by Save As');
+    }
+    const dialogCalls = (await page.evaluate(() => window.__calls)).filter((call) =>
+      call.startsWith('chooseOutput '),
+    );
+    if (dialogCalls.length !== 2 || dialogCalls.some((call) => !call.endsWith('.litematic'))) {
+      problems.push('step 5 does not open Save As with a suggested projection filename');
+    }
     if (await page.locator('#btnStartGen').isDisabled()) {
-      problems.push('step 5 keeps 开始生成投影 disabled after a location is chosen');
+      problems.push('step 5 keeps 检查投影 disabled after a location is chosen');
     }
 
     // This song came back from smart selection in the original-instrument mode, which has no
@@ -796,6 +895,34 @@ function buildSingleSource(directory) {
     await page.waitForFunction(() => document.querySelectorAll('#issueList .issue').length > 0, {
       timeout: 40000,
     });
+
+    const canvasImage = () => page.locator('#canvas').evaluate((canvas) => canvas.toDataURL());
+    for (const id of ['showGrid', 'showNotes']) {
+      const original = await canvasImage();
+      await page.locator('#' + id).uncheck();
+      if ((await canvasImage()) === original) {
+        problems.push(id + ' did not redraw the first checked layout');
+      }
+      await page.locator('#' + id).check();
+    }
+
+    const warningSummary = await page.locator('#checkSummary').textContent();
+    if (!warningSummary.includes('801') || !warningSummary.includes('301 条未显示')) {
+      problems.push('truncated warnings are reported incorrectly: ' + warningSummary);
+    }
+    const jump = page.getByRole('button', { name: /^在红石布线里定位/ }).first();
+    if (!(await jump.isVisible())) {
+      problems.push('the actionable warning after item 500 was hidden');
+    } else {
+      await jump.click();
+      const focused = await page.evaluate(async () => {
+        const { state } = await import('/state.js');
+        const { x, z } = window.__located;
+        const { origin } = window.__main.preview;
+        return state.previewFocus?.x === x - origin.x && state.previewFocus?.z === z - origin.z;
+      });
+      if (!focused) problems.push('the warning jump missed the expected layout cell');
+    }
 
     // What each track became is shown on this step; it has to be populated, not an
     // empty frame.
@@ -957,11 +1084,23 @@ function buildSingleSource(directory) {
       );
     }
 
-    // Only this button writes a file.
+    // Cancellation returns to the checked preview. A second attempt can still go to the result.
+    await page.evaluate(() => {
+      window.__holdExport = true;
+    });
+    await page.locator('#btnGoGenerate').click();
+    await page.waitForFunction(() => document.getElementById('genStage').textContent === '正在编码投影…');
+    await shot('7-generating');
+    await page.locator('#btnCancelGeneration').click();
+    await page.waitForFunction(() => document.getElementById('step-6').classList.contains('active'));
     await page.locator('#btnGoGenerate').click();
     await page.waitForFunction(() => document.getElementById('step-8').classList.contains('active'), {
       timeout: 60000,
     });
+    const lingeringCancellation = await page
+      .locator('#statusToast')
+      .evaluate((toast) => toast.classList.contains('visible') && toast.textContent.includes('已取消生成'));
+    if (lingeringCancellation) problems.push('successful retry still shows the cancelled export toast');
     // A pack nudge appears only when smart selection recommends it. When it does, it must
     // be visible and close exactly once.
     const recommended = result.smartSelection?.resourcePackRecommended ?? true;
@@ -977,6 +1116,18 @@ function buildSingleSource(directory) {
       if (await page.locator('.modal-backdrop.open').count()) {
         problems.push('the resource-pack nudge did not close');
       }
+    }
+
+    const priorPackSaves = (await page.evaluate(() => window.__calls)).filter(
+      (call) => call === 'saveResourcePack',
+    ).length;
+    await page.getByRole('button', { name: '获取资源包', exact: true }).click();
+    const completionPackSaves = (await page.evaluate(() => window.__calls)).filter(
+      (call) => call === 'saveResourcePack',
+    ).length;
+    const packToast = await page.locator('#statusToast').textContent();
+    if (completionPackSaves !== priorPackSaves + 1 || !packToast.includes('资源包已保存')) {
+      problems.push('the completion page resource-pack button did not save and report the bundled pack');
     }
 
     // Developer mode: off by default, toggled from settings, and it must show the live
@@ -1010,12 +1161,30 @@ function buildSingleSource(directory) {
       size: document.getElementById('doneSize').textContent,
       warn: document.getElementById('doneWarningBox').textContent,
       trigger: document.getElementById('doneTriggerHint').textContent,
+      inputs: document.getElementById('doneInputList').textContent,
+      tps: document.getElementById('doneTpsHint').textContent,
     }));
     console.log('done page:', JSON.stringify(done, null, 1));
 
     // Nothing may claim a value it did not compute.
     if (done.blocks === '—' || done.dims === '—' || done.size === '—') {
       problems.push('the result page left a statistic unfilled');
+    }
+
+    const expectedBlocks = exportFixture.regions.reduce((sum, region) => sum + region.blockCount, 0);
+    if (Number(done.blocks.replace(/[^0-9]/g, '')) !== expectedBlocks) {
+      problems.push(`result counts ${done.blocks}, expected ${expectedBlocks} blocks`);
+    }
+    const startCount = exportFixture.startInputs.length;
+    if (
+      startCount < 2 ||
+      !done.trigger.includes(`${startCount} 个独立供电点`) ||
+      !done.inputs.includes('(')
+    ) {
+      problems.push(`result does not identify all external power points: ${done.trigger}`);
+    }
+    if (!done.tps.includes('/tick rate 40') || !(await page.locator('#doneTpsHint').isVisible())) {
+      problems.push('result does not explain how to match the selected TPS in game');
     }
 
     const doneRows = await page.locator('#doneAssignments .assignment-row').count();
@@ -1029,7 +1198,52 @@ function buildSingleSource(directory) {
     // A narrow pass, since a frameless window can be resized very small.
     await page.setViewportSize({ width: 900, height: 900 });
     await page.locator('#step-8').scrollIntoViewIfNeeded();
+    await page.getByRole('button', { name: '获取资源包', exact: true }).click();
+    await page.waitForFunction(() => {
+      const toast = document.querySelector('#statusToast.visible');
+      return toast && getComputedStyle(toast).opacity === '1';
+    });
+    const toastOverlapsLabel = await page.evaluate(() => {
+      const toast = document.getElementById('statusToast').getBoundingClientRect();
+      const labelText = document.createRange();
+      labelText.selectNodeContents(document.querySelector('#step-8 .step-index'));
+      const label = labelText.getBoundingClientRect();
+      return (
+        toast.left < label.right &&
+        toast.right > label.left &&
+        toast.top < label.bottom &&
+        toast.bottom > label.top
+      );
+    });
+    if (toastOverlapsLabel) problems.push('the download notification overlaps the completion step label');
     await shot('7-done-narrow');
+
+    await page.locator('#btnPrevStep').click();
+    if (!(await page.locator('#step-6').evaluate((step) => step.classList.contains('active')))) {
+      problems.push('back from completion opens the finished generation progress screen');
+    }
+    await completionStep.click();
+    await page.locator('#btnNextSong').click();
+    await page.evaluate(() => {
+      window.__holdImports = {};
+      window.__active = window.__main;
+      document.getElementById('btnChangeFile').click();
+    });
+    await page.waitForFunction(() => Boolean(window.__holdImports[window.__main.path]));
+    await page.evaluate(() => {
+      window.__active = window.__single;
+      document.getElementById('btnChangeFile').click();
+    });
+    await page.waitForFunction(() => Boolean(window.__holdImports[window.__single.path]));
+    await page.evaluate(() => {
+      window.__holdImports[window.__single.path](window.__single);
+    });
+    await page.waitForFunction(() => document.getElementById('valTracks').textContent === '1');
+    await page.evaluate(() => {
+      window.__holdImports[window.__main.path](window.__main);
+    });
+    const trackCount = await page.locator('#valTracks').textContent();
+    if (trackCount !== '1') problems.push('an old import response displaced the newer file');
 
     console.log(problems.length ? `PROBLEMS:\n${problems.join('\n')}` : 'no console errors, no overflow');
     // A list of problems that still exits 0 is a list nobody reads: the gate has to fail.

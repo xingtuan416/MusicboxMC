@@ -39,7 +39,8 @@
     "verify:about": "node scripts/verify-about.cjs"
   },
   "dependencies": {
-    "@tonejs/midi": "^2.0.28"
+    "@tonejs/midi": "^2.0.28",
+    "midi-file": "^1.2.4"
   },
   "optionalDependencies": {
     "@rollup/rollup-darwin-arm64": "^4.68.3",

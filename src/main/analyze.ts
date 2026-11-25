@@ -4,7 +4,7 @@ import { parseMidi } from '../core/midi/parse';
 import type { SongModel } from '../core/midi/types';
 import { detectTrack } from '../core/palette/instrumentMap';
 import { formatDuration } from '../core/tempo/speed';
-import { MAX_LAYOUT_ERROR_MS, MAX_QUANTIZE_ERROR_MS, secondsToTick } from '../core/tempo/tick';
+import { BASE_TPS, MAX_LAYOUT_ERROR_MS, MAX_QUANTIZE_ERROR_MS, secondsToTick } from '../core/tempo/tick';
 import { numericRange } from '../core/numericRange';
 import { chooseLeadTrack, trackProminence, type ProminenceTrack } from '../core/arrangement/prominence';
 import type { AnalyzeResult, TrackSummary } from './types';
@@ -16,9 +16,9 @@ import type { AnalyzeResult, TrackSummary } from './types';
  * generated: song metadata, per-track note counts and the tempo segments.
  */
 
-function summarizeTracks(song: SongModel): TrackSummary[] {
+function summarizeTracks(song: SongModel, summaryTps: number): TrackSummary[] {
   return song.tracks.map((t) => {
-    const ticks = t.notes.map((n) => secondsToTick(n.timeSec));
+    const ticks = t.notes.map((n) => secondsToTick(n.timeSec, summaryTps));
     const tickRange = numericRange(ticks);
     const midiRange = numericRange(t.notes.map((note) => note.midi));
     const detection = detectTrack(t);
@@ -48,8 +48,8 @@ function summarizeTracks(song: SongModel): TrackSummary[] {
   });
 }
 
-export function analyze(song: SongModel, path: string): AnalyzeResult {
-  const tracks = summarizeTracks(song);
+export function analyze(song: SongModel, path: string, summaryTps = BASE_TPS): AnalyzeResult {
+  const tracks = summarizeTracks(song, summaryTps);
   const lead = chooseLeadTrack(tracks as ProminenceTrack[]);
   return {
     path,
@@ -63,8 +63,9 @@ export function analyze(song: SongModel, path: string): AnalyzeResult {
       timeSignature: song.timeSignature,
       trackCount: song.tracks.length,
       noteCount: song.tracks.reduce((s, t) => s + t.notes.length, 0),
-      commandErrorMs: MAX_QUANTIZE_ERROR_MS,
-      layoutErrorMs: MAX_LAYOUT_ERROR_MS,
+      summaryTps,
+      commandErrorMs: (MAX_QUANTIZE_ERROR_MS * BASE_TPS) / summaryTps,
+      layoutErrorMs: (MAX_LAYOUT_ERROR_MS * BASE_TPS) / summaryTps,
     },
     tracks,
     recommendedLeadTrackIndex: lead?.index ?? null,

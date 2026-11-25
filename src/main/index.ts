@@ -1,19 +1,20 @@
 import { app, BrowserWindow, Menu, dialog, ipcMain, net, protocol, shell } from 'electron';
-import { basename, join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { allowedExternalUrl } from './externalLink';
-import {
-  analyzeFile,
-  generate,
-  generateToFile,
-  measureLayout,
-  planSmartSelection,
-  type GenerateOptions,
-} from './service';
+import type { GenerateOptions, GenerationStage } from './types';
+import { SongTasks } from './songTasks';
+import { sourceRevision } from './sourceRevision';
 import { describeCoreError } from './messages';
 import { resolveRendererPath } from './rendererPath';
-import { grantDirectory, resolveOutputPath } from './outputPaths';
+import {
+  grantOutput,
+  normalizeFileName,
+  OutputSelectionChanged,
+  resolveOutput,
+  writeSelectedOutput,
+} from './outputPaths';
 import { handleFatalException } from './fatal';
 import { mergePreferences, readPreferences, writePreferences, type Preferences } from './preferences';
 
@@ -71,11 +72,11 @@ function preferences(): Preferences {
   return cachedPreferences;
 }
 
-function savePreferences(patch: unknown): Preferences {
+function savePreferences(patch: unknown): Preferences & { persisted: boolean } {
   const next = mergePreferences(preferences(), patch);
   cachedPreferences = next;
-  writePreferences(join(app.getPath('userData'), 'preferences.json'), next);
-  return next;
+  const persisted = writePreferences(join(app.getPath('userData'), 'preferences.json'), next);
+  return { ...next, persisted };
 }
 
 /**
@@ -104,6 +105,10 @@ function serveRenderer(): void {
 }
 
 let win: BrowserWindow | null = null;
+const songTasks = new SongTasks();
+const generationJobs = new Map<number, { id?: number; controller: AbortController }>();
+
+app.on('before-quit', () => songTasks.close());
 
 function logToRenderer(line: string): void {
   win?.webContents.send('app:log', line);
@@ -130,9 +135,11 @@ function createWindow(): void {
     },
   });
 
+  const senderId = win.webContents.id;
   win.loadURL('app://musicbox/index.html');
 
   win.on('closed', () => {
+    generationJobs.get(senderId)?.controller.abort();
     win = null;
   });
 }
@@ -140,8 +147,11 @@ function createWindow(): void {
 /** Paths from the renderer process must be real files, not arbitrary path strings. */
 function assertFile(path: unknown): string {
   if (typeof path !== 'string' || path.length === 0) throw new Error('缺少文件路径');
-  if (!existsSync(path)) throw new Error(`文件不存在：${path}`);
-  return path;
+  const absolute = resolve(path);
+  const stat = statSync(absolute, { throwIfNoEntry: false });
+  if (!stat) throw new Error(`文件不存在：${path}`);
+  if (!stat.isFile()) throw new Error('请选择 MIDI 文件，当前路径是文件夹或其它类型。');
+  return absolute;
 }
 
 function registerIpc(): void {
@@ -172,64 +182,117 @@ function registerIpc(): void {
     return res.filePath;
   });
 
-  ipcMain.handle('song:analyze', (_e, path: unknown) => {
+  ipcMain.handle('song:analyze', async (_e, path: unknown) => {
     try {
-      return analyzeFile(assertFile(path));
-    } catch (e) {
-      throw new Error(`解析失败：${describeCoreError(e)}`, { cause: e });
+      return await songTasks.run('analyze', assertFile(path));
+    } catch (error) {
+      throw new Error('解析失败：' + describeCoreError(error), { cause: error });
     }
   });
 
-  ipcMain.handle('song:generate', (_e, path: unknown, options: unknown, outputTarget: unknown) => {
-    try {
-      const file = assertFile(path);
-      const safeOptions = (options ?? {}) as GenerateOptions;
-      if (outputTarget !== undefined && outputTarget !== null) {
-        const outputPath = resolveOutputPath(outputTarget);
-        if (!outputPath) throw new Error('输出位置授权无效或已过期，请重新选择文件夹');
-        return generateToFile(file, outputPath, safeOptions);
+  ipcMain.handle(
+    'song:generate',
+    async (event, path: unknown, options: unknown, target: unknown, id: unknown, revision: unknown) => {
+      const senderId = event.sender.id;
+      if (generationJobs.has(senderId)) throw new Error('已有生成任务正在运行');
+      const job = {
+        id: typeof id === 'number' && Number.isSafeInteger(id) ? id : undefined,
+        controller: new AbortController(),
+      };
+      const { signal } = job.controller;
+      const progress = (stage: GenerationStage): void => {
+        if (job.id !== undefined && !event.sender.isDestroyed()) {
+          event.sender.send('song:progress', job.id, stage);
+        }
+      };
+      generationJobs.set(senderId, job);
+      try {
+        const file = assertFile(path);
+        const rawOptions = (options ?? {}) as GenerateOptions;
+        const expected = typeof revision === 'string' ? revision : undefined;
+        if (target === undefined || target === null) {
+          return await songTasks.run('check', file, rawOptions, signal, progress, expected);
+        }
+        const output = resolveOutput(target);
+        if (!output) throw new Error('保存位置授权无效或已过期，请重新选择保存位置。');
+        const { result, buffer } = await songTasks.run(
+          'export',
+          file,
+          rawOptions,
+          signal,
+          progress,
+          expected,
+        );
+        if (!result.success || buffer === null) return result;
+
+        signal.throwIfAborted();
+        sourceRevision(file, result.sourceRevision);
+        progress('write');
+        try {
+          writeSelectedOutput(output, buffer);
+        } catch (error) {
+          if (!(error instanceof OutputSelectionChanged)) throw error;
+          return { ...result, success: false, chooseOutputAgain: true, error: error.message };
+        }
+        return { ...result, outputPath: output.path };
+      } catch (error) {
+        if (signal.aborted) throw new Error('任务已取消', { cause: error });
+        throw new Error('生成失败：' + describeCoreError(error), { cause: error });
+      } finally {
+        generationJobs.delete(senderId);
       }
-      return generate(file, safeOptions).result;
-    } catch (e) {
-      throw new Error(`生成失败：${describeCoreError(e)}`, { cause: e });
-    }
+    },
+  );
+
+  ipcMain.handle('song:cancel', (event, id: unknown) => {
+    const job = generationJobs.get(event.sender.id);
+    if (job && typeof id === 'number' && job.id === id) job.controller.abort();
   });
 
-  // Layout measurement for the developer panel: no file is written and no litematic bytes
-  // are built, so it is cheap enough to run whenever an option changes.
-  ipcMain.handle('song:measure', (_e, path: unknown, options: unknown) => {
+  ipcMain.handle('song:measure', async (_e, path: unknown, options: unknown, revision: unknown) => {
     try {
-      return measureLayout(assertFile(path), (options ?? {}) as GenerateOptions);
-    } catch (e) {
-      throw new Error(`测量失败：${describeCoreError(e)}`, { cause: e });
+      return await songTasks.run(
+        'measure',
+        assertFile(path),
+        (options ?? {}) as GenerateOptions,
+        undefined,
+        undefined,
+        typeof revision === 'string' ? revision : undefined,
+      );
+    } catch (error) {
+      throw new Error('测量失败：' + describeCoreError(error), { cause: error });
     }
   });
 
-  // The configuration step asks what smart routing would choose. Nothing is written; this
-  // is a measurement, so the settings the user sees are the ones the generator will use.
-  ipcMain.handle('song:plan', (_e, path: unknown, options: unknown) => {
+  ipcMain.handle('song:plan', async (_e, path: unknown, options: unknown, revision: unknown) => {
     try {
-      return planSmartSelection(assertFile(path), (options ?? {}) as GenerateOptions);
-    } catch (e) {
-      throw new Error(`智能推荐失败：${describeCoreError(e)}`, { cause: e });
+      return await songTasks.run(
+        'plan',
+        assertFile(path),
+        (options ?? {}) as GenerateOptions,
+        undefined,
+        undefined,
+        typeof revision === 'string' ? revision : undefined,
+      );
+    } catch (error) {
+      throw new Error('智能推荐失败：' + describeCoreError(error), { cause: error });
     }
   });
 
-  // Where the schematic goes, without writing it: the file is produced by the next step.
-  ipcMain.handle('dialog:choose-directory', async () => {
+  ipcMain.handle('dialog:choose-output', async (_e, suggestion: unknown) => {
     if (!win) return null;
+    const name = (typeof suggestion === 'string' && normalizeFileName(suggestion)) || 'Musicbox.litematic';
     const remembered = preferences().lastOutputDir;
-    const picked = await dialog.showOpenDialog(win, {
-      title: '选择保存文件夹',
-      ...(remembered ? { defaultPath: remembered } : {}),
-      properties: ['openDirectory', 'createDirectory'],
+    const picked = await dialog.showSaveDialog(win, {
+      title: '保存投影',
+      defaultPath: remembered ? join(remembered, name) : name,
+      filters: [{ name: 'Litematica 投影', extensions: ['litematic'] }],
+      properties: ['showOverwriteConfirmation'],
     });
-    if (picked.canceled || picked.filePaths.length === 0) return null;
-    const grant = grantDirectory(picked.filePaths[0]!);
-    // Remembered here rather than after generation: the folder was chosen deliberately,
-    // and a cancelled generation should still leave the next dialog in the right place.
-    savePreferences({ lastOutputDir: grant.path });
-    return grant;
+    if (picked.canceled || !picked.filePath) return null;
+    const grant = grantOutput(picked.filePath);
+    const { persisted } = savePreferences({ lastOutputDir: dirname(grant.path) });
+    return { ...grant, preferencesPersisted: persisted };
   });
 
   /**

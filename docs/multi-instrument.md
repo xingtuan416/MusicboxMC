@@ -522,7 +522,7 @@ note = midi + 12 * transpose + 12 * k - A
   - 音符守恒：除被丢弃的鼓音符外不丢音。
   - 时序不变：沿用 `layout.acceptance` 的不变量。
   - litematic 往返 + `VerifyLitematic.java` 独立校验。
-- 命令后端：每轨 sound event 正确；鼓 `pitch=1`；stopsound 覆盖实际用到的音色。
+- 命令后端：每轨 sound event 正确；鼓 `pitch=1`，停止应只清除当前播放器尚未播放的帧。
 - `warningCoverage`：新警告码都有文案和发射点。
 
 ### 10.4 UI

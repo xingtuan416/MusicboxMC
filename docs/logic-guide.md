@@ -41,7 +41,7 @@
 - 输入是秒 → 先量化到游戏刻（20 游戏刻/秒，一刻 50ms）→ 再量化到红石 tick（1 红石 tick = 2 游戏刻 = 0.1 秒）。见 `src/core/tempo/tick.ts:2-6`、`src/core/layout/model.ts:39`。
 - 组间隔：`gap = 本组红石 tick + 全曲 lead-in − 上一组红石 tick`；末级中继器 `r = min(4, gap)`；剩余 `rest = gap − r` 由前面串联的中继器承担，每 4 点延迟一个中继器，`restCells = ceil(rest/4)`（`src/core/layout/track.ts:272-275`、`docs/redstone-model.md:87-94`）。
 - **全曲 lead-in（base）只能是 0 或 1**：中继器最小延迟是 1 红石 tick，落在 0 时刻的组最早也要 1 tick 后才响。若每条轨道各自推断，轨道之间的相对时间就错了，所以 `layout()` 一次算全曲并统一传下去（`src/core/layout/track.ts:78-88`、`263-269`；启动 lead-in 只报一次：`src/core/layout/track.ts` 的 `STARTUP_LEAD_IN`，发出点 `src/core/layout/index.ts:685`）。
-- **误差**：红石后端要量化两次，最坏 ±75ms（1.5 游戏刻），不是界面早期声称的 ±25ms（`src/core/tempo/tick.ts:14-23`）。单个音符实际与计划差超过 1 游戏刻就报 `TIMING_ADJUSTED`（`src/core/layout/track.ts:408`）。
+- **误差**：红石后端要量化两次，最坏 ±75ms（1.5 游戏刻），不是界面早期声称的 ±25ms（`src/core/tempo/tick.ts:14-23`）。计划触发刻由量化后的红石刻和统一启动延迟计算。
 - **速度表**：按 `/tick rate` 换算，预设倍率 1.0 / 0.75 / 0.5 / 1.5 / 2.0，实际时长 = 原时长 ÷ 倍率（`src/core/tempo/speed.ts:16-25`；默认表在 `src/main/generate.ts:62`）。
 
 ## 4. 多条轨道为什么不会越走越散（空间对齐）

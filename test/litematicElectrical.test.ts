@@ -260,9 +260,13 @@ describe('the .litematic on disk is the circuit these tests simulate', () => {
     expect(borrowing.length).toBeGreaterThan(0);
 
     const sim = RedstoneSim.fromPlacements([...at.values()]);
-    for (const lane of lanes.filter((entry) => !entry.fedByCorridor)) {
-      // The player powers each lane head from the west; a borrowed lane is fed by its corridor.
-      sim.set({ x: lane.minX - 1, y: 1, z: lane.z }, { kind: 'source', power: 15 });
+    const heads = lanes.filter((entry) => !entry.fedByCorridor);
+    expect(result.startInputs).toHaveLength(heads.length);
+    expect(result.startInputs).toEqual(
+      expect.arrayContaining(heads.map((lane) => ({ x: lane.minX - 1, y: 1, z: lane.z }))),
+    );
+    for (const input of result.startInputs ?? []) {
+      sim.set(input, { kind: 'source', power: 15 });
     }
     sim.settle();
     sim.run(20000);

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { decodeModifiedUtf8 } from '../src/core/nbt/modifiedUtf8';
 import { writeNbt } from '../src/core/nbt/writer';
-import { nbt } from '../src/core/nbt/tag';
+import { readNbt } from '../src/core/nbt/reader';
+import { nbt, TagType } from '../src/core/nbt/tag';
 
 /**
  * Two diagnostics that pointed at the wrong thing.
@@ -47,5 +48,33 @@ describe('NBT diagnostics', () => {
   it('still accepts a string that fits', () => {
     const justInside = 'a'.repeat(65_535);
     expect(() => writeNbt('', nbt.string(justInside))).not.toThrow();
+  });
+});
+
+describe('NBT collection validation', () => {
+  it('rejects a mismatched or mixed list before writing the payload', () => {
+    expect(thrown(() => writeNbt('', nbt.list(TagType.Int, [nbt.string('x')]))).code).toBe(
+      'NBT_LIST_TYPE_MISMATCH',
+    );
+    expect(thrown(() => writeNbt('', nbt.list(TagType.Int, [nbt.int(1), nbt.string('x')]))).code).toBe(
+      'NBT_LIST_TYPE_MISMATCH',
+    );
+  });
+
+  it.each([
+    [TagType.ByteArray, 1],
+    [TagType.IntArray, 4],
+    [TagType.LongArray, 8],
+  ])('checks that the full payload of tag %i fits before allocating it', (type, width) => {
+    const payload = Buffer.from([type, 0, 0, 0, 0, 0, 8]);
+    expect(thrown(() => readNbt(payload))).toMatchObject({
+      code: 'NBT_READ_OUT_OF_BOUNDS',
+      details: { position: 7, need: 8 * width, length: 7 },
+    });
+  });
+
+  it('rejects a negative array length with a structured error', () => {
+    const payload = Buffer.from([TagType.IntArray, 0, 0, 255, 255, 255, 255]);
+    expect(thrown(() => readNbt(payload)).code).toBe('NBT_INVALID_LENGTH');
   });
 });

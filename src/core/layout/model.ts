@@ -63,12 +63,8 @@ export function chordCapacity(dMax: number): number {
   return 2 * rows + 1;
 }
 
-/**
- * Largest allowed difference between the actual and intended trigger time, in game ticks.
- * With this topology the only source of drift is redstone-tick quantisation:
- * |tick - 2*rt| <= 1.
- */
-export const MAX_TRIGGER_SHIFT = 1;
+/** Bounding the number of materialized circuit blocks keeps long gaps predictable. */
+export const MAX_LAYOUT_BLOCKS = 1_000_000;
 
 /** Game ticks -> redstone ticks, rounded onto the 0.1s grid. */
 export function gameTickToRedstone(tick: number): number {
@@ -109,6 +105,24 @@ export interface XPlan {
   isSynchronized(atRt: number): boolean;
 }
 
+/** Horizontal space and zero-delay padding capacity for one note group. */
+export function groupFootprint(gap: number, noteCount: number, needsStartingWire: boolean) {
+  const delay = Math.min(MAX_REPEATER_DELAY, gap);
+  const rest = gap - delay;
+  const restCells = Math.ceil(rest / MAX_REPEATER_DELAY);
+  const tail = groupTailCells(noteCount);
+  const branchReach = tail === 3 ? chordRows(noteCount) : 0;
+  const lastSlotCap = Math.max(0, Math.min(MAX_PAD_RUN, WIRE_STRENGTH - 1 - branchReach));
+  const lead = needsStartingWire && rest > 0 ? 1 : 0;
+  return { delay, rest, restCells, tail, lastSlotCap, lead, noteOffset: lead + restCells + tail - 1 };
+}
+
+export interface XSample {
+  atRt: number;
+  x: number;
+  padCapacity: number;
+}
+
 /**
  * X samples of each group when a track is laid out naturally (no padding), used by
  * index.ts to advance the shared reference line from each track's actual padded position.
@@ -125,45 +139,31 @@ export function naturalSamples(
   notes: TrackNote[],
   base: number,
   maxNotes: number = MAX_CHORD_NOTES,
-): Array<{ atRt: number; x: number; padCapacity: number }> {
+): XSample[][] {
   const counts = new Map<number, number>();
   for (const n of notes) {
     const rt = gameTickToRedstone(n.tick);
     counts.set(rt, (counts.get(rt) ?? 0) + 1);
   }
   const rts = [...counts.keys()].sort((a, b) => a - b);
-  const out: Array<{ atRt: number; x: number; padCapacity: number }> = [];
-  let x = 0;
-  let prevRt = 0;
-  let first = true;
+  const lanes: XSample[][] = [];
   for (const rt of rts) {
-    const gap = rt + base - prevRt;
-    const r = Math.min(MAX_REPEATER_DELAY, gap);
-    const rest = gap - r;
-    const restCells = Math.ceil(rest / MAX_REPEATER_DELAY);
-    const n = Math.min(counts.get(rt)!, maxNotes);
-    const tail = groupTailCells(n);
-    const branchReach = tail === 3 ? chordRows(n) : 0;
-    const lastSlotCap = Math.max(0, Math.min(MAX_PAD_RUN, WIRE_STRENGTH - 1 - branchReach));
-    const padCapacity = lastSlotCap + restCells * MAX_PAD_RUN;
-    if (first && rest > 0) x = 1;
-    x += restCells + tail;
-    out.push({ atRt: rt + base, x: x - 1, padCapacity }); // note column
-    prevRt = rt + base;
-    first = false;
+    const atRt = rt + base;
+    let notesLeft = counts.get(rt)!;
+    for (let i = 0; notesLeft > 0; i++) {
+      const lane = (lanes[i] ??= []);
+      const previous = lane.at(-1);
+      const n = Math.min(notesLeft, maxNotes);
+      const footprint = groupFootprint(atRt - (previous?.atRt ?? 0), n, previous === undefined);
+      lane.push({
+        atRt,
+        x: (previous ? previous.x + 1 : 0) + footprint.noteOffset,
+        padCapacity: footprint.lastSlotCap + footprint.restCells * MAX_PAD_RUN,
+      });
+      notesLeft -= n;
+    }
   }
-  return out;
-}
-
-/** Group notes by game tick. Only used for the totalTicks statistic; layout groups by redstone tick. */
-export function groupByTick(notes: TrackNote[]): Array<{ tick: number; midi: number[] }> {
-  const map = new Map<number, number[]>();
-  for (const n of notes) {
-    const arr = map.get(n.tick);
-    if (arr) arr.push(n.midi);
-    else map.set(n.tick, [n.midi]);
-  }
-  return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([tick, midi]) => ({ tick, midi }));
+  return lanes;
 }
 
 /** Row of the j-th extra chord note: +1, -1, +2, -2, ... alternating sides. */

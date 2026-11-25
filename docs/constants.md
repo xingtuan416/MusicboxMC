@@ -17,7 +17,6 @@
 | MIDI 读入时的兜底 BPM | 120                                                  | [实现选择]            | `src/core/midi/parse.ts:7`                                 |
 | 命令后端量化误差上限  | ±25ms（±½ 游戏刻）                                   | [实现选择]            | `src/core/tempo/tick.ts:12`                                |
 | 红石后端量化误差上限  | ±75ms（1.5 游戏刻，两次取整）                        | [游戏事实]+[实现选择] | `src/core/tempo/tick.ts:14-23`                             |
-| 单音符允许的触发偏差  | 1 游戏刻（超过报 `TIMING_ADJUSTED`）                 | [实现选择]            | `src/core/layout/model.ts:71`                              |
 | 速度预设倍率          | 1.0 / 0.75 / 0.5 / 1.5 / 2.0（按 `/tick rate` 换算） | [仓库约定]            | `src/main/generate.ts:62`、`src/core/tempo/speed.ts:16-25` |
 
 ## 二、红石电路模型
@@ -184,15 +183,18 @@
 
 ## 十四、输入上限（渲染层不可信，主进程夹紧）
 
-| 量                          | 值       | 位置                               |
-| --------------------------- | -------- | ---------------------------------- |
-| 排除轨道 / 移调表的键数上限 | 4096     | `src/main/options.ts:8`            |
-| 速度预设条数上限            | 32       | `src/main/options.ts:9`            |
-| 作者名长度上限              | 100 字符 | `src/main/options.ts:10`           |
-| 稀疏上限的合法区间          | 1..500   | `src/main/options.ts:11`、`:84-88` |
-| dMax 合法区间               | 1..14    | `src/main/options.ts:58`           |
-| 输出目录授权数上限          | 64       | `src/main/outputPaths.ts:14`       |
-| 文件名长度上限              | 180 字符 | `src/main/outputPaths.ts:19`       |
+| 量                          | 值           | 位置                               |
+| --------------------------- | ------------ | ---------------------------------- |
+| 可配置的基准 TPS            | 1..100 整数  | `src/main/options.ts`              |
+| 单份红石电路的方块上限      | 1,000,000    | `src/core/layout/model.ts`         |
+| 导出区域的体积之和上限      | 8,000,000 格 | `src/core/litematic/build.ts`      |
+| 排除轨道 / 移调表的键数上限 | 4096         | `src/main/options.ts:8`            |
+| 速度预设条数上限            | 32           | `src/main/options.ts:9`            |
+| 作者名长度上限              | 100 字符     | `src/main/options.ts:10`           |
+| 稀疏上限的合法区间          | 1..500       | `src/main/options.ts:11`、`:84-88` |
+| dMax 合法区间               | 1..14        | `src/main/options.ts:58`           |
+| 待使用的输出文件授权上限    | 64           | `src/main/outputPaths.ts:14`       |
+| 文件名长度上限              | 180 字符     | `src/main/outputPaths.ts:19`       |
 
 ## 十五、界面与性能参数
 

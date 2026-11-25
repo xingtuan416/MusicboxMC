@@ -70,16 +70,11 @@ Two controls are placed alongside:
 
 - **Start / Restart** — writes a redstone block next to the clock, running the
   bootstrap chain.
-- **Stop** — clears `#playing`, removes the power block, and stops the note-block
-  sound events the schedule actually used.
+- **Stop** — clears `#playing`, removes the power block and deletes this player’s pending frames. Samples that have already started play to the end.
 
 ## Scoreboard namespace
 
-The objective name is `mb` plus the first 12 hex digits of the SHA-256 of the
-scheduled events, and the storage key is `musicboxmc:<objective>`. Two exports
-generated from the same input and options therefore share a namespace — running
-them at the same time would corrupt each other. Generate with different input if
-you need to play two at once.
+Each player generated for export gets an objective named `mb` followed by 12 random hex digits and a storage key of `musicboxmc:<objective>`. To use multiple copies in one world, check and export each copy separately. Copies pasted from the same file share their scoreboard and storage.
 
 ## Budgets and warnings
 

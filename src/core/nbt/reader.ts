@@ -18,6 +18,14 @@ class NbtReader {
     }
   }
 
+  private collectionLength(bytesPerItem: number): number {
+    const position = this.pos;
+    const length = this.i32();
+    if (length < 0) throw coreError('NBT_INVALID_LENGTH', { position, length });
+    this.need(length * bytesPerItem);
+    return length;
+  }
+
   u8(): number {
     this.need(1);
     return this.buf.readUInt8(this.pos++);
@@ -98,26 +106,26 @@ class NbtReader {
       case TagType.String:
         return nbt.string(this.str());
       case TagType.ByteArray: {
-        const len = this.i32();
+        const len = this.collectionLength(1);
         const arr = new Int8Array(len);
         for (let i = 0; i < len; i++) arr[i] = this.i8();
         return { type: TagType.ByteArray, value: arr };
       }
       case TagType.IntArray: {
-        const len = this.i32();
+        const len = this.collectionLength(4);
         const arr = new Int32Array(len);
         for (let i = 0; i < len; i++) arr[i] = this.i32();
         return { type: TagType.IntArray, value: arr };
       }
       case TagType.LongArray: {
-        const len = this.i32();
+        const len = this.collectionLength(8);
         const arr: bigint[] = new Array(len);
         for (let i = 0; i < len; i++) arr[i] = this.i64();
         return { type: TagType.LongArray, value: arr };
       }
       case TagType.List: {
         const elementType = this.u8() as TagType;
-        const len = this.i32();
+        const len = this.collectionLength(1);
         const items: NbtTag[] = [];
         for (let i = 0; i < len; i++) items.push(this.payload(elementType));
         return { type: TagType.List, elementType, value: items } satisfies NbtList;

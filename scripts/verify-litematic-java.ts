@@ -14,31 +14,41 @@ import { buildLitematic, type RegionData } from '../src/core/litematic/build';
 
 const region: RegionData = {
   position: { x: 0, y: 0, z: 0 },
-  size: { x: 2, y: 1, z: 2 },
+  size: { x: 22, y: 1, z: 2 },
   blocks: [
     { x: 0, y: 0, z: 0, state: { name: 'minecraft:stone' } },
     { x: 1, y: 0, z: 0, state: { name: 'minecraft:note_block', properties: { note: '7' } } },
     { x: 0, y: 0, z: 1, state: { name: 'minecraft:repeater', properties: { delay: '3' } } },
-    { x: 1, y: 0, z: 1, state: { name: 'minecraft:redstone_wire', properties: { power: '0' } } },
+    { x: 21, y: 0, z: 0, state: { name: 'minecraft:redstone_wire', properties: { power: '0' } } },
   ],
+};
+
+const twoStateRegion: RegionData = {
+  position: { x: 0, y: 0, z: 4 },
+  size: { x: 40, y: 1, z: 1 },
+  blocks: [1, 32].map((x) => ({ x, y: 0, z: 0, state: { name: 'minecraft:stone' } })),
 };
 
 const expected = [
   'Version=6',
   'MinecraftDataVersion=3700',
-  'Metadata.RegionCount=1',
-  'region=region_0 size=2x1x2 palette=5 bits=3 words=1 expectedWords=1',
+  'Metadata.RegionCount=2',
+  'region=region_0 size=22x1x2 palette=5 bits=3 words=3 expectedWords=3',
   '  cell(0,0,0) index=0 paletteIndex=1 block=minecraft:stone',
   '  cell(1,0,0) index=1 paletteIndex=2 block=minecraft:note_block',
-  '  cell(0,0,1) index=2 paletteIndex=3 block=minecraft:repeater',
-  '  cell(1,0,1) index=3 paletteIndex=4 block=minecraft:redstone_wire',
+  '  cell(0,0,1) index=22 paletteIndex=3 block=minecraft:repeater',
+  '  cell(21,0,0) index=21 paletteIndex=4 block=minecraft:redstone_wire',
+  'region=region_1 size=40x1x1 palette=2 bits=2 words=2 expectedWords=2',
+  '  cell(1,0,0) index=1 paletteIndex=1 block=minecraft:stone',
+  '  cell(2,0,0) index=2 paletteIndex=0 block=minecraft:air',
+  '  cell(32,0,0) index=32 paletteIndex=1 block=minecraft:stone',
 ];
 
 const work = mkdtempSync(join(tmpdir(), 'musicboxmc-java-'));
 const file = join(work, 'writer-check.litematic');
 writeFileSync(
   file,
-  buildLitematic([region], {
+  buildLitematic([region, twoStateRegion], {
     name: 'java-check',
     author: 'MusicboxMC',
     description: '',

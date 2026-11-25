@@ -4,7 +4,7 @@ import type { NoteBlockInstrument } from '../palette/instruments';
 import type { OutOfRangePolicy, RegionTable } from '../palette/pitchMap';
 import type { RegionData } from '../litematic/build';
 import type { LayoutWarning, Vec3 } from '../layout/types';
-import { buildSchedule } from './schedule';
+import { buildSchedule, type RangeShift } from './schedule';
 import {
   buildBootstrap,
   buildPlaybackChain,
@@ -95,6 +95,7 @@ export interface CommandPlaybackResult {
   warnings: LayoutWarning[];
   totalTicks: number;
   commandBlockCount: number;
+  rangeShift: RangeShift;
 }
 
 /**
@@ -114,7 +115,7 @@ export function buildCommandPlayback(
     throw coreError('COMMAND_INVALID_BUDGET', { max: DEFAULT_COMMAND_CHAIN_BUDGET });
   }
 
-  const { schedule, warnings } = buildSchedule(song, {
+  const { schedule, warnings, rangeShift } = buildSchedule(song, {
     baseTps,
     outOfRange: opts.outOfRange ?? 'warn',
     regions: opts.regions,
@@ -125,7 +126,7 @@ export function buildCommandPlayback(
   const { events, voices, frames, peakNotes } = schedule;
   const instruments = [...new Set(events.map((event) => event.instrument))];
 
-  const objective = scoreboardNamespace(events);
+  const objective = scoreboardNamespace();
   const storage = storageKey(objective);
 
   const clock = commandChainPosition(0);
@@ -146,7 +147,7 @@ export function buildCommandPlayback(
 
   const controls: Control[] = [
     { pos: start, label: 'Start / Restart', commands: bootstrap },
-    { pos: stop, label: 'Stop', commands: buildStopCommands(objective, instruments) },
+    { pos: stop, label: 'Stop', commands: buildStopCommands(objective, storage) },
   ];
   const player = buildPlayer({ commands, controls, power });
 
@@ -191,5 +192,6 @@ export function buildCommandPlayback(
     warnings,
     totalTicks: events[events.length - 1]!.tick,
     commandBlockCount,
+    rangeShift,
   };
 }

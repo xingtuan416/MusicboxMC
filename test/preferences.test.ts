@@ -35,6 +35,14 @@ describe('preferences', () => {
     expect(readPreferences(file)).toEqual(saved);
   });
 
+  it('reports that a session preference could not be persisted', () => {
+    const blockedParent = tempFile();
+    writeFileSync(blockedParent, 'a file, not a directory');
+    const file = join(blockedParent, 'prefs.json');
+    expect(writePreferences(file, DEFAULT_PREFERENCES)).toBe(false);
+    expect(readPreferences(file)).toEqual(DEFAULT_PREFERENCES);
+  });
+
   it('creates the profile folder on the way', () => {
     const file = join(tempFile(), 'nested', 'deeper', 'preferences.json');
     writePreferences(file, { lastOutputDir: null, packPromptMuted: true });

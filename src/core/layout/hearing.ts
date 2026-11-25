@@ -6,17 +6,16 @@ const NOTE_BLOCK = 'minecraft:note_block';
 export interface HearingSpot {
   /** Row the player stands on. */
   playerZ: number;
-  /** Distance in blocks from `playerZ` to the farthest note block. */
+  /** Maximum Z offset of a note block from the player's row. */
   hearingRadius: number;
 }
 
 /**
  * Where the player stands, and how far the farthest note block is from that row.
  *
- * A note block is audible within 48 blocks of the player, measured block to player: a
- * radius, not the width of the arrangement. Measuring the whole Z span against 48
- * therefore rejected songs the player could hear completely, and accepted layouts whose
- * far end was silent. Signs, dust and repeaters make no sound and are ignored here.
+ * This is the lateral component of the game hearing distance while following the song
+ * along X. Compare layouts by the farthest sound on either side of the row. Signs, dust
+ * and repeaters make no sound and are ignored here.
  *
  * `preferredZ` is the lead lane's main line, a real row of dust the player can stand on
  * while the song plays. Without a lead the middle of the note rows is used, so the error

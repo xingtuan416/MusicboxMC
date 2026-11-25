@@ -20,7 +20,7 @@
 | 类型检查（含测试）                   | `npm run typecheck`                                   |
 | lint                                 | `npm run lint` / `npm run lint:fix`                   |
 | 格式化                               | `npm run format` / `npm run format:check`             |
-| 不开界面直接生成                     | `npm run cli -- "song.mid"`                           |
+| 在命令行查看 MIDI 信息               | `npm run cli -- --midi "song.mid"`                    |
 | 校验资源包                           | `npm run resourcepack:check`                          |
 | 独立 Java 校验 litematic 写入器      | `npm run verify:litematic`（需要 JDK）                |
 | 从 CHANGELOG + 已知限制生成发布草稿  | `npm run release:notes`                               |
@@ -30,7 +30,7 @@
 | 关于页真机验证                       | `npm run verify:about`                                |
 | 外部代码审查                         | `ocr review --from <ref> --to <ref> --audience agent` |
 
-CI 在 Node 26 上跑 `npm run check` 与 `verify:litematic`，另有一个 Windows job 跑 `check` + `dist:dir`（tag/手动触发时跑完整 `dist`）。`verify:ui`、`verify:about`、`smoke` 需要显示环境，只能本地跑。
+CI 在 Node 26 上跑 `npm run check`、`verify:litematic` 与 `resourcepack:check`，另有一个 Windows job 跑 `check` + `dist:dir`（tag/手动触发时跑完整 `dist`）。`verify:ui`、`verify:about`、`smoke` 需要显示环境，只能本地跑。
 
 代码审查用阿里 OpenCodeReview（`ocr`，全局安装；配置在 `~/.opencodereview/config.json`，不在仓库里）。按路径的审查规则在 `.opencodereview/rule.json`，新发现的"会静默出错"的不变量应加进去。委托模式 `ocr delegate preview|rule` 不需要 API key。
 
@@ -106,6 +106,13 @@ CI 在 Node 26 上跑 `npm run check` 与 `verify:litematic`，另有一个 Wind
 6. **MUST** 走多乐器路径时把 `assignments` 传给 `layout()` / `buildCommandPlayback()`。不传就走旧的五槽钢琴模式，16 轨文件会全部变成竖琴且不报错。识别优先级固定为 **GM 音色 → 通道 9 鼓 → 轨道名 → 竖琴**；16 种乐器的锚点、底块和替代表见 `docs/multi-instrument.md`。`TrackModel.program` 一旦在 `parseMidi` 里丢掉，GM 优先就静默失效。
 7. **NEVER** 在同时发声的音符行之间留空行，或把和弦音符按两行间隔排。和弦行必须**相邻**：≤3 个音只给内联音符一个中继器，两侧靠音符盒单跳点亮；≥4 个音每行一个同延迟中继器。Minecraft 不会因为相邻音符盒同时被邻格点亮就响两次。强制合并的紧凑路径也用同一拓扑；只有超过紧凑路径容量（`min(2×dMax+1, 27)`，默认 27 音）的极端和弦才退回 staged 两行总线。注意普通布局的单列容量是 `2×dMax+1`（默认 29 音），超过它是拆轨而不是换拓扑。这条曾被改错成"每音隔一格"，既浪费空间又把相邻轨推出 48 格听距。
 8. **MUST** 共享 X 参考线从每条轨**实际补齐后的位置**递推，不能只看各轨独立的自然 X。历史补齐会改变后续每组的起点；丢掉它会让曾经补齐的轨超前于参考线且不产生 `SPATIAL_DRIFT`，长多轨音乐的同时音符会重新拉开。
+9. **MUST** 区分文件里没有 `programChange` 与显式 GM 0。Tone 会给两者都填 0，识别前必须保留拆分后每条轨道的原始声明，否则轨名识别会被竖琴静默覆盖。
+10. **MUST** X 参考线只采样映射后会摆放的音符，并按真实和弦容量分列。借道候选和布线必须同时使用真实取电位置与相同的引线格计算。
+11. **MUST** MIDI 音符在原始轨内按通道和音高配对，再按按下时的 GM program 归组。松开前换音色的音符仍属于按下时的组，同一源轨的每个逻辑轨都继承轨名。
+12. **MUST** 内置资源包只替换 `bass/guitar/harp/flute/bell` 五个声音事件。红石与命令的资源包提示按实际保留的钢琴外侧槽计算，导出前用 `npm run resourcepack:check` 校验。
+13. **MUST** 选轨、推荐、检查和导出使用导入时的同一 MIDI 版本。原路径的文件变化时提示重新导入，避免把旧的音轨下标套到新文件。
+14. **MUST** 命令播放器的新实例使用独立计分板和 storage。停止时只清理自身的时钟和待播帧，禁止输出会影响其它播放器的 `stopsound @a`。
+15. **MUST** 投影覆盖确认由原生「另存为」处理。只写对话框确认的完整路径。目标在写入前发生变化时，要求重新选择。
 
 ## 常见故障
 

@@ -83,9 +83,6 @@ describe('quantisation error (not zero, but bounded at 1 game tick per note and 
     });
     expect(res.placed[0]!.actual).toBe(2);
     expect(res.warnings).toContainEqual({ code: 'STARTUP_LEAD_IN', ticks: 2 });
-    // The lead-in shifts every track equally, so it is not a per-note timing problem and
-    // must not be reported as one.
-    expect(res.warnings.filter((w) => w.code === 'TIMING_ADJUSTED')).toHaveLength(0);
   });
 
   it('reports the lead-in once no matter how many tracks start at rt 0', () => {
@@ -94,7 +91,6 @@ describe('quantisation error (not zero, but bounded at 1 game tick per note and 
       { config: cfg, regions: DEFAULT_REGIONS },
     );
     expect(multi.warnings.filter((w) => w.code === 'STARTUP_LEAD_IN')).toHaveLength(1);
-    expect(multi.warnings.filter((w) => w.code === 'TIMING_ADJUSTED')).toHaveLength(0);
   });
 
   it('first group at rt >= 1: no lead-in, no warning, actual equals the original game tick', () => {
@@ -104,7 +100,6 @@ describe('quantisation error (not zero, but bounded at 1 game tick per note and 
     });
     expect(res.placed[0]!.actual).toBe(10);
     expect(res.warnings.some((w) => w.code === 'STARTUP_LEAD_IN')).toBe(false);
-    expect(res.warnings.some((w) => w.code === 'TIMING_ADJUSTED')).toBe(false);
   });
 
   it('adjacent groups differ by 2*(redstone tick difference), over 200 random scores', () => {

@@ -114,14 +114,18 @@ public class VerifyLitematic {
 
       int sx = (Integer) size.get("x"), sy = (Integer) size.get("y"), sz = (Integer) size.get("z");
       int volume = sx * sy * sz;
-      int bits = Math.max(1, 32 - Integer.numberOfLeadingZeros(Math.max(1, entries.size() - 1)));
+      int bits = Math.max(2, Integer.SIZE - Integer.numberOfLeadingZeros(entries.size() - 1));
+      long expectedWords = ((long) volume * bits + 63) / 64;
+      if (words.length != expectedWords) {
+        throw new IOException("Region " + regionName + ": expected " + expectedWords + " words, got " + words.length);
+      }
 
       System.out.println("region=" + regionName
           + " size=" + sx + "x" + sy + "x" + sz
           + " palette=" + entries.size()
           + " bits=" + bits
           + " words=" + words.length
-          + " expectedWords=" + ((long) volume * bits + 63) / 64);
+          + " expectedWords=" + expectedWords);
 
       // Name each cell of the region so the expected block at any position is explicit.
       for (int y = 0; y < sy; y++) {

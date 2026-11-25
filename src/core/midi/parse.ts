@@ -1,76 +1,130 @@
-import { Midi } from '@tonejs/midi';
-import type { NoteEvent, SongModel, TempoSegment, TrackModel } from './types';
+import { Header, Track } from '@tonejs/midi';
+import { parseMidi as parseRawMidi, type MidiEvent } from 'midi-file';
+import type { SongModel, TempoSegment, TrackModel } from './types';
 import { decodeMidiText } from './textEncoding';
 import { coreError } from '../errors';
 
-/** Tempo a MIDI file plays at until its first tempo event, per the SMF specification. */
 const DEFAULT_BPM = 120;
+
+interface PendingNote {
+  track: Omit<TrackModel, 'index'>;
+  tick: number;
+  velocity: number;
+}
+
+/** Pair each release with its attack, even if the channel changed program in between. */
+function parseTrack(events: MidiEvent[], header: Header): Omit<TrackModel, 'index'>[] {
+  const nameEvent = events.find((event) => event.type === 'trackName');
+  const name = decodeMidiText(nameEvent?.text ?? '');
+  const programs = new Map<number, number>();
+  const groups = new Map<number, Omit<TrackModel, 'index'>>();
+  const pending = new Map<number, PendingNote[]>();
+  let tick = 0;
+
+  function trackFor(channel: number): Omit<TrackModel, 'index'> {
+    const program = programs.get(channel);
+    const key = channel * 129 + (program ?? 128);
+    const found = groups.get(key);
+    if (found) return found;
+
+    const tone = new Track([], header);
+    tone.channel = channel;
+    tone.instrument.number = program ?? 0;
+    const track = {
+      name,
+      channel,
+      program,
+      instrument: tone.instrument.name,
+      percussion: channel === 9,
+      notes: [],
+    };
+    groups.set(key, track);
+    return track;
+  }
+
+  for (const event of events) {
+    tick += event.deltaTime;
+    if (!('channel' in event)) continue;
+    const channel = event.channel;
+    if (event.type === 'programChange') programs.set(channel, event.programNumber);
+
+    if (event.type === 'noteOff' || (event.type === 'noteOn' && event.velocity === 0)) {
+      const key = channel * 128 + event.noteNumber;
+      const queue = pending.get(key);
+      const attack = queue?.shift();
+      if (queue?.length === 0) pending.delete(key);
+      if (!attack) continue;
+      const timeSec = header.ticksToSeconds(attack.tick);
+      const durationSec = header.ticksToSeconds(tick) - timeSec;
+      attack.track.notes.push({
+        midi: event.noteNumber,
+        timeSec,
+        durationSec,
+        velocity: attack.velocity,
+        channel,
+      });
+    } else {
+      const track = trackFor(channel);
+      if (event.type !== 'noteOn') continue;
+      const key = channel * 128 + event.noteNumber;
+      const queue = pending.get(key) ?? [];
+      queue.push({ track, tick, velocity: event.velocity / 127 });
+      pending.set(key, queue);
+    }
+  }
+  return groups.size > 0 ? [...groups.values()] : [trackFor(0)];
+}
 
 /** Parse MIDI binary into a normalized SongModel. */
 export function parseMidi(buffer: Buffer | Uint8Array): SongModel {
-  const midi = new Midi(buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer));
-
-  // Time division is either ticks per quarter note or SMPTE frames per second. The
-  // library leaves `ppq` undefined for SMPTE, which makes every derived time NaN; a NaN
-  // used to send the layout into an infinite loop, so refuse the file up front instead.
-  if (!Number.isFinite(midi.header.ppq) || midi.header.ppq <= 0) {
+  const raw = parseRawMidi(buffer);
+  if (raw.header.format !== 0 && raw.header.format !== 1) {
+    throw coreError('MIDI_UNSUPPORTED_FORMAT', { format: raw.header.format });
+  }
+  const ppq = raw.header.ticksPerBeat;
+  if (ppq === undefined || !Number.isSafeInteger(ppq) || ppq <= 0) {
     throw coreError('MIDI_UNSUPPORTED_TIMEBASE');
   }
-
-  // Every time is derived from the first tempo event, including the span before it: the
-  // library measures that span at the first event's own tempo, so a file whose first
-  // tempo starts late would have its opening played at the wrong speed. State the
-  // specification's default at tick 0 and recompute. `Note.time` is a getter, so this
-  // corrects the notes as well, provided it happens before any of them is read.
-  if (!midi.header.tempos.some((tempo) => tempo.ticks === 0)) {
-    midi.header.tempos.push({ ticks: 0, bpm: DEFAULT_BPM });
-    midi.header.update();
+  // Tone's Header needs absolute event times. Use it for tempo and time signatures
+  // without sending the note stream through Tone's program-based track splitter.
+  for (const track of raw.tracks) {
+    let tick = 0;
+    for (const event of track) {
+      tick += event.deltaTime;
+      Object.assign(event, { absoluteTime: tick });
+    }
   }
-
-  const tempos: TempoSegment[] = midi.header.tempos.map((t) => ({
-    ticks: t.ticks,
-    timeSec: t.time ?? 0,
-    bpm: t.bpm,
+  const header = new Header({ ...raw, tracks: raw.tracks.length > 0 ? raw.tracks : [[]] });
+  if (!header.tempos.some((tempo) => tempo.ticks === 0)) {
+    header.tempos.push({ ticks: 0, bpm: DEFAULT_BPM });
+    header.update();
+  }
+  const tempos: TempoSegment[] = header.tempos.map((tempo) => ({
+    ticks: tempo.ticks,
+    timeSec: tempo.time ?? 0,
+    bpm: tempo.bpm,
   }));
-  // `tempos[0]` is guaranteed here: the block above inserts a tick-0 tempo whenever the
-  // file has none, so a fallback at this point would be unreachable and would give the
-  // default tempo a second definition.
-
-  const ts = midi.header.timeSignatures[0];
+  const ts = header.timeSignatures[0];
   const timeSignature: [number, number] | null = ts ? [ts.timeSignature[0]!, ts.timeSignature[1]!] : null;
 
-  const tracks: TrackModel[] = midi.tracks.map((track, index) => {
-    const notes: NoteEvent[] = track.notes.map((n) => {
-      // Nothing downstream can lay out a note at an unrepresentable time, and a
-      // non-finite one would spin rather than fail, so this is checked here instead of
-      // being trusted to the parser.
-      if (!Number.isFinite(n.time) || !Number.isFinite(n.duration) || n.time < 0) {
+  const logical = raw.tracks.flatMap((track) => parseTrack(track, header));
+  if (raw.header.format === 1 && logical[0]?.notes.length === 0) logical.shift();
+  let durationSec = 0;
+  const tracks: TrackModel[] = logical.map((track, index) => {
+    track.notes.sort((a, b) => a.timeSec - b.timeSec || a.midi - b.midi);
+    for (const note of track.notes) {
+      if (!Number.isFinite(note.timeSec) || !Number.isFinite(note.durationSec) || note.timeSec < 0) {
         throw coreError('MIDI_INVALID_TIMING', { track: index });
       }
-      return {
-        midi: n.midi,
-        timeSec: n.time,
-        durationSec: n.duration,
-        velocity: n.velocity,
-        channel: track.channel,
-      };
-    });
-    notes.sort((a, b) => a.timeSec - b.timeSec || a.midi - b.midi);
-    return {
-      index,
-      name: decodeMidiText(track.name),
-      channel: track.channel,
-      program: track.instrument?.number,
-      instrument: track.instrument?.name ?? 'unknown',
-      percussion: track.instrument?.percussion ?? false,
-      notes,
-    };
+      durationSec = Math.max(durationSec, note.timeSec + note.durationSec);
+    }
+    return { ...track, index };
   });
 
   return {
-    name: decodeMidiText(midi.name || ''),
-    ppq: midi.header.ppq,
-    durationSec: midi.duration,
+    name: decodeMidiText(header.name),
+    ppq,
+    durationSec,
     baseBpm: tempos[0]!.bpm,
     tempos,
     timeSignature,

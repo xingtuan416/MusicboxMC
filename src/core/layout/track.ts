@@ -19,13 +19,11 @@ import {
   ALIGN_TOLERANCE_CELLS,
   GAME_TICKS_PER_REDSTONE_TICK,
   MAX_PAD_RUN,
+  MAX_LAYOUT_BLOCKS,
   MAX_REPEATER_DELAY,
-  MAX_TRIGGER_SHIFT,
-  WIRE_STRENGTH,
   chordCapacity,
   chordRowLayout,
-  chordRows,
-  groupTailCells,
+  groupFootprint,
   type TrackNote,
   type XPlan,
 } from './model';
@@ -73,6 +71,8 @@ export interface BuildTrackOptions {
    * the caller can re-emit them on a new track.
    */
   collectOverflow?: boolean;
+  /** Remaining budget shared by all lanes of one layout. */
+  blockBudget?: number;
   /** False on the lanes an overflow chord is re-emitted onto; see `prepareGroups`. */
   reportRangeWarnings?: boolean;
   /**
@@ -270,9 +270,15 @@ export function buildTrack(opts: BuildTrackOptions): {
 
   for (const g of prepared) {
     const gap = g.rt + base - prevRt; // >= 1: equal rts are merged and base keeps the first >= 1
-    const r = Math.min(MAX_REPEATER_DELAY, gap);
-    const rest = gap - r;
-    const restCells = Math.ceil(rest / MAX_REPEATER_DELAY);
+    const {
+      delay: r,
+      rest,
+      restCells,
+      tail,
+      lastSlotCap,
+      lead,
+      noteOffset,
+    } = groupFootprint(gap, g.notes.length, first && !ride);
 
     arrive = prevRt;
 
@@ -284,8 +290,7 @@ export function buildTrack(opts: BuildTrackOptions): {
     // still falls short, the residual is reported as SPATIAL_DRIFT.
     // Only chords of four or more notes get a branch column; otherwise the final
     // repeater draws directly from the block behind it.
-    const tail = groupTailCells(g.notes.length);
-    const noteXNatural = x + (first && rest > 0 ? 1 : 0) + restCells + (tail - 1);
+    const noteXNatural = x + noteOffset;
     const atRt = g.rt + base;
     const targetX = opts.plan ? opts.plan.targetX(atRt) : noteXNatural;
     const deficit = Math.max(0, targetX - noteXNatural);
@@ -300,14 +305,19 @@ export function buildTrack(opts: BuildTrackOptions): {
     // The final repeater sits one cell after that run, and the branch column one cell
     // after the repeater, so the column is powered at `WIRE_STRENGTH - pad` for a run of
     // `pad`; hence the run may not exceed `WIRE_STRENGTH - 1 - r`.
-    const branchReach = groupTailCells(g.notes.length) === 3 ? chordRows(g.notes.length) : 0;
-    const lastSlotCap = Math.max(0, Math.min(MAX_PAD_RUN, WIRE_STRENGTH - 1 - branchReach));
     const pad = Math.min(padNeeded, lastSlotCap + (slots - 1) * MAX_PAD_RUN);
-    if (padNeeded > pad) {
+    const branches = chordRowLayout(g.notes.length);
+    const branchBlocks = (tail === 3 ? 1 : 0) + 2 * branches.filter((branch) => !branch.conducted).length;
+    const groupBlocks = 2 * (restCells + pad + lead + 1 + g.notes.length + branchBlocks);
+    if (placements.length + groupBlocks > (opts.blockBudget ?? MAX_LAYOUT_BLOCKS)) {
+      throw coreError('LAYOUT_BLOCK_LIMIT', { limit: MAX_LAYOUT_BLOCKS });
+    }
+    const eastDrift = ride ? Math.max(0, noteXNatural - targetX - tolerance) : 0;
+    if (padNeeded > pad || eastDrift > 0) {
       warnings.push({
         code: 'SPATIAL_DRIFT',
         tick: g.tick,
-        drift: deficit - pad,
+        drift: eastDrift > 0 ? noteXNatural - targetX : deficit - pad,
         trackIndex: opts.trackIndex,
         x: noteXNatural + pad,
         z: opts.zBase,
@@ -323,9 +333,9 @@ export function buildTrack(opts: BuildTrackOptions): {
     // When the first group has repeaters ahead of it, lay one starting dust cell as
     // the power connection point. With rest = 0 the branch column is itself the first
     // cell, so power goes straight onto the column and keeps it at strength 15.
-    if (first && rest > 0 && !ride) {
-      putWire(0, opts.zBase);
-      x = 1;
+    if (lead) {
+      putWire(x, opts.zBase);
+      x += lead;
     }
 
     // Padding runs: dust only, zero delay
@@ -352,7 +362,6 @@ export function buildTrack(opts: BuildTrackOptions): {
     // Branch column: main row plus branch rows. Dust in one column is a single
     // connected network, so every row in it is powered at the same instant.
     const xCol = x;
-    const branches = chordRowLayout(g.notes.length);
     const needColumn = tail === 3;
     if (needColumn) putWire(xCol, opts.zBase);
     // Branch rows (4+ notes) get dust for vertical power transfer; conducted rows get
@@ -400,18 +409,6 @@ export function buildTrack(opts: BuildTrackOptions): {
 
     const actual = (g.rt + base) * GAME_TICKS_PER_REDSTONE_TICK;
     placed.push({ tick: g.tick, actual, x: xCol });
-    // The quantisation offset already includes the 2*base lead-in, so only a deviation
-    // beyond the lead-in plus one game tick of grid error is worth reporting.
-    if (Math.abs(actual - g.tick - 2 * base) > MAX_TRIGGER_SHIFT) {
-      warnings.push({
-        code: 'TIMING_ADJUSTED',
-        tick: g.tick,
-        actual,
-        trackIndex: opts.trackIndex,
-        x: xCol,
-        z: opts.zBase,
-      });
-    }
 
     x = xCol + tail;
     prevRt = g.rt + base;

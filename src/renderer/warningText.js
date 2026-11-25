@@ -40,21 +40,18 @@ const WARN_TEXT = {
     `强制合并：全曲统一启动等待 ${w.ticks} 游戏刻，峰值 ${w.peakNotes} 音；曲内相对时序不变`,
   FANOUT_EXPANDED: (w) =>
     `tick ${w.tick}：${w.n} 个音使用 ${w.stages} 级续电分支，单级两侧容量 ${w.limit}；仍为同一主线且同刻发声`,
-  STARTUP_LEAD_IN: (w) =>
-    `全曲统一延后 ${w.ticks} 游戏刻（${(w.ticks / 20).toFixed(1)} 秒）：红石刻 0 上的音` +
+  STARTUP_LEAD_IN: (w, ctx) =>
+    `全曲统一延后 ${w.ticks} 游戏刻（${ctx.seconds(w.ticks)} 秒）：红石刻 0 上的音` +
     `也需要一个中继器延迟才能驱动。曲内相对时序不变，不需要处理。`,
   OUT_OF_RANGE: (w, ctx) =>
     `${ctx.label(w.trackIndex)} · ${ctx.at(w.tick)} · MIDI ${w.midi}（${pitchName(w.midi)}）` +
     `超出${rangeTextFor(w, ctx)}，处理方式：` +
     `${OUT_OF_RANGE_ACTION_TEXT[w.action] || w.action}`,
-  TIMING_ADJUSTED: (w, ctx) =>
-    `${ctx.label(w.trackIndex)} · z${w.z} 行 · ${ctx.at(w.tick)} 的音实际在 ` +
-    `${ctx.at(w.actual)} 触发，偏移 ${w.actual - w.tick > 0 ? '+' : ''}${w.actual - w.tick} 游戏刻`,
   TRACK_SPLIT: (w) => `tick ${w.tick}：${w.notes} 个音密集放不下，已自动拆到新音轨`,
   SMART_HEARING_UNREACHED: (w) =>
     w.attempted
-      ? `智能分流后最远的音符仍在 ${w.radiusZ} 格外（听距 ${w.limit} 格）；已选择当前可用方案中听距最短的布局`
-      : `不合并：最远的音符在 ${w.radiusZ} 格外，超过 ${w.limit} 格听距。` +
+      ? `智能分流后，音符离主轨行最远 ${w.radiusZ} 格，超过 Z 向阈值 ${w.limit} 格。已选横向距离最短的布局。`
+      : `音符离主轨行最远 ${w.radiusZ} 格，超过 Z 向阈值 ${w.limit} 格。` +
         `可以在配置里手动开启合并，或排除几条音轨。`,
   SMART_MERGE_FAILED: (w) =>
     `${MERGE_MODE_TEXT[w.mode] || w.mode}没能生成几何安全的布局，已改用` +
@@ -109,9 +106,8 @@ const WARN_TITLE = {
   FANOUT_EXPANDED: '和弦使用多级分支',
   STARTUP_LEAD_IN: '全曲统一延后',
   OUT_OF_RANGE: '音符超出乐器音域',
-  TIMING_ADJUSTED: '触发时刻被调整',
   TRACK_SPLIT: '音轨被拆分',
-  SMART_HEARING_UNREACHED: '智能分流后仍超出听距',
+  SMART_HEARING_UNREACHED: '音符超出主轨行的横向听距',
   SMART_MERGE_FAILED: '合并方案不可用，已回退',
   SPATIAL_DRIFT: '多轨对齐出现偏差',
   INSTRUMENT_UNKNOWN: '乐器未能识别',
@@ -123,7 +119,6 @@ const WARN_TITLE = {
 
 function warnSeverity(code) {
   if (
-    code === 'TIMING_ADJUSTED' ||
     code === 'TRACK_SPLIT' ||
     code === 'POLYPHONY_EXCEEDED' ||
     code === 'SPATIAL_DRIFT' ||
@@ -168,6 +163,7 @@ function trackLabel(result, index) {
 
 /** The context every warning text needs: a range, a track name, a readable time. */
 function warningContext(result) {
+  const seconds = (tick) => (tick / (result?.song?.summaryTps ?? 20)).toFixed(2);
   const infoFor = (index) => (result?.trackInstruments || []).find((entry) => entry.trackIndex === index);
 
   return {
@@ -192,7 +188,8 @@ function warningContext(result) {
       return result?.pitchRange ?? null;
     },
     label: (index) => trackLabel(result, index),
-    at: (tick) => `tick ${tick}（${(tick / 20).toFixed(2)} 秒）`,
+    seconds,
+    at: (tick) => `tick ${tick}（${seconds(tick)} 秒）`,
   };
 }
 

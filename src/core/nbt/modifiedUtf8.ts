@@ -21,6 +21,19 @@ import { coreError } from '../errors';
 /** Longest string NBT can store: the length prefix is an unsigned 16-bit byte count. */
 export const MAX_MODIFIED_UTF8_BYTES = 0xffff;
 
+/** Verify the unsigned 16-bit byte limit without allocating the encoded string. */
+export function assertNbtStringLength(value: string): void {
+  if (value.length > MAX_MODIFIED_UTF8_BYTES) {
+    throw coreError('NBT_STRING_TOO_LONG', { bytes: value.length });
+  }
+  let bytes = 0;
+  for (let i = 0; i < value.length; i++) {
+    const unit = value.charCodeAt(i);
+    bytes += unit > 0 && unit <= 0x7f ? 1 : unit <= 0x7ff ? 2 : 3;
+  }
+  if (bytes > MAX_MODIFIED_UTF8_BYTES) throw coreError('NBT_STRING_TOO_LONG', { bytes });
+}
+
 /** Encode a string the way `DataOutput.writeUTF` does. */
 export function encodeModifiedUtf8(value: string): Buffer {
   const bytes = Buffer.allocUnsafe(value.length * 3);

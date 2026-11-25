@@ -1,56 +1,79 @@
 import { randomUUID } from 'node:crypto';
-import { isAbsolute, join, relative, resolve } from 'node:path';
-import type { DirectoryGrant, OutputTarget } from './types';
+import {
+  closeSync,
+  fsyncSync,
+  linkSync,
+  lstatSync,
+  openSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { basename, dirname, isAbsolute, join } from 'node:path';
+import type { OutputGrant } from './types';
 
-/**
- * Directory grants for schematic output.
- *
- * The renderer never receives write authority as a free-form path. It gets an opaque token
- * for a directory the user chose through the native dialog, plus permission to supply one
- * plain file name inside it. Tokens live only for this process, so a stale renderer path
- * cannot be replayed after a restart.
- */
+interface SelectedOutput {
+  path: string;
+  token: string;
+  revision: string | null;
+}
 
 const GRANT_LIMIT = 64;
-const grants = new Map<string, string>();
+const grants = new Map<string, SelectedOutput>();
 
 const INVALID_FILE_CHARS = /[<>:"/\\|?*]/;
 const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)/i;
 const MAX_FILE_NAME = 180;
 
-/** Record a directory the user picked, and return the display path plus its token. */
-export function grantDirectory(directory: string): DirectoryGrant {
-  const path = resolve(directory);
+export class OutputSelectionChanged extends Error {
+  constructor() {
+    super('保存位置的文件已变化，请重新选择保存位置。');
+  }
+}
+
+function destinationRevision(path: string): string | null {
+  const stat = lstatSync(path, { bigint: true, throwIfNoEntry: false });
+  if (!stat) return null;
+  if (!stat.isFile()) throw new OutputSelectionChanged();
+  return [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(':');
+}
+
+/** Authorize exactly the path returned by the native Save As dialog. */
+export function grantOutput(path: string): OutputGrant {
+  const name = basename(path);
+  if (!isAbsolute(path) || normalizeFileName(name) !== name) {
+    throw new Error('请选择有效的 .litematic 文件名。');
+  }
+  const revision = destinationRevision(path);
   const token = randomUUID();
-  grants.set(token, path);
-  while (grants.size > GRANT_LIMIT) {
+  grants.set(token, { path, token, revision });
+  if (grants.size > GRANT_LIMIT) {
     const oldest = grants.keys().next().value;
-    if (oldest === undefined) break;
-    grants.delete(oldest);
+    if (oldest !== undefined) grants.delete(oldest);
   }
   return { path, token };
 }
 
-/**
- * Resolve a renderer output request to an absolute path, or null when it is not authorized.
- *
- * The file name is deliberately narrower than a path: no separators, drive letters,
- * alternate data streams, traversal, Windows device names, or trailing dots/spaces.
- */
-export function resolveOutputPath(target: unknown): string | null {
-  if (target === null || typeof target !== 'object' || Array.isArray(target)) return null;
-  const candidate = target as Partial<OutputTarget>;
-  if (typeof candidate.token !== 'string' || typeof candidate.fileName !== 'string') return null;
-  const directory = grants.get(candidate.token);
-  if (!directory) return null;
+export function resolveOutput(target: unknown): SelectedOutput | undefined {
+  return typeof target === 'string' ? grants.get(target) : undefined;
+}
 
-  const fileName = normalizeFileName(candidate.fileName);
-  if (!fileName) return null;
-
-  const output = resolve(directory, fileName);
-  const inside = relative(directory, output);
-  if (inside === '' || inside.startsWith('..') || isAbsolute(inside)) return null;
-  return inside === fileName ? join(directory, fileName) : null;
+/** Publish once, using overwrite permission only for the file the dialog confirmed. */
+export function writeSelectedOutput(target: SelectedOutput, bytes: Uint8Array): void {
+  try {
+    writeSchematic(target.path, bytes, target.revision !== null, () => {
+      if (grants.get(target.token) !== target || destinationRevision(target.path) !== target.revision) {
+        throw new OutputSelectionChanged();
+      }
+    });
+    grants.delete(target.token);
+  } catch (error) {
+    if (error instanceof OutputSelectionChanged || (error as NodeJS.ErrnoException).code === 'EEXIST') {
+      grants.delete(target.token);
+      throw new OutputSelectionChanged();
+    }
+    throw error;
+  }
 }
 
 /** Add the litematic extension and reject anything that could escape the granted folder. */
@@ -63,4 +86,28 @@ export function normalizeFileName(raw: string): string | null {
   const stem = name.slice(0, -'.litematic'.length);
   if (!stem || stem === '.' || stem === '..' || WINDOWS_RESERVED.test(stem)) return null;
   return name;
+}
+
+/** Publish a complete file. An unconfirmed write must fail if another writer wins the name. */
+export function writeSchematic(
+  file: string,
+  bytes: Uint8Array,
+  replace = false,
+  beforePublish?: () => void,
+): void {
+  const temp = join(dirname(file), '.' + randomUUID() + '.litematic.tmp');
+  const fd = openSync(temp, 'wx');
+  try {
+    try {
+      writeFileSync(fd, bytes);
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+    beforePublish?.();
+    if (replace) renameSync(temp, file);
+    else linkSync(temp, file);
+  } finally {
+    rmSync(temp, { force: true });
+  }
 }

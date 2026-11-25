@@ -1,11 +1,11 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type {
   AnalyzeResult,
-  DirectoryGrant,
   GenerateOptions,
   GenerateResult,
+  GenerationStage,
   LayoutMeasure,
-  OutputTarget,
+  OutputGrant,
   SmartPlanResult,
 } from '../main/service';
 import type { Preferences } from '../main/preferences';
@@ -48,12 +48,20 @@ export interface MusicboxApi {
   saveResourcePack(): Promise<string | null>;
   /** Parse only, without generating circuits */
   analyze(path: string): Promise<AnalyzeResult>;
-  /** Full generation; without an authorized target it only builds bytes in memory. */
-  generate(path: string, options: GenerateOptions, output?: OutputTarget): Promise<GenerateResult>;
+  /** Check without encoding, or export to an authorized target. */
+  generate(
+    path: string,
+    options: GenerateOptions,
+    output?: string,
+    id?: number,
+    revision?: string,
+  ): Promise<GenerateResult>;
+  cancelGeneration(id: number): Promise<void>;
+  onGenerationProgress(handler: (id: number, stage: GenerationStage) => void): void;
   /** Measure what smart routing would choose, without writing a file. */
-  plan(path: string, options: GenerateOptions): Promise<SmartPlanResult>;
+  plan(path: string, options: GenerateOptions, revision?: string): Promise<SmartPlanResult>;
   /** Measure one layout (X/Y/Z, Minecraft track count) without generating bytes. */
-  measure(path: string, options: GenerateOptions): Promise<LayoutMeasure>;
+  measure(path: string, options: GenerateOptions, revision?: string): Promise<LayoutMeasure>;
   /** Reveal the file in the system file manager */
   reveal(path: string): Promise<void>;
   /** Open the file with the system default application */
@@ -69,11 +77,11 @@ export interface MusicboxApi {
    */
   pathForFile(file: File): string;
   /** Choose the folder a schematic will be written into; the token authorizes that folder. */
-  chooseDirectory(): Promise<DirectoryGrant | null>;
+  chooseOutput(suggestedName: string): Promise<OutputGrant | null>;
   /** Remembered choices: the last output folder and whether the pack reminder was muted. */
   getPreferences(): Promise<Preferences>;
   /** Change one remembered choice and get the whole record back. */
-  setPreferences(patch: Partial<Preferences>): Promise<Preferences>;
+  setPreferences(patch: Partial<Preferences>): Promise<Preferences & { persisted: boolean }>;
   /** Version, licence and repository, for the About section. */
   appInfo(): Promise<AppInfo>;
   /** Runtime versions and paths, for the developer panel. */
@@ -88,9 +96,14 @@ const api: MusicboxApi = {
   chooseMidi: () => ipcRenderer.invoke('dialog:choose-midi'),
   saveResourcePack: () => ipcRenderer.invoke('dialog:save-resource-pack'),
   analyze: (path) => ipcRenderer.invoke('song:analyze', path),
-  generate: (path, options, output) => ipcRenderer.invoke('song:generate', path, options, output),
-  plan: (path, options) => ipcRenderer.invoke('song:plan', path, options),
-  measure: (path, options) => ipcRenderer.invoke('song:measure', path, options),
+  generate: (path, options, output, id, revision) =>
+    ipcRenderer.invoke('song:generate', path, options, output, id, revision),
+  cancelGeneration: (id) => ipcRenderer.invoke('song:cancel', id),
+  onGenerationProgress: (handler) => {
+    ipcRenderer.on('song:progress', (_event, id: number, stage: GenerationStage) => handler(id, stage));
+  },
+  plan: (path, options, revision) => ipcRenderer.invoke('song:plan', path, options, revision),
+  measure: (path, options, revision) => ipcRenderer.invoke('song:measure', path, options, revision),
   reveal: (path) => ipcRenderer.invoke('shell:reveal', path),
   open: (path) => ipcRenderer.invoke('shell:open', path),
   onLog: (handler) => {
@@ -98,7 +111,7 @@ const api: MusicboxApi = {
   },
   pathForFile: (file) => webUtils.getPathForFile(file),
   windowControl: (action) => ipcRenderer.invoke('window:control', action),
-  chooseDirectory: () => ipcRenderer.invoke('dialog:choose-directory'),
+  chooseOutput: (suggestedName) => ipcRenderer.invoke('dialog:choose-output', suggestedName),
   getPreferences: () => ipcRenderer.invoke('prefs:get'),
   setPreferences: (patch) => ipcRenderer.invoke('prefs:set', patch),
   appInfo: () => ipcRenderer.invoke('app:info'),

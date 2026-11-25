@@ -44,7 +44,7 @@ describe('lane annotation planner', () => {
     const plan = planLaneAnnotation(planOptions([lane([0], -4, 2), lane([1], 0, 3), lane([2, 3], 5, 2)], 1));
     expect(plan).not.toBeNull();
     expect(plan!.signs.map((sign) => sign.role)).toEqual(['secondary', 'lead', 'secondary']);
-    expect(plan!.signs[1]!.lines).toEqual(['主音轨', '轨 2', '力度 90%', '站这里']);
+    expect(plan!.signs[1]!.lines).toEqual(['主音轨', '轨 2', '力度 90%', '沿线向东']);
     expect(plan!.signs[0]!.lines[3]).toBe('距主轨 4');
     expect(plan!.signs[2]!.lines[1]).toBe('轨 3+4');
     expect(plan!.singleLane).toBe(false);
@@ -65,7 +65,7 @@ describe('lane annotation planner', () => {
     expect(plan!.singleLane).toBe(true);
     expect(plan!.signs).toHaveLength(1);
     expect(plan!.signs[0]!.role).toBe('merged');
-    expect(plan!.signs[0]!.lines).toEqual(['全曲主线', '轨 1+2+3', '站这里', '主线行']);
+    expect(plan!.signs[0]!.lines).toEqual(['全曲主线', '轨 1+2+3', '沿主线走', '向东收听']);
     // Standing in the middle of a 19-block spine keeps every note inside the hearing radius.
     expect(plan!.player.z).toBe(9);
     expect(plan!.spreadZ).toBe(9);

@@ -47,6 +47,7 @@ const state = {
   step: 1,
   /** Absolute path of the chosen MIDI, as returned by the main process. */
   midiPath: null,
+  midiRevision: undefined,
   /** SongSummary from analyze(). */
   song: null,
   /** TrackSummary[] plus the user's selection. */
@@ -59,18 +60,15 @@ const state = {
   smartSelection: true,
   /** The routing summary the last measurement produced, or null before one ran. */
   smartMeasured: null,
-  /** What the measurement was run for; a changed track selection invalidates it. */
+  /** The options that produced the last recommendation. */
   smartSignature: '',
-  /** Resource-pack advice from that measurement; null means "derive it from the mode". */
-  packRecommended: null,
   /** Bumped per measurement so a slow answer cannot overwrite newer settings. */
   smartToken: 0,
   /** Last layout measurement shown by developer mode on the configuration step. */
   devMeasure: null,
-  /** Folder the schematic will be written into. The file name is kept separately. */
-  outputDir: null,
-  /** Main-process grant for `outputDir`; this is the only thing that authorizes a write. */
-  outputDirToken: null,
+  /** Exact output path and token from the native save dialog. */
+  output: null,
+  choosingOutput: false,
   /**
    * Remembered between launches by the main process: the folder last written to, and
    * whether the resource-pack reminder was muted for good.
@@ -200,7 +198,9 @@ async function savePrefs(patch) {
   state.prefs = { ...state.prefs, ...patch };
   syncPackReminderButton();
   try {
-    state.prefs = await api.setPreferences(patch);
+    const { persisted, ...prefs } = await api.setPreferences(patch);
+    state.prefs = prefs;
+    if (persisted === false) notify('设置已在本次会话生效，重启后可能恢复原值。');
   } catch (error) {
     devLog('prefs', { error: error?.message || String(error) });
   }
@@ -220,34 +220,36 @@ function syncPackReminderButton() {
 
 function goStep(target) {
   const next = Math.max(1, Math.min(steps.length, Number(target)));
+  if (next !== state.step && activeJob?.kind === 'export' && activeJob.stage === 'write') return;
+  if ((state.step === 6 || state.step === 7) && next !== state.step && activeJob) {
+    void cancelJob();
+  }
   state.step = next;
 
   steps.forEach((section, index) => section.classList.toggle('active', index + 1 === next));
   $('btnPrevStep').classList.toggle('is-hidden', next === 1);
-  stepNodes.forEach((node, index) => {
-    node.classList.toggle('current', index + 1 === next);
-    node.classList.toggle('done', index + 1 < next);
-  });
+  syncJobControls();
 
   playNote(330 + next * 40, 'sine', 0.08);
 
-  // Entering the configuration step measures the smart routing once, so the values shown
-  // there are exactly the ones the generator will use. The measurement is a dry run of the
-  // whole pipeline, so it only runs again when the track selection changed.
-  if (next === 4 && state.smartSelection && state.smartSignature !== selectionSignature()) {
-    void applySmartSelection();
+  if (next === 4) {
+    syncSmartPanel();
+    scheduleSmartSelection();
+    scheduleDevMeasure(0);
   }
-  if (next === 4) scheduleDevMeasure(0);
 
   // The pack nudge belongs on the last step, not on the check step: arriving at the check
   // step with a modal over it hides the very thing the user was sent there to read.
   if (next === 8 && state.result?.outputPath) {
-    const packWanted = state.packRecommended ?? state.instrumentMode === 'extended';
+    const packWanted = state.result.resourcePackRecommended ?? state.instrumentMode === 'extended';
     // Shown after every export that needs it, not once per installation: the reminder is
     // only useful to someone who is about to install the pack. "Don't ask again" is the
     // way out, and the setting that holds it can be undone.
     if (packWanted && !state.prefs.packPromptMuted) {
-      showPackNudge({ onMute: () => void savePrefs({ packPromptMuted: true }) });
+      showPackNudge({
+        onMute: () => void savePrefs({ packPromptMuted: true }),
+        onSave: () => void saveResourcePack(),
+      });
     }
   }
 }
@@ -263,6 +265,7 @@ function setImportView(mode) {
   $('importError').style.display = mode === 'error' ? 'flex' : 'none';
   $('importLoaded').style.display = mode === 'loaded' ? 'flex' : 'none';
   $('btnStep2Next').disabled = mode !== 'loaded';
+  syncJobControls();
 }
 
 /**
@@ -300,12 +303,22 @@ function showImportError(message) {
   playFailure();
 }
 
+let importToken = 0;
+
 async function loadMidi(path) {
   if (!path) return;
-  state.midiPath = path;
+  const token = ++importToken;
+  state.smartToken++;
+  devMeasureToken++;
+  void cancelJob();
   setImportView('loading');
   try {
     const result = await api.analyze(path);
+    if (token !== importToken) return;
+    state.midiPath = result.path ?? path;
+    state.midiRevision = result.sourceRevision;
+    state.result = null;
+    checkedSignature = null;
     state.song = result.song;
     // A MIDI file routinely carries tracks that hold no notes - a conductor track, or one
     // whose channel was never used. They compile to nothing, so listing them offers the
@@ -320,7 +333,6 @@ async function loadMidi(path) {
     state.smartSelection = true;
     state.smartMeasured = null;
     state.smartSignature = '';
-    state.packRecommended = null;
 
     $('midiFileTitle').textContent = result.file;
     $('valDuration').textContent = result.song.durationText;
@@ -334,7 +346,7 @@ async function loadMidi(path) {
     $('midiFileSub').textContent = `校验通过 · ${state.tracks.length} 条音轨`;
     $('valNotes').textContent = number(result.song.noteCount);
 
-    $('fileNameInput').value = suggestedName(path, result.song.name);
+    state.output = null;
 
     const dropped = result.tracks.length - state.tracks.length;
     $('trackFilterHint').style.display = dropped > 0 ? 'block' : 'none';
@@ -353,7 +365,7 @@ async function loadMidi(path) {
       notify('这个文件里没有音符');
     }
   } catch (error) {
-    showImportError(error?.message || String(error));
+    if (token === importToken) showImportError(error?.message || String(error));
   }
 }
 
@@ -590,28 +602,63 @@ function toggleFoldCard(id) {
 function selectionSignature() {
   const excluded = state.tracks.filter((track) => !track.checked).map((track) => track.index);
   const lead = state.leadBasis === 'manual' ? state.leadTrackIndex : '';
-  return `${state.midiPath}|${state.backend}|${excluded.join(',')}|${lead}`;
+  return JSON.stringify([
+    state.midiPath,
+    state.midiRevision,
+    state.backend,
+    excluded,
+    lead,
+    state.dMax,
+    state.baseTps,
+    state.outOfRange,
+    state.laneSharing,
+    state.laneShareSparseBelow,
+    state.centerLead,
+    state.laneRide,
+    state.commandBudget,
+  ]);
+}
+
+let smartTimer;
+let smartPendingSignature;
+
+function currentSmartMeasurement() {
+  return state.smartSelection && state.smartSignature === selectionSignature() ? state.smartMeasured : null;
+}
+
+function scheduleSmartSelection() {
+  clearTimeout(smartTimer);
+  if (state.step !== 4 || !state.midiPath || !state.smartSelection) return;
+  const signature = selectionSignature();
+  if (signature === state.smartSignature || smartPendingSignature !== undefined) return;
+  smartTimer = setTimeout(() => void applySmartSelection(), 180);
 }
 
 /** One line describing what the measurement decided. */
 function smartRoutingText(info) {
   if (!info) return '';
-  const mode = info.instrumentMode === 'extended' ? '扩展竖琴音域（需资源包）' : '原版乐器';
+  const mode = info.instrumentMode === 'extended' ? '扩展竖琴音域' : '原版乐器';
   if (state.backend === 'command') return `${mode} · 命令播放不判定听距、合并与借道`;
   const merge = MERGE_MODE_TEXT[info.mergeMode] ?? MERGE_MODE_TEXT.off;
-  return `${mode} · ${merge} · 最远 ${info.radiusZ} 格`;
+  return `${mode} · ${merge} · 离主轨行最远 ${info.radiusZ} 格`;
 }
 
 function syncSmartPanel() {
   const badge = $('smartBadge');
   const button = $('btnSmartApply');
-  if (state.smartSelection && state.smartMeasured) {
+  const measurement = currentSmartMeasurement();
+  button.disabled = smartPendingSignature !== undefined;
+  if (smartPendingSignature === selectionSignature()) {
+    badge.textContent = '计算中…';
+    badge.dataset.state = 'busy';
+    $('smartApplyResult').textContent = '';
+  } else if (measurement) {
     badge.textContent = '已应用';
     badge.dataset.state = 'auto';
     button.textContent = '重新计算智能推荐';
     $('smartConfigHint').textContent =
-      '已按当前音轨选好乐器模式、合并方式与稀疏音轨借道，下面显示的数值就是生成时会用的；改动下面的设置会切回手动。';
-    $('smartApplyResult').textContent = smartRoutingText(state.smartMeasured);
+      '已按当前音轨和参数计算。修改乐器或布局选项可切到手动，修改基准 TPS 等参数会重新计算。';
+    $('smartApplyResult').textContent = smartRoutingText(measurement);
   } else if (state.smartSelection) {
     badge.textContent = '待计算';
     badge.dataset.state = 'busy';
@@ -638,16 +685,22 @@ function syncSmartPanel() {
  * claimed smart mode while the summaries and the file followed the manual values.
  */
 async function applySmartSelection() {
-  if (!state.midiPath) return;
+  if (!state.midiPath || smartPendingSignature !== undefined) return;
+  clearTimeout(smartTimer);
   const token = ++state.smartToken;
   const signature = selectionSignature();
-  const button = $('btnSmartApply');
-  button.disabled = true;
-  $('smartBadge').textContent = '计算中…';
-  $('smartBadge').dataset.state = 'busy';
+  const { instrumentMode, merge, smartSelection } = state;
+  const stillCurrent = () =>
+    token === state.smartToken &&
+    signature === selectionSignature() &&
+    instrumentMode === state.instrumentMode &&
+    merge === state.merge &&
+    smartSelection === state.smartSelection;
+  smartPendingSignature = signature;
+  syncSmartPanel();
   try {
-    const { info, error } = await api.plan(state.midiPath, generateOptions());
-    if (token !== state.smartToken) return;
+    const { info, error } = await api.plan(state.midiPath, generateOptions(), state.midiRevision);
+    if (!stillCurrent()) return;
     if (!info) {
       state.smartSelection = false;
       state.smartMeasured = null;
@@ -666,10 +719,9 @@ async function applySmartSelection() {
     // three merge boxes, and the generator re-derives it from the switch, so the boxes keep
     // the unmerged choice rather than inventing a fourth selected state.
     if (state.backend !== 'command') state.merge = info.mergeMode === 'share' ? 'off' : info.mergeMode;
-    state.packRecommended = info.resourcePackRecommended;
     syncSummary();
   } catch (failure) {
-    if (token !== state.smartToken) return;
+    if (!stillCurrent()) return;
     state.smartSelection = false;
     state.smartMeasured = null;
     syncSummary();
@@ -678,7 +730,10 @@ async function applySmartSelection() {
     $('smartConfigHint').textContent =
       `智能推荐失败：${failure?.message || failure}。现在按下面的手动设置生成。`;
   } finally {
-    button.disabled = false;
+    smartPendingSignature = undefined;
+    if ($('smartBadge').dataset.state !== 'error') syncSmartPanel();
+    else $('btnSmartApply').disabled = false;
+    scheduleSmartSelection();
   }
 }
 
@@ -712,12 +767,16 @@ function syncSummary() {
   syncSmartPanel();
   syncOptionBoxes();
   const extended = state.instrumentMode === 'extended';
-  $('sumPitch').textContent = extended
-    ? `扩展竖琴音域（需配套资源包）· 钢琴 F#1–F#7 · 最多 ${state.dMax} 音同时`
-    : `原版乐器 · 各乐器两个八度 · 最多 ${state.dMax} 音同时`;
-  // A measurement knows whether the pack helps this song; without one, the instrument
-  // mode is the only evidence there is.
-  const packWanted = state.packRecommended ?? extended;
+  const pitch = extended ? '扩展竖琴音域 · 钢琴 F#1–F#7' : '原版乐器 · 各乐器两个八度';
+  const columnCapacity = 2 * state.dMax + 1;
+  const capacity =
+    state.backend === 'command'
+      ? ''
+      : state.merge === 'force'
+        ? ` · 紧凑列最多 ${Math.min(columnCapacity, 27)} 音，超出改用分段布线`
+        : ` · 单列最多 ${columnCapacity} 音，超出拆轨`;
+  $('sumPitch').textContent = pitch + capacity;
+  const packWanted = currentSmartMeasurement()?.resourcePackRecommended ?? extended;
   $('packTitle').textContent = packWanted
     ? '配套资源包（可选，保存后自行安装）'
     : '配套资源包（当前设置不需要）';
@@ -726,7 +785,7 @@ function syncSummary() {
   $('packCard').hidden = !packWanted;
   if (packWanted) {
     $('packDescription').textContent =
-      '只统一扩展竖琴那五个音色槽的钢琴采样：音域不变（F#1–F#7 来自五个扩展槽，不是这个包）；被占用的原生 bass/guitar/flute/bell 已改用替代表，不受它影响。保存后放进 .minecraft/resourcepacks/ 再自行启用。';
+      '把扩展竖琴使用的五个音色槽统一为钢琴采样。扩展音域由投影内的音符盒提供。保存后放进 .minecraft/resourcepacks/ 再自行启用。';
   }
   $('sumRange').textContent = {
     warn: '提示并八度移调',
@@ -830,7 +889,10 @@ function syncSummary() {
   $('sumMisc').textContent = mergeText;
   $('commandBudgetField').style.display = state.backend === 'command' ? 'flex' : 'none';
   // The readout is dev-only and cheap to skip; every option change lands here.
+  scheduleSmartSelection();
   scheduleDevMeasure();
+  syncJobControls();
+  if (state.step === 6 && !activeJob && checkedSignature !== generationSignature()) void runCheck();
 }
 
 /** Map the interface state onto the generator's options, and nothing more. */
@@ -869,34 +931,29 @@ function generateOptions() {
  * Step 5: output location
  * ──────────────────────────────────────────────────────────────────────────── */
 
-function outputFileName() {
-  const raw = $('fileNameInput').value.trim() || suggestedName(state.midiPath, state.song?.name);
-  return raw.toLowerCase().endsWith('.litematic') ? raw : `${raw}.litematic`;
-}
-
 function syncOutputText() {
-  const name = outputFileName();
-  $('fullPathText').textContent = state.outputDir
-    ? `完整路径：${state.outputDir}\\${name}`
-    : `完整路径：尚未选择文件夹（文件名 ${name}）`;
-  $('outputDirText').textContent = state.outputDir ?? '尚未选择文件夹';
-
-  // Writing a schematic is what this step is for, so it stays disabled until the main
-  // process has authorized a folder. `runGeneration` checks the same thing, because a
-  // disabled button is a hint and not a guarantee.
-  $('btnStartGen').disabled = !state.outputDirToken;
+  $('outputPathText').textContent = state.output?.path ?? '尚未选择投影文件';
+  syncJobControls();
 }
 
 async function chooseOutputFile() {
+  if (state.choosingOutput || activeJob || !state.midiPath) return;
+  const imported = importToken;
+  const name = state.output?.path.split(/[\\/]/).pop() || suggestedName(state.midiPath, state.song?.name);
+  state.choosingOutput = true;
+  syncJobControls();
   try {
-    const grant = await api.chooseDirectory();
-    if (!grant) return; // Cancelled.
-    state.outputDir = grant.path;
-    state.outputDirToken = grant.token;
+    const grant = await api.chooseOutput(name);
+    if (!grant || imported !== importToken) return;
+    state.output = grant;
     syncOutputText();
+    if (grant.preferencesPersisted === false) notify('已选择保存位置，重启后可能需要重新选择文件夹。');
     playNote(480, 'sine', 0.08);
   } catch (error) {
-    notify(`无法选择文件夹：${error?.message || error}`);
+    notify(`无法选择保存位置：${error?.message || error}`);
+  } finally {
+    state.choosingOutput = false;
+    syncJobControls();
   }
 }
 
@@ -905,6 +962,92 @@ async function chooseOutputFile() {
  * ──────────────────────────────────────────────────────────────────────────── */
 
 let elapsedTimer = null;
+let jobCounter = 0;
+let activeJob = null;
+let checkedSignature = null;
+
+const stageText = {
+  read: '正在读取 MIDI…',
+  layout: '正在计算布局…',
+  preview: '正在准备预览…',
+  encode: '正在编码投影…',
+  write: '正在保存投影…',
+};
+
+function generationSignature() {
+  return JSON.stringify([state.midiPath, state.midiRevision, generateOptions()]);
+}
+
+function syncStepNavigation(hasCheckedLayout) {
+  const imported = Boolean(state.midiPath) && !$('btnStep2Next').disabled;
+  const tracksSelected = imported && state.tracks.some((track) => track.checked);
+  const available = [
+    true,
+    true,
+    imported,
+    tracksSelected,
+    tracksSelected,
+    hasCheckedLayout,
+    false,
+    Boolean(state.result?.outputPath),
+  ];
+  stepNodes.forEach((node, index) => {
+    const step = index + 1;
+    const current = step === state.step;
+    node.disabled = !current && !available[index];
+    node.classList.toggle('current', current);
+    node.classList.toggle('done', step < state.step);
+    node.setAttribute('aria-current', current ? 'step' : 'false');
+  });
+}
+
+function syncJobControls() {
+  const busy = state.choosingOutput || activeJob !== null;
+  const canExport = state.output !== null && !busy;
+  $('btnChooseOutput').disabled = busy || !state.midiPath;
+  $('btnStartGen').disabled = !canExport;
+  const hasCheckedLayout = checkedSignature === generationSignature();
+  $('btnGoGenerate').disabled = !canExport || !hasCheckedLayout;
+  $('btnRetryGen').disabled = !canExport;
+  $('btnCancelGeneration').disabled = activeJob?.cancelling === true || activeJob?.stage === 'write';
+  syncStepNavigation(hasCheckedLayout);
+}
+
+function beginJob(kind) {
+  if (activeJob) return null;
+  activeJob = { id: ++jobCounter, kind, signature: generationSignature(), stage: 'read', cancelling: false };
+  syncJobControls();
+  return activeJob;
+}
+
+function finishJob(job) {
+  if (activeJob === job) activeJob = null;
+  syncJobControls();
+}
+
+async function cancelJob() {
+  const job = activeJob;
+  if (!job || job.cancelling || job.stage === 'write') return;
+  job.cancelling = true;
+  syncJobControls();
+  try {
+    await api.cancelGeneration?.(job.id);
+  } catch (error) {
+    job.cancelling = false;
+    syncJobControls();
+    notify('取消任务失败：' + (error?.message || error));
+  }
+}
+
+api.onGenerationProgress?.((id, stage) => {
+  const job = activeJob;
+  if (!job || job.id !== id) return;
+  job.stage = stage;
+  syncJobControls();
+  if (job.cancelling) return;
+  if (job.kind === 'check' && state.step === 6) $('checkSummary').textContent = stageText[stage];
+  if (job.kind === 'export' && state.step === 7) $('genStage').textContent = stageText[stage];
+});
 
 function startElapsed() {
   const startedAt = Date.now();
@@ -931,37 +1074,61 @@ async function runGeneration() {
     showGenerateError('还没有选择 MIDI 文件。', '缺少输入');
     return;
   }
-  if (!state.outputDir || !state.outputDirToken) {
+  if (!state.output) {
     showGenerateError('还没有选择保存位置。', '缺少输出位置');
     return;
   }
 
+  const job = beginJob('export');
+  if (!job) return;
+  $('statusToast').classList.remove('visible');
+  $('genStage').textContent = stageText.read;
   $('genErrorBox').style.display = 'none';
   $('genRunningBox').style.display = 'flex';
   $('genTitle').textContent = '正在生成投影';
   startElapsed();
 
   try {
-    // With a destination granted the main process also writes the file. The token is
-    // authorization for the chosen folder; the renderer never sends the full path.
-    const result = await api.generate(state.midiPath, generateOptions(), {
-      token: state.outputDirToken,
-      fileName: outputFileName(),
-    });
+    const result = await api.generate(
+      state.midiPath,
+      generateOptions(),
+      state.output.token,
+      job.id,
+      state.midiRevision,
+    );
     clearInterval(elapsedTimer);
+    finishJob(job);
+    if (job.signature !== generationSignature()) return;
+    if (result.chooseOutputAgain) {
+      state.output = null;
+      syncOutputText();
+      goStep(5);
+      $('btnChooseOutput').focus();
+      notify(result.error || '请重新选择保存位置。');
+      return;
+    }
 
     if (!result.success) {
       showGenerateError(result.error || '生成器没有给出原因。');
       return;
     }
 
+    state.output = null;
+    syncOutputText();
     state.result = result;
     showResult(result);
     setupPreviewButton();
     goStep(8);
     playSuccess();
   } catch (error) {
-    showGenerateError(error?.message || String(error));
+    finishJob(job);
+    if (job.cancelling) {
+      clearInterval(elapsedTimer);
+      if (state.step === 7) goStep(6);
+      notify('已取消生成。');
+    } else {
+      showGenerateError(error?.message || String(error));
+    }
   }
 }
 
@@ -970,8 +1137,7 @@ async function runGeneration() {
  * ──────────────────────────────────────────────────────────────────────────── */
 
 function showResult(result) {
-  const stats = result.stats;
-  const blocks = stats.noteBlockCount + stats.circuitBlocks + (stats.commandBlockCount ?? 0);
+  const blocks = result.regions.reduce((sum, region) => sum + region.blockCount, 0);
   const size = unionSize(result.regions);
 
   $('doneFileSub').textContent = result.outputPath
@@ -982,10 +1148,20 @@ function showResult(result) {
   $('doneDims').textContent = size ? `${number(size.x)} × ${number(size.y)} × ${number(size.z)}` : '—';
   $('doneSize').textContent = bytesText(result.bytes);
 
+  const inputs = result.startInputs ?? [];
   $('doneTriggerHint').textContent =
     result.playbackMode === 'command'
-      ? '粘贴后结构自带信号源，确认命令方块已开启即可播放'
-      : '在主线起点接上红石线，再接一个按钮来驱动';
+      ? '启用命令方块，粘贴结构后按 Start / Restart 启动。'
+      : inputs.length > 1
+        ? `将 ${inputs.length} 个独立供电点接到同一个按钮，确保同一游戏刻送电。`
+        : '在主线起点接上红石线和按钮。';
+  $('doneInputs').hidden = inputs.length === 0;
+  $('doneInputs').open = false;
+  $('doneInputList').textContent = inputs.map(({ x, y, z }) => `(${x}, ${y}, ${z})`).join('、');
+  const tps = result.song?.summaryTps ?? 20;
+  $('doneTpsHint').textContent =
+    tps === 20 ? '' : `基准为 ${tps} TPS。请在游戏中执行 /tick rate ${tps} 以保持原曲速度。`;
+  $('doneTpsHint').hidden = tps === 20;
 
   $('doneWarningBox').style.display = 'none';
   $('doneWarningBox').textContent = '';
@@ -1071,9 +1247,6 @@ document.addEventListener('click', (event) => {
       // A manual choice wins, and the panel has to say so: a checkbox that still reads
       // "smart" while the generator follows the manual value was the confusing part.
       state.smartSelection = false;
-      // The pack only changes samples, so a merge choice says nothing about it; an
-      // instrument choice does.
-      if (group === 'instrument') state.packRecommended = null;
     }
     syncSummary();
     // The notice invites the user to leave the defaults alone. Once they have not, it has
@@ -1084,12 +1257,17 @@ document.addEventListener('click', (event) => {
 });
 
 $('btnPrevStep').addEventListener('click', () => {
-  if (state.step > 1) goStep(state.step - 1);
+  if (state.step === 8) {
+    goStep(checkedSignature === generationSignature() ? 6 : 5);
+  } else if (state.step > 1) {
+    goStep(state.step - 1);
+  }
 });
 
 $('realFileInput').addEventListener('change', (event) => {
   const file = event.target.files?.[0];
-  if (file) void loadMidi(api.pathForFile(file));
+  event.target.value = '';
+  if (file) importMidiFile(file);
 });
 
 $('importEmpty').addEventListener('click', (event) => {
@@ -1134,6 +1312,23 @@ function carriesFiles(event) {
   return Array.from(event.dataTransfer?.types ?? []).includes('Files');
 }
 
+function importMidiFile(file) {
+  if (!/\.(mid|midi)$/i.test(file.name)) {
+    showImportError('请选择 .mid 或 .midi 文件。');
+    return;
+  }
+  try {
+    const path = api.pathForFile(file);
+    if (!path) {
+      showImportError('无法读取所选文件的路径，请改用点击选择。');
+      return;
+    }
+    void loadMidi(path);
+  } catch {
+    showImportError('无法读取所选文件的路径，请改用点击选择。');
+  }
+}
+
 function setDragHighlight(on) {
   // The empty box is hidden once a song is loaded; the step itself is always visible,
   // so the replacement-drop path gets feedback too.
@@ -1167,20 +1362,7 @@ dropStep.addEventListener('drop', (event) => {
   setDragHighlight(false);
   const file = event.dataTransfer.files?.[0];
   if (!file) return;
-  if (!/\.(mid|midi)$/i.test(file.name)) {
-    showImportError('请拖入 .mid 或 .midi 文件。');
-    return;
-  }
-  try {
-    const path = api.pathForFile(file);
-    if (!path) {
-      showImportError('无法读取拖入文件的路径，请改用点击选择。');
-      return;
-    }
-    void loadMidi(path);
-  } catch {
-    showImportError('无法读取拖入文件的路径，请改用点击选择。');
-  }
+  importMidiFile(file);
 });
 
 // Without these, Chromium treats a drop outside the target as a navigation and
@@ -1190,7 +1372,10 @@ window.addEventListener('dragover', (event) => {
 });
 window.addEventListener('drop', (event) => event.preventDefault());
 $('btnChangeFile').addEventListener('click', () => void chooseMidiFile());
-$('btnResetImport').addEventListener('click', () => setImportView('empty'));
+$('btnResetImport').addEventListener('click', () => {
+  importToken++;
+  setImportView('empty');
+});
 
 $('btnToggleAllTracks').addEventListener('click', () => {
   const allChecked = state.tracks.every((track) => track.checked);
@@ -1198,6 +1383,7 @@ $('btnToggleAllTracks').addEventListener('click', () => {
     track.checked = !allChecked;
   });
   renderTracks();
+  syncSummary();
   playNote(allChecked ? 220 : 520, 'sine', 0.1);
 });
 
@@ -1261,7 +1447,7 @@ $('leadTrackList').addEventListener('click', (event) => {
   syncLeadPicker();
   // Picking a lead is not a rejection of the instrument mode or the merge the recommendation
   // chose, so smart selection stays on; the lead card and the check page both say "手动指定".
-  // The signature changes, so entering the next step measures again with this lead.
+  syncSummary();
   playNote(460, 'sine', 0.07);
 });
 
@@ -1276,9 +1462,10 @@ $('commandBudgetInput').addEventListener('change', (event) => {
   const value = Number(event.target.value);
   state.commandBudget = Number.isFinite(value) && value > 0 ? Math.round(value) : 65536;
   event.target.value = String(state.commandBudget);
+  syncSummary();
 });
 
-$('btnSavePack').addEventListener('click', async () => {
+async function saveResourcePack() {
   try {
     const target = await savePack();
     if (!target) return; // Cancelled.
@@ -1288,22 +1475,26 @@ $('btnSavePack').addEventListener('click', async () => {
   } catch (error) {
     notify(`保存资源包失败：${error?.message || error}`);
   }
-});
+}
+$('btnSavePack').addEventListener('click', () => void saveResourcePack());
+$('btnGetResourcePack').addEventListener('click', () => void saveResourcePack());
 
 $('btnChooseOutput').addEventListener('click', () => void chooseOutputFile());
-$('fileNameInput').addEventListener('input', syncOutputText);
 $('btnStartGen').addEventListener('click', () => {
+  if (activeJob) return;
   goStep(6);
   void runCheck();
 });
 
 // The check step's button is the only thing that writes a file.
 $('btnGoGenerate').addEventListener('click', () => {
+  if (activeJob || checkedSignature !== generationSignature()) return;
   goStep(7);
   void runGeneration();
 });
 $('btnBackToExport').addEventListener('click', () => goStep(5));
 $('btnRetryGen').addEventListener('click', () => void runGeneration());
+$('btnCancelGeneration').addEventListener('click', () => void cancelJob());
 
 $('btnOpenFolder').addEventListener('click', () => {
   if (state.result?.outputPath) void api.reveal(state.result.outputPath);
@@ -1311,13 +1502,16 @@ $('btnOpenFolder').addEventListener('click', () => {
 });
 
 $('btnNextSong').addEventListener('click', () => {
+  importToken++;
+  state.smartToken++;
+  devMeasureToken++;
+  checkedSignature = null;
   state.midiPath = null;
+  state.midiRevision = undefined;
   state.song = null;
   state.tracks = [];
-  state.outputDir = null;
-  state.outputDirToken = null;
+  state.output = null;
   state.result = null;
-  $('fileNameInput').value = '';
   setImportView('empty');
   syncOutputText();
   goStep(2);
@@ -1333,17 +1527,21 @@ $('btnWinClose').addEventListener('click', () => void api.windowControl('close')
 
 /** Fill the About rows once, the first time the settings dialog is opened. */
 let aboutLoaded = false;
+let aboutLoading = false;
 async function loadAbout() {
-  if (aboutLoaded) return;
-  aboutLoaded = true;
+  if (aboutLoaded || aboutLoading) return;
+  aboutLoading = true;
   try {
     const info = await api.appInfo();
     $('aboutVersion').textContent = info.version;
     $('aboutLicense').textContent = info.license;
     $('aboutAuthor').textContent = info.author;
     $('btnOpenRepo').addEventListener('click', () => void api.open(info.repository));
+    aboutLoaded = true;
   } catch (error) {
     notify(`无法读取版本信息：${error?.message || error}`);
+  } finally {
+    aboutLoading = false;
   }
 }
 
@@ -1536,7 +1734,7 @@ function renderSmartResult(result) {
     'single-instrument': '单乐器曲',
     'multi-instrument': '多乐器多音轨曲',
   }[smart.category];
-  const mode = smart.instrumentMode === 'extended' ? '扩展竖琴音域（需资源包）' : '原版乐器';
+  const mode = smart.instrumentMode === 'extended' ? '扩展竖琴音域' : '原版乐器';
   const mergeLabel = MERGE_MODE_TEXT;
   const lead = state.tracks.find((track) => track.index === smart.leadTrackIndex);
   const leadBasis =
@@ -1546,25 +1744,28 @@ function renderSmartResult(result) {
       balance: '力度接近，综合活跃度与单音旋律',
       fallback: '没有可用有音律轨，使用当前音轨',
     }[smart.leadBasis] || '自动推荐';
-  // A forced merge leaves one spine, so naming a lead track would point at a lane that no
-  // longer exists on its own; the sign in the schematic says the same thing.
-  const singleLane = result.laneAnnotation?.singleLane ?? smart.mergeMode === 'force';
-  const leadLine = singleLane
+  const leadLine = result.mergedAllTracks
     ? '主音轨：全曲合并成一条主线，没有独立主音轨（站到主线那一行）'
     : `主音轨：${lead ? `轨 ${lead.index + 1}「${lead.name || lead.instrument}」` : '未指定'} · ${leadBasis}`;
 
-  const lines = [`分类：${category}`, `乐器模式：${mode}`];
+  const lines = [
+    `分类：${category}`,
+    `乐器模式：${mode}`,
+    `资源包：${smart.resourcePackRecommended ? '建议保存，需自行安装' : '不需要'}`,
+  ];
   if (result.playbackMode === 'command') {
     // Command playback has no lanes, no Z span and no merge, so none of those conclusions
     // apply; printing a lead track there would suggest a layout that does not exist.
     lines.push('主音轨 / 听距 / 合并方式：命令播放不适用');
   } else {
     lines.push(
-      `听距：最远的音符离你 ${smart.radiusZ} 格（阈值 ${smart.compactRadius} / ${smart.audibleRadius} 格）`,
+      `离主轨行最远 ${smart.radiusZ} 格（Z 向阈值 ${smart.compactRadius} / ${smart.audibleRadius} 格）`,
       `合并方式：${mergeLabel[smart.mergeMode] ?? smart.mergeMode}`,
       leadLine,
-      `资源包：${smart.resourcePackRecommended ? '建议保存（需自行安装，不会自动装）' : '不需要'}`,
     );
+    if (result.preview?.size?.x > 2 * smart.audibleRadius) {
+      lines.push('随播放沿 X 方向走动，保持在当前发声音符附近。');
+    }
     const sharing = result.laneSharing ?? smart.laneSharing;
     if (sharing) lines.push(...laneSharingLines(sharing));
     const ride = result.laneRide;
@@ -1580,13 +1781,15 @@ function renderSmartResult(result) {
       );
     }
     const candidates = smart.candidates
-      .map((candidate) => `${mergeLabel[candidate.mode] ?? candidate.mode} 最远 ${candidate.radiusZ} 格`)
+      .map((candidate) => `${mergeLabel[candidate.mode] ?? candidate.mode} Z 向最远 ${candidate.radiusZ} 格`)
       .join(' · ');
     if (candidates) lines.push(`候选布局：${candidates}`);
     const annotation = result.laneAnnotation;
     if (annotation) {
-      const spot = `(${annotation.player.x}, ${annotation.player.y}, ${annotation.player.z})`;
-      lines.push(`投影注释：${annotation.signs.length} 条牌 · 站 ${spot} · 听距 ${annotation.spreadZ} 格`);
+      const spot = annotation.player.z;
+      lines.push(
+        `投影注释：${annotation.signs.length} 条牌 · 跟随 Z ${spot} 行 · 横向最远 ${annotation.spreadZ} 格`,
+      );
     }
   }
 
@@ -1598,11 +1801,14 @@ function renderIssues(result) {
   const list = $('issueList');
   list.replaceChildren();
 
-  const warnings = (result.warnings ?? []).slice(0, WARNING_DISPLAY_LIMIT);
+  const warnings = result.warnings ?? [];
   const bySeverity = new Map(ISSUE_GROUPS.map((group) => [group.severity, []]));
+  let actionable = 0;
   for (const warning of warnings) {
     const severity = warnSeverity(warning.code) === 'warn' ? 'warn' : 'info';
-    bySeverity.get(severity).push(warning);
+    if (severity === 'warn') actionable++;
+    const items = bySeverity.get(severity);
+    if (items.length < WARNING_DISPLAY_LIMIT) items.push(warning);
   }
 
   if (warnings.length === 0) {
@@ -1610,15 +1816,15 @@ function renderIssues(result) {
     return;
   }
 
-  const actionable = bySeverity.get('warn').length;
-  $('checkSummary').textContent =
-    actionable > 0
-      ? `共 ${number(warnings.length)} 条，其中 ${number(actionable)} 条建议处理。` +
-        '点「在红石布线里定位」可以跳到对应位置；想改配置就点「上一步」。'
-      : `共 ${number(warnings.length)} 条，都不影响生成，看一眼即可。`;
+  const total = `共 ${number(warnings.length)} 条`;
+  const advice = actionable > 0 ? `，其中 ${number(actionable)} 条建议处理。` : '，可展开查看。';
+  let remaining = WARNING_DISPLAY_LIMIT;
+  const hidden = warnings.length > remaining ? `另有 ${number(warnings.length - remaining)} 条未显示。` : '';
+  $('checkSummary').textContent = total + advice + hidden;
 
   for (const group of ISSUE_GROUPS) {
-    const items = bySeverity.get(group.severity);
+    const items = bySeverity.get(group.severity).slice(0, remaining);
+    remaining -= items.length;
     if (items.length === 0) continue;
 
     const heading = document.createElement('div');
@@ -1634,24 +1840,21 @@ function renderIssues(result) {
   }
 }
 
-/**
- * A chip per track, so the user can reach a row instead of hunting for it by dragging.
- *
- * The Z position comes from the regions the generator reported rather than from the track
- * index, because the spacing between tracks depends on how wide the song's chords are.
- */
+/** A chip jumps to the first note on its track's actual circuit row. */
 function renderTrackChips(result) {
   const box = $('previewTrackChips');
   box.replaceChildren();
 
   const firstRowOfTrack = new Map();
-  for (const region of result.regions ?? []) {
-    if (!firstRowOfTrack.has(region.trackIndex)) {
-      firstRowOfTrack.set(region.trackIndex, region.position.z);
-    }
+  for (const lane of result.previewLanes ?? []) {
+    if (!firstRowOfTrack.has(lane.trackIndex)) firstRowOfTrack.set(lane.trackIndex, lane);
+  }
+  if (result.playbackMode === 'command' && result.regions?.[0]) {
+    const { x, z } = result.regions[0].position;
+    firstRowOfTrack.set(-1, { x, z });
   }
 
-  for (const [index, z] of firstRowOfTrack) {
+  for (const [index, { x, z }] of firstRowOfTrack) {
     const track = (result.tracks ?? []).find((entry) => entry.index === index);
     const chip = document.createElement('button');
     chip.type = 'button';
@@ -1659,7 +1862,7 @@ function renderTrackChips(result) {
     chip.textContent =
       index < 0 ? '合并主线' : track?.name ? `${index + 1} ${track.name}` : `音轨 ${index + 1}`;
     chip.title = `跳到 z${z} 行`;
-    chip.addEventListener('click', () => focusPreviewCell(0, z));
+    chip.addEventListener('click', () => focusPreviewCell(x, z));
     box.append(chip);
   }
 }
@@ -1747,19 +1950,26 @@ function renderAssignmentTable(containerId, result) {
     ' · 点开看详情';
 }
 
-/**
- * Run a generation for its warnings alone.
- *
- * The output path is deliberately left out: the main process then builds the whole result
- * and writes no file, which is what makes this a rehearsal rather than an export.
- */
+/** Analyze the selected layout without encoding or saving a file. */
 async function runCheck() {
   if (!state.midiPath) return;
-  $('checkSummary').textContent = '正在先跑一遍，看看有什么问题…';
+  const job = beginJob('check');
+  if (!job) return;
+  checkedSignature = null;
+  $('checkSummary').textContent = stageText.read;
   $('issueList').replaceChildren();
+  $('smartResult').style.display = 'none';
+  const canApply = () => !job.cancelling && job.signature === generationSignature();
 
   try {
-    const result = await api.generate(state.midiPath, generateOptions());
+    const result = await api.generate(
+      state.midiPath,
+      generateOptions(),
+      undefined,
+      job.id,
+      state.midiRevision,
+    );
+    if (!canApply()) return;
     if (!result.success) {
       $('smartResult').style.display = 'none';
       $('checkSummary').textContent = '这一遍没能跑完。';
@@ -1781,31 +1991,31 @@ async function runCheck() {
       return;
     }
 
-    const issues = result.warnings?.length ?? 0;
-    $('checkSummary').textContent =
-      issues === 0
-        ? '没有发现问题，可以直接生成。'
-        : `共 ${number(issues)} 处需要看一眼。点「在红石布线里定位」可以跳到对应位置；想改配置就点「上一步」。`;
+    checkedSignature = job.signature;
     renderIssues(result);
     renderSmartResult(result);
     renderTrackChips(result);
     renderAssignmentTable('assignmentTable', result);
     // The canvas measures its container, so this runs after the step is on screen.
     renderPreview(result);
-    if (issues === 0) notify('没有发现问题，可以生成');
+    if (!result.warnings?.length) notify('没有发现问题，可以生成');
   } catch (error) {
+    if (!canApply()) return;
     $('checkSummary').textContent = '这一遍没能跑完。';
     notify(`检查失败：${error?.message || error}`);
     playFailure();
+  } finally {
+    finishJob(job);
+    if (!job.cancelling && job.signature !== generationSignature() && state.step === 6) {
+      void runCheck();
+    }
   }
 }
 
 // Panning and the layer toggles. The drawing module exposes the operations but binds
 // nothing itself, so the controls live here.
 for (const id of ['showGrid', 'showNotes']) {
-  $(id).addEventListener('change', () => {
-    if (state.result) renderPreview(state.result);
-  });
+  $(id).addEventListener('change', () => renderPreview());
 }
 
 (() => {
@@ -1954,10 +2164,10 @@ function devSnapshot() {
         applied: state.smartSelection,
         measured: state.smartMeasured,
         signature: state.smartSignature,
-        packRecommended: state.packRecommended,
+        packRecommended: currentSmartMeasurement()?.resourcePackRecommended,
       },
       options: state.midiPath ? generateOptions() : null,
-      output: { dir: state.outputDir, hasToken: Boolean(state.outputDirToken) },
+      output: { path: state.output?.path ?? null, hasToken: Boolean(state.output?.token) },
       measure: state.devMeasure,
     },
     tracks: state.tracks.map((track) => ({
@@ -2022,6 +2232,7 @@ let devMeasureToken = 0;
  */
 function scheduleDevMeasure(delay = 320) {
   clearTimeout(devMeasureTimer);
+  devMeasureToken++;
   if (!isDevMode() || !state.midiPath) {
     clearDevMeasure();
     return;
@@ -2055,7 +2266,7 @@ function measureText(measure) {
     `MC 轨道 ${measure.trackCount} 条`,
     `源音轨 ${measure.sourceTrackCount} 条`,
     `站 Z ${measure.playerZ}`,
-    `最远 ${measure.hearingRadius} 格`,
+    `离主轨行最远 ${measure.hearingRadius} 格`,
     `区域 ${measure.regionCount}`,
     `音符盒 ${number(measure.noteBlockCount)}`,
     `方块 ${number(measure.blockCount)}`,
@@ -2093,7 +2304,7 @@ async function runDevMeasure() {
   const element = $('devMeasure');
   if (element) element.textContent = '测量布局…';
   try {
-    const measure = await api.measure(state.midiPath, generateOptions());
+    const measure = await api.measure(state.midiPath, generateOptions(), state.midiRevision);
     if (token !== devMeasureToken) return;
     state.devMeasure = measure;
     if (element) element.textContent = measureText(measure);

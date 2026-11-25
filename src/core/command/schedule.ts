@@ -80,13 +80,19 @@ export function playbackPitch(note: number): string {
     .replace(/\.$/, '');
 }
 
+export interface RangeShift {
+  notes: number;
+  maxSemitones: number;
+}
+
 /** Map every retained note to a game tick, a sound event and a pitch. */
 export function collectEvents(
   song: SongModel,
   options: ScheduleOptions,
-): { events: ScheduledEvent[]; warnings: LayoutWarning[] } {
+): { events: ScheduledEvent[]; warnings: LayoutWarning[]; rangeShift: RangeShift } {
   const warnings: LayoutWarning[] = [];
   const events: ScheduledEvent[] = [];
+  const rangeShift = { notes: 0, maxSemitones: 0 };
   const excluded = new Set(options.excludeTracks ?? []);
 
   for (const track of song.tracks) {
@@ -176,6 +182,10 @@ export function collectEvents(
         });
       }
       if (mapped.dropped) continue;
+      if (mapped.degraded) {
+        rangeShift.notes++;
+        rangeShift.maxSemitones = Math.max(rangeShift.maxSemitones, Math.abs(mapped.shiftSemitones));
+      }
 
       if (!Number.isSafeInteger(tick) || tick < 0 || tick > SCORE_MAX) {
         throw coreError('COMMAND_TIME_OUT_OF_RANGE');
@@ -198,7 +208,7 @@ export function collectEvents(
   if (events.length === 0) {
     throw coreError('COMMAND_NO_NOTES');
   }
-  return { events, warnings };
+  return { events, warnings, rangeShift };
 }
 
 /**
@@ -249,8 +259,8 @@ export function encodeFrames(events: ScheduledEvent[]): {
 export function buildSchedule(
   song: SongModel,
   options: ScheduleOptions,
-): { schedule: Schedule; warnings: LayoutWarning[] } {
-  const { events, warnings } = collectEvents(song, options);
+): { schedule: Schedule; warnings: LayoutWarning[]; rangeShift: RangeShift } {
+  const { events, warnings, rangeShift } = collectEvents(song, options);
   const { voices, frames, peakNotes } = encodeFrames(events);
-  return { schedule: { events, voices, frames, peakNotes }, warnings };
+  return { schedule: { events, voices, frames, peakNotes }, warnings, rangeShift };
 }

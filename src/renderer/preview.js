@@ -67,10 +67,11 @@ const previewCountCache = new WeakMap();
 function previewCounts(preview) {
   let counts = previewCountCache.get(preview);
   if (counts) return counts;
-  counts = { wire: 0, base: 0, notes: 0 };
-  for (const cell of preview.wireCells) if (cell) counts.wire += 1;
-  for (const cell of preview.baseCells) if (cell) counts.base += 1;
-  for (const cell of preview.noteCells) if (cell) counts.notes += 1;
+  counts = {
+    wire: Object.keys(preview.wireCells).length,
+    base: Object.keys(preview.baseCells).length,
+    notes: Object.keys(preview.noteCells).length,
+  };
   previewCountCache.set(preview, counts);
   return counts;
 }
@@ -482,7 +483,7 @@ function tileArt(preview, tile, art) {
  * moves the picture instead of redrawing it. Only the ruler, the gutter and the selection
  * ring are drawn per frame.
  */
-function renderPreview(res) {
+function renderPreview(res = state.generated) {
   const canvas = $('canvas');
   const hint = $('previewHint');
   const wrap = $('canvasWrap');
@@ -496,7 +497,7 @@ function renderPreview(res) {
   $('previewDescription').textContent =
     res?.playbackMode === 'command'
       ? '命令播放器 · 立体结构俯视图'
-      : '向右是时间，向下是不同音轨的空间排布。';
+      : '向右是时间，向下是音轨排布。进游戏后沿主轨行向东跟随播放。';
 
   if (!preview || preview.size.x === 0) {
     canvas.width = 0;
@@ -770,7 +771,11 @@ function panPreview(pixelsX, pixelsZ) {
 }
 
 /** Put a given cell in the middle of the view; the warning list uses this. */
-function focusPreviewCell(x, z) {
+function focusPreviewCell(layoutX, layoutZ) {
+  const origin = state.generated?.preview?.origin;
+  if (!origin) return;
+  const x = layoutX - origin.x;
+  const z = layoutZ - origin.z;
   const wrap = $('canvasWrap');
   // Being sent to a cell you cannot see is no use, so a jump never lands below the size
   // at which the cell is actually drawn rather than filled flat.

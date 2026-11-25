@@ -1,5 +1,14 @@
 const { _electron } = require('playwright-core');
-const { existsSync, mkdirSync, rmSync, statSync } = require('node:fs');
+const { Midi } = require('@tonejs/midi');
+const {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 
@@ -79,16 +88,23 @@ const { join, resolve } = require('node:path');
         (analyzed?.tracks || []).map((t) => t.name || '(unnamed)').join(', '),
     );
 
-    // 3. The main process grants the folder chosen in its native dialog. Stub only that
-    // dialog, then let the real authorization and write path run end to end.
-    await app.evaluate(({ dialog }, directory) => {
-      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [directory] });
-    }, work);
-    const grant = await page.evaluate(() => window.musicbox.chooseDirectory());
-    check(
-      grant?.path === work && typeof grant?.token === 'string' && grant.token.length > 0,
-      'chooseDirectory returned a directory grant',
-    );
+    // Stub the native result while exercising the real Save As bridge and publication path.
+    async function chooseOutput(filePath) {
+      await app.evaluate(({ dialog }, selected) => {
+        dialog.showSaveDialog = async (_window, options) => {
+          if (!options.filters?.[0]?.extensions.includes('litematic')) throw new Error('wrong save dialog');
+          if (!options.defaultPath?.endsWith('suggested.litematic'))
+            throw new Error('missing default filename');
+          return { canceled: selected === null, filePath: selected ?? '' };
+        };
+        dialog.showMessageBox = async () => {
+          throw new Error('export displayed a second overwrite dialog');
+        };
+      }, filePath);
+      return page.evaluate(() => window.musicbox.chooseOutput('suggested.litematic'));
+    }
+    const grant = await chooseOutput(output);
+    check(grant?.path === output && !!grant?.token, 'Save As granted the exact filename chosen');
 
     const forged = await page.evaluate(
       async ([path, token]) => {
@@ -101,12 +117,34 @@ const { join, resolve } = require('node:path');
       },
       [song, grant?.token ?? 'missing'],
     );
-    check(forged, 'generate rejects paths outside the granted directory');
+    check(forged, 'generate cannot change the path granted by Save As');
+
+    const rejectedDirectory = await page.evaluate(async (path) => {
+      try {
+        await window.musicbox.analyze(path);
+        return false;
+      } catch (error) {
+        return error.message.includes('当前路径是文件夹');
+      }
+    }, work);
+    check(rejectedDirectory, 'analyze reports directories as invalid MIDI inputs');
+
+    const stages = await page.evaluate(async (path) => {
+      const seen = [];
+      window.musicbox.onGenerationProgress((id, stage) => seen.push([id, stage]));
+      const read = await window.musicbox.generate(path, {}, undefined, 1);
+      window.__generationStages = seen;
+      return { bytes: read.bytes, success: read.success, seen };
+    }, song);
+    check(
+      stages.success && stages.bytes === 0 && !stages.seen.some(([, stage]) => stage === 'encode'),
+      'check prepares a preview without encoding',
+    );
 
     // 4. generate: the file has to exist afterwards, and its size has to match the result.
     const generated = await page.evaluate(
-      ([path, target]) => window.musicbox.generate(path, {}, target),
-      [song, { token: grant.token, fileName: 'smoke.litematic' }],
+      ([path, target]) => window.musicbox.generate(path, {}, target, 2),
+      [song, grant.token],
     );
     check(generated?.success === true, 'generate reported success: ' + (generated?.error || 'no error'));
     check(existsSync(output), 'generate wrote ' + output);
@@ -124,9 +162,109 @@ const { join, resolve } = require('node:path');
         ((generated?.stats?.noteBlockCount ?? 0) + (generated?.stats?.circuitBlocks ?? 0)),
     );
 
-    // 5. `chooseMidi` and `saveResourcePack` still open native modals that automation
-    // cannot answer; their file work is covered by the direct calls above. `chooseDirectory`
-    // was exercised in step 3 with only its modal stubbed.
+    const exportStages = await page.evaluate(() =>
+      window.__generationStages.filter(([id]) => id === 2).map(([, stage]) => stage),
+    );
+    check(
+      exportStages.join(',') === 'encode,write',
+      'export reused the checked layout and reported encode/write',
+    );
+
+    writeFileSync(output, 'previous export');
+    const declined = await chooseOutput(null);
+    check(
+      declined === null && readFileSync(output, 'utf8') === 'previous export',
+      'cancelling Save As leaves an existing file untouched',
+    );
+    const replacement = await chooseOutput(output);
+    const replaced = await page.evaluate(
+      ([path, token]) => window.musicbox.generate(path, {}, token),
+      [song, replacement.token],
+    );
+    check(
+      replaced?.success === true && statSync(output).size === replaced.bytes,
+      'native confirmation authorizes replacement without a second dialog',
+    );
+
+    const competingPath = join(work, 'competing.litematic');
+    const competing = await chooseOutput(competingPath);
+    writeFileSync(competingPath, 'created after the dialog');
+    const collision = await page.evaluate(
+      ([path, token]) => window.musicbox.generate(path, {}, token),
+      [song, competing.token],
+    );
+    check(
+      collision?.chooseOutputAgain === true &&
+        readFileSync(competingPath, 'utf8') === 'created after the dialog',
+      'a file created after Save As requires a new selection and remains untouched',
+    );
+
+    const long = new Midi();
+    for (let t = 0; t < 8; t++) {
+      const track = long.addTrack();
+      for (let i = 0; i < 4000; i++) track.addNote({ midi: 60, ticks: i * 120, duration: 60 });
+    }
+    const longFile = join(work, 'cancel.mid');
+    writeFileSync(longFile, long.toArray());
+    const cancelGrant = await chooseOutput(join(work, 'cancel.litematic'));
+    const cancelled = await page.evaluate(
+      async ([path, token]) => {
+        window.musicbox.onGenerationProgress((id, stage) => {
+          if (id === 3 && stage === 'layout') void window.musicbox.cancelGeneration(id);
+        });
+        try {
+          await window.musicbox.generate(path, {}, token, 3);
+          return false;
+        } catch (error) {
+          return error.message.includes('任务已取消');
+        }
+      },
+      [longFile, cancelGrant.token],
+    );
+    check(
+      cancelled && !existsSync(join(work, 'cancel.litematic')),
+      'cancelling the worker before commit leaves no output',
+    );
+    const afterCancel = await page.evaluate((path) => window.musicbox.generate(path, {}), song);
+    check(afterCancel.success, 'the next check starts a fresh worker after cancellation');
+
+    const mutable = join(work, 'mutable.mid');
+    copyFileSync(song, mutable);
+    const imported = await page.evaluate((path) => window.musicbox.analyze(path), mutable);
+    const beforeChange = await page.evaluate(
+      ([path, revision]) => window.musicbox.generate(path, {}, undefined, 4, revision),
+      [mutable, imported.sourceRevision],
+    );
+    check(beforeChange.success && !!imported.sourceRevision, 'check uses the imported MIDI revision');
+    writeFileSync(mutable, long.toArray());
+    const staleGrant = await chooseOutput(join(work, 'stale.litematic'));
+    const stale = await page.evaluate(
+      async ([path, token, revision]) => {
+        try {
+          await window.musicbox.generate(path, {}, token, 5, revision);
+          return false;
+        } catch (error) {
+          return error.message.includes('重新导入');
+        }
+      },
+      [mutable, staleGrant.token, imported.sourceRevision],
+    );
+    check(stale && !existsSync(join(work, 'stale.litematic')), 'MIDI changed after check cannot be exported');
+    const reimported = await page.evaluate((path) => window.musicbox.analyze(path), mutable);
+    check(reimported.sourceRevision !== imported.sourceRevision, 'reimport receives the new MIDI revision');
+
+    // 5. Saving the resource pack copies the ZIP bundled by the build.
+    const packPath = join(work, 'piano-pack.zip');
+    await app.evaluate(({ dialog }, filePath) => {
+      dialog.showSaveDialog = async () => ({ canceled: false, filePath });
+    }, packPath);
+    const savedPack = await page.evaluate(() => window.musicbox.saveResourcePack());
+    check(
+      savedPack === packPath &&
+        existsSync(packPath) &&
+        readFileSync(packPath).equals(readFileSync(resolve('assets/musicboxmc-piano-pack-1.20.4.zip'))),
+      'saveResourcePack copies the verified bundled resource pack',
+    );
 
     // 6. windowControl: the frameless title bar's buttons reach the real window.
     await page.evaluate(() => window.musicbox.windowControl('maximize'));

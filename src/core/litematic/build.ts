@@ -1,5 +1,5 @@
 import { gzipSync, gunzipSync } from 'node:zlib';
-import { packLongArray, requiredBits, unpackLongArray } from './bitArray';
+import { longArrayLength, packLongArray, requiredBits, unpackLongArray } from './bitArray';
 import { NbtCompound, NbtTag, TagType, nbt, nbtIntVec3 } from '../nbt/tag';
 import { readNbt } from '../nbt/reader';
 import { writeNbt } from '../nbt/writer';
@@ -29,6 +29,22 @@ export interface LitematicMeta {
 
 export const MC_1_20_4_DATA_VERSION = 3700;
 export const LITEMATIC_VERSION_1_20_4 = 6;
+
+/** Limit the dense working set before allocating block indices or packed words. */
+const MAX_LITEMATIC_VOLUME = 8_000_000;
+
+export function assertLitematicVolume(regions: Iterable<Pick<RegionData, 'size'>>): void {
+  let total = 0;
+  for (const {
+    size: { x, y, z },
+  } of regions) {
+    const volume = x * y * z;
+    total += volume;
+    if (x <= 0 || y <= 0 || z <= 0 || !Number.isSafeInteger(total) || total > MAX_LITEMATIC_VOLUME) {
+      throw coreError('LITEMATIC_VOLUME_LIMIT', { limit: MAX_LITEMATIC_VOLUME });
+    }
+  }
+}
 
 /** Index order: index = y * (sizeX * sizeZ) + z * sizeX + x */
 export function blockIndex(x: number, y: number, z: number, sizeX: number, sizeZ: number): number {
@@ -126,6 +142,7 @@ function buildRegion(region: RegionData): PackedRegion {
 
 /** Assemble the root NBT of a .litematic and gzip it. */
 export function buildLitematic(regions: RegionData[], meta: LitematicMeta): Buffer {
+  assertLitematicVolume(regions);
   const packed = regions.map(buildRegion);
 
   const regionMap = new Map<string, NbtTag>();
@@ -272,6 +289,9 @@ export function parseLitematic(buf: Buffer): ParsedLitematic {
 
     const volume = Math.abs(size.x) * Math.abs(size.y) * Math.abs(size.z);
     const bits = requiredBits(palette.length);
+    if (!Number.isSafeInteger(volume) || statesTag.value.length !== longArrayLength(volume, bits)) {
+      throw coreError('LITEMATIC_BLOCK_STATE_LENGTH');
+    }
     const indices = unpackLongArray(statesTag.value, volume, bits);
     const entitiesTag = regionTag.value.get('TileEntities');
     const tileEntities =

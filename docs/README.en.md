@@ -27,8 +27,7 @@
 
 MusicboxMC reads a MIDI file, compiles it into a redstone circuit, and writes that
 circuit as a Litematica `.litematic` schematic. Paste it into a world, apply
-redstone power at the start of the main line, and it
-plays.
+redstone power to every independent input on the same game tick to start playback.
 
 The hard part is not placing note blocks, it is timing. The generator quantises
 every note onto the redstone tick grid, works out the repeater delays that carry
@@ -66,7 +65,7 @@ what it generates.
 2. **Adjust.** Most songs need nothing changed. The settings that matter are `dMax`
    — how wide one chord column may be — and what to do with notes outside the
    covered range.
-3. **Check, then generate.** After choosing a folder the app runs the generator once
+3. **Check, then generate.** After choosing the destination and filename in the system Save As dialog, the app runs the generator once
    without writing anything, lists what it found on the **check results** step, and
    draws the **redstone wiring** view: one row per Z row, one column per X cell, time
    running to the right. It is a **viewport**, not the whole drawing — drag or scroll
@@ -76,8 +75,8 @@ what it generates.
    ![The redstone wiring view](images/preview.png)
 
 4. **Paste.** Put the `.litematic` in `.minecraft/schematics/`, load it with
-   Litematica in game, then connect redstone to the start of the main line and drive it with a
-   button.
+   Litematica in game and use the result screen’s coordinates to connect all independent redstone inputs to the same button. Apply power to all of them on the same game tick. For command playback, enable command blocks and press Start / Restart.
+   If you changed the base TPS, run the `/tick rate` command shown on the result screen to keep the original tempo.
 
 If anything needs attention afterwards, the **check results** step lists it. Every
 warning that has a location carries a **locate in the wiring view** button: one click
@@ -158,13 +157,12 @@ schematic is identical either way. **It is not recommended in native mode**, whe
 would also replace native bass, guitar, flute and bell.
 
 The pack **ships inside the application**. A _Save (about 50 KB)_ button sits on the
-export step, and the first extended-mode export offers it once. Put the file in
+export step. The result screen also has a _Get resource pack_ button and prompts you when the song uses an outer piano slot. Put the file in
 `.minecraft/resourcepacks/` and enable it in game. It is also on the
 [release page](https://github.com/xingtuan416/MusicboxMC/releases/latest/download/MusicboxMC-piano-pack-1.20.4.zip)
-if you would rather download it directly.
+for direct download. The `v0.4.5` release asset still uses the old sound mapping.
 
-`npm run resourcepack:check <pack.zip>` validates any pack against the mapping the
-generator expects.
+`npm run resourcepack:check` validates the bundled pack. Append `-- <pack.zip>` to check a specific file for Minecraft 1.20.4 metadata and the five expected sound mappings.
 
 ## How this compares to Note Block Studio
 

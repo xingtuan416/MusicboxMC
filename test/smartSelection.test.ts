@@ -30,31 +30,16 @@ describe('smart song classification', () => {
 
   it('extends only a pure harp song, and always pairs that with the pack', () => {
     // Inside the single harp slot F#3-F#5: plain harp, no pack.
-    expect(smartModeFor('pure-harp', { min: 60, max: 72 })).toEqual({
-      mode: 'native',
-      resourcePackRecommended: false,
-    });
+    expect(smartModeFor('pure-harp', { min: 60, max: 72 })).toBe('native');
     // Crosses the slot but stays inside F#1-F#7: the five-slot piano, and the pack is what
     // turns those five slots into one instrument, so it is part of the recommendation.
-    expect(smartModeFor('pure-harp', { min: 40, max: 90 })).toEqual({
-      mode: 'extended',
-      resourcePackRecommended: true,
-    });
+    expect(smartModeFor('pure-harp', { min: 40, max: 90 })).toBe('extended');
     // Beyond F#1-F#7 the pack could not help; the out-of-range policy is what applies.
-    expect(smartModeFor('pure-harp', { min: 10, max: 120 })).toEqual({
-      mode: 'extended',
-      resourcePackRecommended: false,
-    });
+    expect(smartModeFor('pure-harp', { min: 10, max: 120 })).toBe('extended');
     // Everything else keeps its own instruments and needs no pack: extended mode would
     // force the companion pack on a song that has a use for neither.
-    expect(smartModeFor('single-instrument', { min: 40, max: 90 })).toEqual({
-      mode: 'native',
-      resourcePackRecommended: false,
-    });
-    expect(smartModeFor('multi-instrument', { min: 10, max: 120 })).toEqual({
-      mode: 'native',
-      resourcePackRecommended: false,
-    });
+    expect(smartModeFor('single-instrument', { min: 40, max: 90 })).toBe('native');
+    expect(smartModeFor('multi-instrument', { min: 10, max: 120 })).toBe('native');
   });
 });
 

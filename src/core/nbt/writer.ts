@@ -129,6 +129,12 @@ class NbtWriter {
         for (const v of tag.value) this.i64(v);
         break;
       case TagType.List:
+        if (
+          tag.value.some((item) => item.type !== tag.elementType) ||
+          (tag.value.length > 0 && tag.elementType === TagType.End)
+        ) {
+          throw coreError('NBT_LIST_TYPE_MISMATCH');
+        }
         this.u8(tag.elementType);
         this.i32(tag.value.length);
         for (const item of tag.value) this.payload(item);

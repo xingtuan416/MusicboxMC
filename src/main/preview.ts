@@ -10,7 +10,7 @@ import type { PreviewData } from './types';
  * layers as floor, then wire, then note blocks.
  */
 
-const EMPTY_LAYER: string[] = [];
+const EMPTY_LAYER: Readonly<Record<number, string>> = Object.freeze({});
 
 export const EMPTY_PREVIEW: PreviewData = {
   size: { x: 0, y: 0, z: 0 },
@@ -41,18 +41,7 @@ export function toRegionData(slices: ReturnType<typeof sliceRegions>): RegionDat
 
 /** The preview layers by block type: wire / note blocks / floor. */
 export function buildPreview(slices: ReturnType<typeof sliceRegions>, topDown = false): PreviewData {
-  if (slices.length === 0) {
-    return {
-      size: { x: 0, y: 0, z: 0 },
-      origin: { x: 0, z: 0 },
-      wireCells: EMPTY_LAYER,
-      repeaterDelays: EMPTY_LAYER,
-      repeaterFacings: EMPTY_LAYER,
-      noteCells: EMPTY_LAYER,
-      baseCells: EMPTY_LAYER,
-      blocks: [],
-    };
-  }
+  if (slices.length === 0) return EMPTY_PREVIEW;
 
   let minX = Number.POSITIVE_INFINITY;
   let minZ = Number.POSITIVE_INFINITY;
@@ -69,13 +58,13 @@ export function buildPreview(slices: ReturnType<typeof sliceRegions>, topDown = 
   const width = maxX - minX;
   const depth = maxZ - minZ;
 
-  // Row-major: index = z * width + x
-  const wireCells = new Array<string>(width * depth).fill('');
-  const repeaterDelays = new Array<string>(width * depth).fill('');
-  const repeaterFacings = new Array<string>(width * depth).fill('');
-  const noteCells = new Array<string>(width * depth).fill('');
-  const baseCells = new Array<string>(width * depth).fill('');
-  const baseHeights = topDown ? new Array<number>(width * depth).fill(-Infinity) : [];
+  // Store only occupied grid cells. Keys are row-major: z * width + x.
+  const wireCells: Record<number, string> = {};
+  const repeaterDelays: Record<number, string> = {};
+  const repeaterFacings: Record<number, string> = {};
+  const noteCells: Record<number, string> = {};
+  const baseCells: Record<number, string> = {};
+  const baseHeights: Record<number, number> = {};
 
   for (const s of slices) {
     for (const b of s.blocks) {
@@ -91,11 +80,11 @@ export function buildPreview(slices: ReturnType<typeof sliceRegions>, topDown = 
             : baseCells;
       // Command mode is vertically packed; show its topmost block at each X/Z.
       if (layer === baseCells && topDown) {
-        if (b.pos.y >= baseHeights[idx]!) {
+        if (b.pos.y >= (baseHeights[idx] ?? -Infinity)) {
           layer[idx] = b.block;
           baseHeights[idx] = b.pos.y;
         }
-      } else if (layer[idx] === '') layer[idx] = b.block;
+      } else if (layer[idx] === undefined) layer[idx] = b.block;
       if (layer === wireCells && b.block === 'minecraft:repeater') {
         repeaterDelays[idx] = b.props?.delay ?? '';
         repeaterFacings[idx] = b.props?.facing ?? 'west';
@@ -105,7 +94,7 @@ export function buildPreview(slices: ReturnType<typeof sliceRegions>, topDown = 
 
   const blocks = new Set<string>();
   for (const layer of [wireCells, noteCells, baseCells]) {
-    for (const cell of layer) if (cell) blocks.add(cell);
+    for (const cell of Object.values(layer)) blocks.add(cell);
   }
   return {
     size: { x: width, y: maxY, z: depth },

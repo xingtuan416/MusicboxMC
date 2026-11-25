@@ -19,6 +19,7 @@ import {
   gameTickToRedstone,
   GAME_TICKS_PER_REDSTONE_TICK,
   MAX_PAD_RUN,
+  MAX_LAYOUT_BLOCKS,
   MAX_REPEATER_DELAY,
   MAX_SIDE_ROWS,
   type TrackNote,
@@ -170,6 +171,10 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
   }
 
   const groups = [...groupByRt.values()].sort((a, b) => a.rt - b.rt);
+  const lastRt = groups.at(-1)?.rt ?? 0;
+  if (2 * Math.ceil(lastRt / MAX_REPEATER_DELAY) > MAX_LAYOUT_BLOCKS) {
+    throw coreError('LAYOUT_BLOCK_LIMIT', { limit: MAX_LAYOUT_BLOCKS });
+  }
   for (const group of groups) {
     // Highest note first, then source order, so the fan-out is deterministic.
     group.notes.sort((a, b) => b.midi - a.midi || a.sourceIndex - b.sourceIndex);
@@ -244,6 +249,9 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
 
     const key = (pos: Vec3): string => `${pos.x},${pos.y},${pos.z}`;
     const put = (x: number, y: number, z: number, state: BlockState): void => {
+      if (placements.length >= MAX_LAYOUT_BLOCKS) {
+        throw coreError('LAYOUT_BLOCK_LIMIT', { limit: MAX_LAYOUT_BLOCKS });
+      }
       const placement = place({ x, y, z }, state);
       if (occupied.has(key(placement.pos))) {
         throw coreError('FORCED_COORDINATE_CONFLICT', { position: key(placement.pos) });
@@ -401,7 +409,7 @@ export function buildForcedLayout(inputs: ForcedInput[], opts: ForcedOptions): L
           x: rootX,
         });
       }
-      totalTicks = Math.max(totalTicks, group.tick);
+      totalTicks = Math.max(totalTicks, group.rt * 2 + startupDelayTicks);
 
       if (!compact && group.notes.length > perSide * 2) {
         warnings.push({

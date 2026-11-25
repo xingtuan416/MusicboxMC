@@ -125,15 +125,6 @@ export type LayoutWarning =
       low?: number;
       high?: number;
     }
-  /** `x` and `z` are the cell the note block was placed at, so the view can point at it. */
-  | {
-      code: 'TIMING_ADJUSTED';
-      tick: number;
-      actual: number;
-      trackIndex: number;
-      x: number;
-      z: number;
-    }
   /** A dense group did not fit and was re-emitted on a new track. */
   | { code: 'TRACK_SPLIT'; tick: number; notes: number }
   /**

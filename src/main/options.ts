@@ -37,7 +37,7 @@ export function sanitizeGenerateOptions(raw: unknown): GenerateOptions {
       ...new Set(
         input.excludeTracks.filter((value): value is number => Number.isSafeInteger(value) && value >= 0),
       ),
-    ].slice(0, MAX_TRACK_KEYS);
+    ];
   }
   if (isRecord(input.transpose)) {
     const transpose: Record<number, number> = {};
@@ -52,7 +52,12 @@ export function sanitizeGenerateOptions(raw: unknown): GenerateOptions {
     }
     options.transpose = transpose;
   }
-  if (typeof input.baseTps === 'number' && Number.isFinite(input.baseTps) && input.baseTps > 0) {
+  if (
+    typeof input.baseTps === 'number' &&
+    Number.isSafeInteger(input.baseTps) &&
+    input.baseTps >= 1 &&
+    input.baseTps <= 100
+  ) {
     options.baseTps = input.baseTps;
   }
   if (Number.isSafeInteger(input.dMax) && (input.dMax as number) >= 1 && (input.dMax as number) <= 14) {

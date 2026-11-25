@@ -155,7 +155,8 @@ describe('command playback', () => {
       expect(commands[0]).toContain('players add #tick');
       const heard = scheduledNotes(entities, result.totalTicks).map((note) => note.tick);
       expect(heard).toEqual(ticks);
-      expect(commands.at(-1)).toContain('stopsound'); // Stop controller terminates with sound cleanup.
+      expect(commands.at(-1)).toContain('data remove storage');
+      expect(commands.some((command) => command.startsWith('stopsound'))).toBe(false);
       expect(
         commands.some(
           (command) =>
@@ -163,6 +164,19 @@ describe('command playback', () => {
             command.includes('frames[0] run scoreboard players set #playing'),
         ),
       ).toBe(true);
+    }
+  });
+
+  it('isolates separately generated players even when their scheduled notes match', () => {
+    const song = stackedSong([0, 2, 4]);
+    const first = buildCommandPlayback(song);
+    const second = buildCommandPlayback(song);
+    expect(first.info.objective).not.toBe(second.info.objective);
+    for (const entity of first.region.tileEntities ?? []) {
+      if (text(entity, 'id') !== 'minecraft:command_block') continue;
+      const command = text(entity, 'Command');
+      expect(command).not.toContain(second.info.objective);
+      expect(command).not.toMatch(/^stopsound/);
     }
   });
 

@@ -59,7 +59,12 @@ export function registerDev(options) {
 export function wrapApi(source) {
   const wrapped = {};
   for (const [name, value] of Object.entries(source)) {
-    if (typeof value !== 'function' || name === 'onLog' || name === 'pathForFile') {
+    if (
+      typeof value !== 'function' ||
+      name === 'onLog' ||
+      name === 'onGenerationProgress' ||
+      name === 'pathForFile'
+    ) {
       wrapped[name] = value;
       continue;
     }

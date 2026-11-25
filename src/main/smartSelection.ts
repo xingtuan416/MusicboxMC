@@ -1,5 +1,4 @@
 import { chooseLeadTrack, rankProminence, type LeadBasis } from '../core/arrangement/prominence';
-import { coveredRange, DEFAULT_REGIONS } from '../core/palette/pitchMap';
 import { INSTRUMENTS } from '../core/palette/instruments';
 import type { InstrumentMode, TrackAssignment } from '../core/palette/assignment';
 import type { TrackSummary } from './types';
@@ -71,13 +70,8 @@ export function decideMerge(
   return [off, ...candidates].sort((a, b) => a.radiusZ - b.radiusZ)[0]!;
 }
 
-export interface SmartMode {
-  mode: InstrumentMode;
-  resourcePackRecommended: boolean;
-}
-
 /**
- * Pick the smart instrument mode and whether the companion pack is useful.
+ * Pick the smart instrument mode from the written pitch span.
  *
  * Extended harp range is effectively "install the companion pack": it puts the piano on
  * the five instrument slots (bass/guitar/harp/flute/bell), and without the pack those five
@@ -88,18 +82,13 @@ export interface SmartMode {
  * have to give up its native bass/guitar/flute/bell tracks for substitutes, and a song that
  * needs no pack must not be steered into one.
  */
-export function smartModeFor(category: SongCategory, midi: { min: number; max: number } | null): SmartMode {
-  if (category !== 'pure-harp') return { mode: 'native', resourcePackRecommended: false };
+export function smartModeFor(
+  category: SongCategory,
+  midi: { min: number; max: number } | null,
+): InstrumentMode {
   const harp = INSTRUMENTS.harp.range;
-  const extended = coveredRange(DEFAULT_REGIONS);
-  if (!harp || !extended || !midi) return { mode: 'native', resourcePackRecommended: false };
-  const outsideHarp = midi.min < harp[0] || midi.max > harp[1];
-  const insideExtended = midi.min >= extended[0] && midi.max <= extended[1];
-  return {
-    mode: outsideHarp ? 'extended' : 'native',
-    // Beyond F#1-F#7 there is nothing the pack could unify; the out-of-range policy speaks.
-    resourcePackRecommended: outsideHarp && insideExtended,
-  };
+  if (category !== 'pure-harp' || !harp || !midi) return 'native';
+  return midi.min < harp[0] || midi.max > harp[1] ? 'extended' : 'native';
 }
 
 export interface LanePlan {

@@ -212,7 +212,7 @@
         pointer-events: none;
       }
 
-      /* Minimal seven-step progress indicator. */
+      /* Step progress and navigation. */
       .titlebar-center {
         display: flex;
         align-items: center;
@@ -230,8 +230,12 @@
         transition: all 0.3s var(--ease-out);
       }
 
-      .step-node:hover {
+      .step-node:not(:disabled):hover {
         background: rgba(20, 20, 19, 0.32);
+      }
+
+      .step-node:disabled {
+        cursor: default;
       }
 
       .step-node.done {
@@ -1489,8 +1493,10 @@
       .status-toast {
         position: fixed;
         top: 64px;
-        left: 50%;
-        transform: translateX(-50%) translateY(-12px);
+        right: 24px;
+        max-width: min(440px, calc(100% - 48px));
+        overflow-wrap: anywhere;
+        transform: translateY(-12px);
         z-index: 120;
         padding: 10px 20px;
         border-radius: 999px;
@@ -1505,7 +1511,7 @@
 
       .status-toast.visible {
         opacity: 1;
-        transform: translateX(-50%) translateY(0);
+        transform: translateY(0);
       }
 
       @media (max-width: 640px) {
@@ -2042,7 +2048,7 @@
     </div>
 
     <!-- Toast. -->
-    <div id="statusToast" class="status-toast"></div>
+    <div id="statusToast" class="status-toast" role="status"></div>
 
     <!-- Frameless application shell. -->
     <div class="electron-window">
@@ -2569,8 +2575,8 @@
                     <div class="switch-copy">
                       <div class="switch-title">稀疏音轨借道</div>
                       <div class="switch-desc">
-                        音符很少的音轨不再单开一条轨道，而是并到相邻轨道：轨道更少、方块更少，代价是它们共用一条主线的电路。听距（最远的音符离你几格）已经小于
-                        30
+                        音符很少的音轨不再单开一条轨道，而是并到相邻轨道：轨道更少、方块更少，代价是它们共用一条主线的电路。音符离主轨行的最大
+                        Z 向距离已经小于 30
                         格时不再尝试；同乐器合并之后也会在合并出的轨道上再试一次。合并可能把和弦行铺深，所以会实测：听距不降反升就不采用。
                       </div>
                     </div>
@@ -2710,6 +2716,7 @@
                     </label>
                     <input
                       id="baseTpsInput"
+                      aria-describedby="baseTpsHint"
                       class="input-clean"
                       type="number"
                       min="1"
@@ -2717,6 +2724,7 @@
                       step="1"
                       value="20"
                     />
+                    <span id="baseTpsHint" class="stat-k">游戏需使用相同的 TPS 才能保持原曲速度。</span>
                   </div>
                 </div>
               </div>
@@ -2802,7 +2810,7 @@
             <div class="step-head">
               <span class="step-index tnum">STEP 05 / 08</span>
               <h2 class="step-h1">选择导出位置</h2>
-              <p class="step-sub">生成的 .litematic 会保存到你选择的位置。文件名默认取自曲名，可以改。</p>
+              <p class="step-sub">在系统保存窗口里选择文件夹和投影文件名。</p>
             </div>
 
             <div class="grid-3">
@@ -2813,28 +2821,19 @@
                 style="grid-column: span 3; text-align: left"
               >
                 <div style="font-size: 15px; font-weight: 700">选择保存位置…</div>
-                <div id="outputDirText" style="font-size: 12px; color: var(--ink-secondary); margin-top: 4px">
-                  尚未选择，生成时会弹出系统保存对话框
+                <div
+                  id="outputPathText"
+                  class="tnum"
+                  style="
+                    font-size: 12px;
+                    color: var(--ink-secondary);
+                    margin-top: 4px;
+                    overflow-wrap: anywhere;
+                  "
+                >
+                  尚未选择投影文件
                 </div>
               </button>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 8px">
-              <label
-                for="fileNameInput"
-                style="font-size: 13px; font-weight: 700; color: var(--ink-secondary)"
-                >输出文件名</label
-              >
-              <input
-                id="fileNameInput"
-                class="input-clean"
-                type="text"
-                value=""
-                placeholder="读取曲目后自动填入"
-              />
-              <div id="fullPathText" class="tnum" style="font-size: 13px; color: var(--ink-secondary)">
-                完整路径：尚未选择
-              </div>
             </div>
 
             <!--
@@ -2874,7 +2873,7 @@
 
             <div class="action-bar">
               <button type="button" class="btn-glass" data-goto="4">上一步</button>
-              <button type="button" id="btnStartGen" class="btn-obsidian">开始生成投影</button>
+              <button type="button" id="btnStartGen" class="btn-obsidian">检查投影</button>
             </div>
           </div>
         </section>
@@ -2997,22 +2996,16 @@
             <div class="step-head">
               <span class="step-index tnum">STEP 07 / 08</span>
               <h2 id="genTitle" class="step-h1">正在生成投影</h2>
-              <p class="step-sub">正在排布红石电路并写入文件…</p>
+              <p class="step-sub" id="genStage" role="status">正在读取 MIDI…</p>
             </div>
 
-            <!--
-            Progress view: generation completes in one pass in the main process and reports
-            no stages, so no percentage is shown. The large number is real elapsed time and
-            the bar is indeterminate.
-          -->
             <div id="genRunningBox" class="progress-wrap">
               <div id="genElapsed" class="progress-huge tnum">0.0s</div>
               <div class="progress-bar-track indeterminate">
                 <div class="progress-bar-fill"></div>
               </div>
-              <p style="font-size: 13px; color: var(--ink-secondary); margin: 0">
-                曲目越长需要的时间越久，大编制曲子可能要十几秒。
-              </p>
+              <p style="font-size: 13px; color: var(--ink-secondary); margin: 0">写入文件前可以取消。</p>
+              <button type="button" id="btnCancelGeneration" class="btn-glass">取消生成</button>
             </div>
 
             <!-- Failure or interruption. -->
@@ -3021,7 +3014,7 @@
                 生成已中止
               </div>
               <div id="genErrDetail" style="font-size: 14px; color: var(--ink-secondary)">
-                任务在写入体素矩阵前已取消，未生成本地文件。
+                生成过程中发生错误。
               </div>
               <div style="display: flex; gap: 12px">
                 <button type="button" class="btn-glass" data-goto="4">返回修改配置</button>
@@ -3078,17 +3071,22 @@
                 >
               </div>
               <div class="stat-card">
-                <span class="stat-k tnum">03 · 一键演奏</span>
+                <span class="stat-k tnum">03 · 启动播放</span>
                 <span
                   id="doneTriggerHint"
                   style="font-size: 13.5px; color: var(--ink-primary); font-weight: 600; margin-top: 4px"
-                  >在主线起点接上红石线，再接一个按钮来驱动</span
-                >
+                ></span>
+                <details id="doneInputs" hidden>
+                  <summary>查看供电点的相对坐标</summary>
+                  <p id="doneInputList" style="overflow-wrap: anywhere"></p>
+                </details>
+                <span id="doneTpsHint" class="stat-k" hidden></span>
               </div>
             </div>
 
-            <div class="action-bar">
+            <div class="action-bar" style="flex-wrap: wrap">
               <button type="button" id="btnPreview" class="btn-glass">查看红石布线</button>
+              <button type="button" id="btnGetResourcePack" class="btn-glass">获取资源包</button>
               <button type="button" id="btnNextSong" class="btn-glass">转换下一首</button>
               <button type="button" id="btnOpenFolder" class="btn-obsidian">打开所在文件夹</button>
             </div>

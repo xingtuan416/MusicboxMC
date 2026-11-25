@@ -105,7 +105,7 @@ export const nbt = {
   longArray: (value: bigint[]): NbtLongArray => ({ type: TagType.LongArray, value }),
   list: (elementType: TagType, value: NbtTag[]): NbtList => ({
     type: TagType.List,
-    elementType: value.length > 0 ? value[0]!.type : elementType,
+    elementType,
     value,
   }),
   compound: (entries: Record<string, NbtTag> | Map<string, NbtTag> = {}): NbtCompound => ({

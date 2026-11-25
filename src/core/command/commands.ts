@@ -1,6 +1,5 @@
-import { createHash } from 'node:crypto';
-import { INSTRUMENTS, INSTRUMENT_ORDER, type NoteBlockInstrument } from '../palette/instruments';
-import type { ScheduledEvent, Voice } from './schedule';
+import { randomBytes } from 'node:crypto';
+import type { Voice } from './schedule';
 
 /**
  * Command text for the playback chain.
@@ -22,18 +21,9 @@ const EMPTY_FRAME_LIST_BYTES = 2;
  */
 const COMMAND_CHUNK_BUDGET_BYTES = 24000;
 
-/** Every note-block instrument, in the canonical order used for command voice slots. */
-export const NOTE_BLOCK_INSTRUMENTS: readonly NoteBlockInstrument[] = INSTRUMENT_ORDER;
-
-/**
- * Scoreboard namespace for a set of events.
- *
- * Two exports generated from the same input and options produce the same name and
- * therefore share their storage, so they must not be run at the same time.
- */
-export function scoreboardNamespace(events: ScheduledEvent[]): string {
-  const digest = createHash('sha256').update(JSON.stringify(events)).digest('hex');
-  return `mb${digest.slice(0, 12)}`;
+/** Each compiled player owns its own score and storage, including identical exports. */
+export function scoreboardNamespace(): string {
+  return 'mb' + randomBytes(6).toString('hex');
 }
 
 export function storageKey(objective: string): string {
@@ -108,14 +98,11 @@ export function buildBootstrap(objective: string, storage: string, frames: numbe
   ];
 }
 
-/** The Stop control: clear the flag, then silence the instruments actually used. */
-export function buildStopCommands(
-  objective: string,
-  instruments: readonly NoteBlockInstrument[] = NOTE_BLOCK_INSTRUMENTS,
-): string[] {
+/** Stop future notes and release this player's queued frames. */
+export function buildStopCommands(objective: string, storage: string): string[] {
   return [
-    `scoreboard players set #playing ${objective} 0`,
+    'scoreboard players set #playing ' + objective + ' 0',
     '',
-    ...instruments.map((instrument) => `stopsound @a record minecraft:${INSTRUMENTS[instrument].soundEvent}`),
+    'data remove storage ' + storage + ' frames',
   ];
 }

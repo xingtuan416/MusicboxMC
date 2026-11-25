@@ -49,12 +49,13 @@ export function readPreferences(file: string): Preferences {
   }
 }
 
-/** Write the file. A read-only profile must not take the window down; the app just forgets. */
-export function writePreferences(file: string, preferences: Preferences): void {
+/** Return whether the session preferences were also persisted. */
+export function writePreferences(file: string, preferences: Preferences): boolean {
   try {
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, `${JSON.stringify(preferences, null, 2)}\n`, 'utf8');
+    return true;
   } catch {
-    // Ignored on purpose - see the comment above.
+    return false;
   }
 }

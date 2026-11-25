@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { writeSchematic } from './outputPaths';
 import { basename } from 'node:path';
 import { parseMidi } from '../core/midi/parse';
 import type { SongModel } from '../core/midi/types';
@@ -17,9 +18,15 @@ import {
   type InstrumentMode,
   type TrackAssignment,
 } from '../core/palette/assignment';
-import { chooseOctaveOffset } from '../core/palette/instrumentPitch';
-import { coveredRange, DEFAULT_REGIONS, type RegionTable } from '../core/palette/pitchMap';
-import { buildLitematic, MC_1_20_4_DATA_VERSION, LITEMATIC_VERSION_1_20_4 } from '../core/litematic/build';
+import { assertNbtStringLength } from '../core/nbt/modifiedUtf8';
+import { chooseOctaveOffset, mapDrumNote, mapPitchToInstrument } from '../core/palette/instrumentPitch';
+import { coveredRange, DEFAULT_REGIONS, mapPitch, type RegionTable } from '../core/palette/pitchMap';
+import {
+  assertLitematicVolume,
+  buildLitematic,
+  MC_1_20_4_DATA_VERSION,
+  LITEMATIC_VERSION_1_20_4,
+} from '../core/litematic/build';
 import { speedTable } from '../core/tempo/speed';
 import { buildCommandPlayback } from '../core/command';
 import { secondsToTick } from '../core/tempo/tick';
@@ -43,6 +50,7 @@ import type {
   AnalyzeResult,
   GenerateOptions,
   GenerateResult,
+  GenerationStage,
   LaneAnnotationInfo,
   LaneRideInfo,
   LaneSharingInfo,
@@ -76,6 +84,44 @@ function pitchRangeFor(assignments: readonly TrackAssignment[]): { low: number; 
   if (!assignments.some((assignment) => assignment.voicing.kind === 'pitch')) return undefined;
   const [low, high] = coveredRange(PALETTE_REGIONS);
   return { low, high };
+}
+
+/** Inspect the notes the chosen voicing can actually retain. */
+function inspectVoicing(
+  song: SongModel,
+  byTrack: Readonly<Record<number, TrackAssignment>>,
+  excluded: ReadonlySet<number>,
+  options: GenerateOptions,
+): { silent: Set<number>; resourcePackRecommended: boolean } {
+  const silent = new Set(excluded);
+  let resourcePackRecommended = false;
+  const policy = options.outOfRange ?? 'warn';
+  for (const track of song.tracks) {
+    if (excluded.has(track.index)) continue;
+    const voicing = byTrack[track.index]?.voicing;
+    const transpose = options.transpose?.[track.index] ?? 0;
+    let audible = track.notes.length > 0;
+    if (voicing?.kind === 'drums') {
+      audible = track.notes.some((note) => mapDrumNote(note.midi, track.name) !== null);
+    } else if (voicing?.kind === 'pitch') {
+      audible = false;
+      for (const note of track.notes) {
+        const mapped = mapPitch(note.midi, PALETTE_REGIONS, policy, transpose);
+        if (mapped.dropped) continue;
+        audible = true;
+        if (mapped.instrument !== 'harp') resourcePackRecommended = true;
+        if (resourcePackRecommended) break;
+      }
+    } else if (voicing?.kind === 'instrument' && policy === 'drop') {
+      const instrument = voicing.instrument;
+      const { offset } = chooseOctaveOffset(track.notes, instrument, transpose);
+      audible = track.notes.some(
+        (note) => !mapPitchToInstrument(note.midi, instrument, policy, transpose, offset).dropped,
+      );
+    }
+    if (!audible) silent.add(track.index);
+  }
+  return { silent, resourcePackRecommended };
 }
 
 /** Assignment-level notices; the layout emits the same ones for the redstone backend. */
@@ -131,14 +177,24 @@ function summarizeAssignments(
   });
 }
 
-function generateCommands(
+export interface PreparedGeneration {
+  result: GenerateResult;
+  encode?: () => Buffer;
+}
+
+type Progress = (stage: GenerationStage) => void;
+
+function prepareCommands(
   song: SongModel,
   base: AnalyzeResult,
   options: GenerateOptions,
   start: number,
   assignments: readonly TrackAssignment[],
-  smartSelection?: SmartSelectionInfo,
-): { result: GenerateResult; buffer: Buffer | null } {
+  smartSelection: SmartSelectionInfo | undefined,
+  resourcePackRecommended: boolean,
+  routeOnly: boolean,
+  progress?: Progress,
+): PreparedGeneration {
   const presets = options.speedPresets ?? DEFAULT_PRESETS;
   const baseTps = options.baseTps ?? DEFAULT_LAYOUT_CONFIG.baseTps;
   try {
@@ -148,13 +204,23 @@ function generateCommands(
       assignments: voicingMap(assignments),
     });
     const region = compiled.region;
-    const buffer = buildLitematic([region], {
-      name: song.name || base.file,
-      author: options.author ?? 'MusicboxMC',
-      description: `MusicboxMC command playback / ${compiled.info.playedNotes} notes / ${compiled.totalTicks} game ticks`,
-      dataVersion: MC_1_20_4_DATA_VERSION,
-      version: LITEMATIC_VERSION_1_20_4,
-    });
+    assertLitematicVolume([region]);
+    if (routeOnly) {
+      return {
+        result: routingResult({ base, presets, baseTps, durationSec: song.durationSec }, smartSelection),
+      };
+    }
+    progress?.('preview');
+    const name = song.name || base.file;
+    assertNbtStringLength(name);
+    const encode = () =>
+      buildLitematic([region], {
+        name,
+        author: options.author ?? 'MusicboxMC',
+        description: `MusicboxMC command playback / ${compiled.info.playedNotes} notes / ${compiled.totalTicks} game ticks`,
+        dataVersion: MC_1_20_4_DATA_VERSION,
+        version: LITEMATIC_VERSION_1_20_4,
+      });
     // Commands are vertically packed; the preview shows their top-down footprint.
     const slice = {
       trackIndex: -1,
@@ -169,12 +235,13 @@ function generateCommands(
         })),
     };
     return {
-      buffer,
+      encode,
       result: {
         ...base,
         success: true,
-        bytes: buffer.length,
+        bytes: 0,
         playbackMode: 'command',
+        resourcePackRecommended,
         commandPlayback: compiled.info,
         outOfRangeNotes: compiled.warnings.filter((warning) => warning.code === 'OUT_OF_RANGE').length,
         pitchRange: pitchRangeFor(assignments),
@@ -192,8 +259,7 @@ function generateCommands(
         warnings: [...assignmentWarnings(assignments), ...compiled.warnings],
         // Command playback places no grouped cells, so there is nothing to point at.
         placed: [],
-        // Its own mapping is not counted here yet; see the review note in docs.
-        rangeShift: { notes: 0, maxSemitones: 0 },
+        rangeShift: compiled.rangeShift,
         trackInstruments: summarizeAssignments(song, assignments, options.transpose),
         ...(smartSelection ? { smartSelection } : {}),
         regions: [
@@ -217,7 +283,7 @@ function generateCommands(
       error: `命令播放生成失败：${describeCoreError(error)}`,
     });
     result.playbackMode = 'command';
-    return { result, buffer: null };
+    return { result };
   }
 }
 
@@ -383,33 +449,43 @@ function laneLegend(
   result: LayoutResult,
   tracks: AnalyzeResult['tracks'],
   leadTrackIndex: number | null,
+  silent: ReadonlySet<number>,
 ): { annotation: LaneAnnotation; info: LaneAnnotationInfo } | null {
   const velocity = new Map(tracks.map((track) => [track.index, track.meanVelocity]));
+  let topY = result.min.y;
+  let noteXSum = 0;
+  let noteCount = 0;
   const lanes = result.tracks
     .filter((track) => track.placements.length > 0)
     .map((track) => {
-      const zs = track.placements.map((placement) => placement.pos.z);
+      let zMin = Number.POSITIVE_INFINITY;
+      let zMax = Number.NEGATIVE_INFINITY;
+      for (const placement of track.placements) {
+        zMin = Math.min(zMin, placement.pos.z);
+        zMax = Math.max(zMax, placement.pos.z);
+        topY = Math.max(topY, placement.pos.y);
+        if (placement.block === 'minecraft:note_block') {
+          noteXSum += placement.pos.x;
+          noteCount++;
+        }
+      }
       return {
-        sourceTracks: track.sourceIndices.length > 0 ? [...track.sourceIndices] : [track.trackIndex],
+        sourceTracks: (track.sourceIndices.length > 0 ? track.sourceIndices : [track.trackIndex]).filter(
+          (index) => !silent.has(index),
+        ),
         zBase: track.zBase,
-        zMin: Math.min(...zs),
-        zMax: Math.max(...zs),
+        zMin,
+        zMax,
       };
     });
   if (lanes.length === 0) return null;
   const leadLane =
-    lanes.length > 1 && leadTrackIndex !== null
-      ? lanes.findIndex((lane) => lane.sourceTracks.includes(leadTrackIndex))
-      : -1;
+    leadTrackIndex !== null ? lanes.findIndex((lane) => lane.sourceTracks.includes(leadTrackIndex)) : -1;
   // A redstone song is walked, not stood still in: the player starts at the first note and
   // keeps moving east, so naming the first column put "stand here" thousands of blocks
   // away from most of the music. The mean note column is the honest answer, and it is
   // fine for it to be approximate - the player is walking anyway.
-  const noteXs = result.tracks.flatMap((track) =>
-    track.placements.filter((p) => p.block === 'minecraft:note_block').map((p) => p.pos.x),
-  );
-  const playerX =
-    noteXs.length === 0 ? result.min.x : Math.round(noteXs.reduce((sum, x) => sum + x, 0) / noteXs.length);
+  const playerX = noteCount === 0 ? result.min.x : Math.round(noteXSum / noteCount);
 
   const annotation = planLaneAnnotation({
     lanes,
@@ -420,13 +496,14 @@ function laneLegend(
     playerZ: result.playerZ,
     spreadZ: result.hearingRadius,
     // Stand the posts on the top of the circuit so nothing is buried under wire.
-    y: Math.max(...result.tracks.flatMap((track) => track.placements.map((p) => p.pos.y))),
+    y: topY,
     label: (sourceTracks) =>
       sourceTracks.length <= 3
         ? `轨 ${sourceTracks.map((index) => index + 1).join('+')}`
         : `共 ${sourceTracks.length} 轨`,
     strength: (sourceTracks) => {
-      const best = Math.max(...sourceTracks.map((index) => velocity.get(index) ?? 0));
+      let best = 0;
+      for (const index of sourceTracks) best = Math.max(best, velocity.get(index) ?? 0);
       return best > 0 ? `力度 ${Math.round(best * 100)}%` : null;
     },
   });
@@ -495,6 +572,14 @@ function failure(ctx: FailureContext): GenerateResult {
     regions: [],
     preview: EMPTY_PREVIEW,
   };
+}
+
+function routingResult(
+  context: Omit<FailureContext, 'error'>,
+  smartSelection: SmartSelectionInfo | undefined,
+): GenerateResult {
+  const { error: _error, ...result } = failure({ ...context, error: '' });
+  return { ...result, success: true, smartSelection };
 }
 
 interface PlanContext {
@@ -801,21 +886,22 @@ function planLayout(ctx: PlanContext): PlannedLayout {
   };
 }
 
-/**
- * Full pipeline: parse → layout → slice regions → litematic bytes.
- * Failures do not throw; they return success=false + error so the GUI can show them directly.
- */
-export function generate(
+/** Prepare diagnostics and a deferred encoder for one source and option snapshot. */
+export function prepareGeneration(
   path: string,
   rawOptions: GenerateOptions = {},
-): { result: GenerateResult; buffer: Buffer | null } {
+  routeOnly = false,
+  progress?: Progress,
+): PreparedGeneration {
   const options = sanitizeGenerateOptions(rawOptions);
   const start = Date.now();
   const presets = options.speedPresets ?? DEFAULT_PRESETS;
   const baseTps = options.baseTps ?? DEFAULT_LAYOUT_CONFIG.baseTps;
 
+  progress?.('read');
   const song = parseMidi(readFileSync(path));
-  const base = analyze(song, path);
+  const base = analyze(song, path, baseTps);
+  progress?.('layout');
   const excluded = new Set(options.excludeTracks ?? []);
   const activeTrackIndices = new Set(
     base.tracks
@@ -826,7 +912,7 @@ export function generate(
   const category: SongCategory = classifySong(nativeAssignments, activeTrackIndices);
   const smartEnabled = options.smartSelection === true;
   const smartMode = smartEnabled ? smartModeFor(category, midiBounds(base.tracks, activeTrackIndices)) : null;
-  const instrumentMode = smartMode?.mode ?? resolveMode(options);
+  const instrumentMode = smartMode ?? resolveMode(options);
   const assignments = assignTracks(song, instrumentMode);
   // Excluded tracks must disappear from every derived view, not just from the notes:
   // warnings, the assignment table and the piano span all follow this filtered list.
@@ -837,7 +923,8 @@ export function generate(
   // Every song has a lead track: the player stands on its line, and the lanes are laid out
   // by how loud each one is. A layout without a lead would leave the player standing at a
   // Z that belongs to no lane, so this is no longer conditional on smart routing.
-  const lanePlan = buildLaneOrder(base.tracks, excluded, options.leadTrackIndex);
+  const { silent, resourcePackRecommended } = inspectVoicing(song, byTrack, excluded, options);
+  const lanePlan = buildLaneOrder(base.tracks, silent, options.leadTrackIndex);
 
   if (options.commandPlayback) {
     const commandSmart: SmartSelectionInfo | undefined = smartEnabled
@@ -848,13 +935,23 @@ export function generate(
           radiusZ: 0,
           compactRadius: SMART_RADIUS.compact,
           audibleRadius: SMART_RADIUS.audible,
-          resourcePackRecommended: false,
+          resourcePackRecommended,
           leadTrackIndex: lanePlan.leadTrackIndex,
           leadBasis: lanePlan.leadBasis,
           candidates: [],
         }
       : undefined;
-    return generateCommands(song, base, options, start, activeAssignments, commandSmart);
+    return prepareCommands(
+      song,
+      base,
+      options,
+      start,
+      activeAssignments,
+      commandSmart,
+      resourcePackRecommended,
+      routeOnly,
+      progress,
+    );
   }
 
   const included = song.tracks.filter((t) => t.notes.length > 0 && !excluded.has(t.index));
@@ -867,7 +964,6 @@ export function generate(
         presets,
         baseTps,
       }),
-      buffer: null,
     };
   }
 
@@ -884,7 +980,7 @@ export function generate(
       category,
       smartEnabled,
       instrumentMode,
-      resourcePackRecommended: smartMode?.resourcePackRecommended ?? false,
+      resourcePackRecommended,
     });
   } catch (e) {
     return {
@@ -895,17 +991,10 @@ export function generate(
         presets,
         baseTps,
       }),
-      buffer: null,
     };
   }
   const { result, smartSelection, laneSharing } = planned;
-  const ride = laneRideInfo(result);
-
-  const slices = sliceRegions(result);
-  const legend =
-    options.annotateLanes === false ? null : laneLegend(result, base.tracks, lanePlan.leadTrackIndex);
-  const decoration = legend ? annotationSlice(legend.annotation) : null;
-  if (decoration) slices.push(decoration);
+  const context = { base, durationSec: song.durationSec, presets, baseTps };
   if (!result.tracks.some((track) => track.placements.length > 0)) {
     const f = failure({
       base,
@@ -916,72 +1005,137 @@ export function generate(
     });
     f.warnings = result.warnings;
     f.outOfRangeNotes = result.warnings.filter((w) => w.code === 'OUT_OF_RANGE').length;
-    return { result: f, buffer: null };
+    return { result: f };
   }
-  let buffer: Buffer;
+  if (routeOnly) return { result: routingResult(context, smartSelection) };
+
   try {
-    buffer = buildLitematic(toRegionData(slices), {
-      name: song.name || basename(path),
-      author: options.author ?? 'MusicboxMC',
-      description: `MusicboxMC — ${result.tracks.length} 轨 / ${result.totalTicks} ticks`,
-      dataVersion: MC_1_20_4_DATA_VERSION,
-      version: LITEMATIC_VERSION_1_20_4,
+    progress?.('preview');
+    const ride = laneRideInfo(result);
+    const slices = sliceRegions(result);
+    const legend =
+      options.annotateLanes === false
+        ? null
+        : laneLegend(result, base.tracks, lanePlan.leadTrackIndex, silent);
+    const decoration = legend ? annotationSlice(legend.annotation) : null;
+    if (decoration) slices.push(decoration);
+    assertLitematicVolume(slices);
+    const name = song.name || basename(path);
+    assertNbtStringLength(name);
+    const startInputs = result.tracks.flatMap((track) => {
+      if (track.ride) return [];
+      const y = DEFAULT_LAYOUT_CONFIG.circuitY;
+      let x = Number.POSITIVE_INFINITY;
+      for (const placement of track.placements) {
+        if (placement.pos.y !== y || placement.pos.z !== track.zBase) continue;
+        if (placement.block === 'minecraft:redstone_wire' || placement.block === 'minecraft:repeater') {
+          x = Math.min(x, placement.pos.x);
+        }
+      }
+      return Number.isFinite(x) ? [{ x: x - 1, y, z: track.zBase }] : [];
     });
-  } catch (e) {
-    const f = failure({
-      base,
-      durationSec: song.durationSec,
-      error: `litematic 写入失败：${describeCoreError(e)}`,
-      presets,
-      baseTps,
-    });
-    f.warnings = result.warnings;
-    return { result: f, buffer: null };
-  }
+    const encode = () =>
+      buildLitematic(toRegionData(slices), {
+        name,
+        author: options.author ?? 'MusicboxMC',
+        description: `MusicboxMC — ${result.tracks.length} 轨 / ${result.totalTicks} ticks`,
+        dataVersion: MC_1_20_4_DATA_VERSION,
+        version: LITEMATIC_VERSION_1_20_4,
+      });
 
-  const outOfRangeNotes = result.warnings.filter((w) => w.code === 'OUT_OF_RANGE').length;
-  const noteBlockCount = result.tracks.reduce(
-    (s, t) => s + t.placements.filter((p) => p.block === 'minecraft:note_block').length,
-    0,
-  );
+    const outOfRangeNotes = result.warnings.filter((w) => w.code === 'OUT_OF_RANGE').length;
+    const noteBlockCount = result.tracks.reduce(
+      (s, t) => s + t.placements.filter((p) => p.block === 'minecraft:note_block').length,
+      0,
+    );
 
-  return {
-    result: {
-      ...base,
-      success: true,
-      playbackMode: 'redstone',
-      bytes: buffer.length,
-      outOfRangeNotes,
-      pitchRange: pitchRangeFor(activeAssignments),
-      stats: {
-        tickCount: result.totalTicks,
-        noteBlockCount,
-        circuitBlocks: result.tracks.reduce((s, t) => s + t.placements.length, 0),
-        regionCount: slices.length,
-        elapsedMs: Date.now() - start,
-        outputTrackCount: result.tracks.length,
-        startupDelayTicks: result.startupDelayTicks ?? 0,
+    return {
+      result: {
+        ...base,
+        success: true,
+        playbackMode: 'redstone',
+        resourcePackRecommended,
+        startInputs,
+        mergedAllTracks:
+          result.tracks.length === 1 &&
+          song.tracks.some((track) => !silent.has(track.index) && track.index !== lanePlan.leadTrackIndex),
+        bytes: 0,
+        outOfRangeNotes,
+        pitchRange: pitchRangeFor(activeAssignments),
+        stats: {
+          tickCount: result.totalTicks,
+          noteBlockCount,
+          circuitBlocks: result.tracks.reduce((s, t) => s + t.placements.length, 0),
+          regionCount: slices.length,
+          elapsedMs: Date.now() - start,
+          outputTrackCount: result.tracks.length,
+          startupDelayTicks: result.startupDelayTicks ?? 0,
+        },
+        speedTable: speedTable(song.durationSec, presets, baseTps),
+        warnings: result.warnings,
+        placed: result.placed,
+        rangeShift: result.rangeShift,
+        trackInstruments: result.trackInstruments,
+        ...(smartSelection ? { smartSelection } : {}),
+        ...(laneSharing ? { laneSharing } : {}),
+        ...(legend ? { laneAnnotation: legend.info } : {}),
+        ...(ride ? { laneRide: ride } : {}),
+        regions: slices.map((s, i) => ({
+          name: `region_${i}`,
+          trackIndex: s.trackIndex,
+          position: s.position,
+          size: s.size,
+          blockCount: s.blocks.length,
+        })),
+        preview: buildPreview(slices),
+        previewLanes: result.tracks.flatMap((track) => {
+          const first = track.taps[0]?.notes[0];
+          return first ? [{ trackIndex: track.trackIndex, x: first.notePos.x, z: track.zBase }] : [];
+        }),
       },
-      speedTable: speedTable(song.durationSec, presets, baseTps),
-      warnings: result.warnings,
-      placed: result.placed,
-      rangeShift: result.rangeShift,
-      trackInstruments: result.trackInstruments,
-      ...(smartSelection ? { smartSelection } : {}),
-      ...(laneSharing ? { laneSharing } : {}),
-      ...(legend ? { laneAnnotation: legend.info } : {}),
-      ...(ride ? { laneRide: ride } : {}),
-      regions: slices.map((s, i) => ({
-        name: `region_${i}`,
-        trackIndex: s.trackIndex,
-        position: s.position,
-        size: s.size,
-        blockCount: s.blocks.length,
-      })),
-      preview: buildPreview(slices),
-    },
-    buffer,
-  };
+      encode,
+    };
+  } catch (error) {
+    const f = failure({ ...context, error: '准备投影失败：' + describeCoreError(error) });
+    f.warnings = result.warnings;
+    f.outOfRangeNotes = result.warnings.filter((warning) => warning.code === 'OUT_OF_RANGE').length;
+    return { result: f };
+  }
+}
+
+/** Serialize a prepared layout only when an export actually needs bytes. */
+export function encodeGeneration(
+  prepared: PreparedGeneration,
+  progress?: Progress,
+): { result: GenerateResult; buffer: Buffer | null } {
+  const { result, encode } = prepared;
+  if (!result.success || !encode) return { result, buffer: null };
+  progress?.('encode');
+  const start = Date.now();
+  try {
+    const buffer = encode();
+    return {
+      result: {
+        ...result,
+        bytes: buffer.length,
+        stats: { ...result.stats, elapsedMs: result.stats.elapsedMs + Date.now() - start },
+      },
+      buffer,
+    };
+  } catch (error) {
+    return {
+      result: { ...result, success: false, error: '编码投影失败：' + describeCoreError(error) },
+      buffer: null,
+    };
+  }
+}
+
+/** Full pipeline for direct callers. The desktop coalesces check and export in its worker. */
+export function generate(
+  path: string,
+  rawOptions: GenerateOptions = {},
+): { result: GenerateResult; buffer: Buffer | null } {
+  return encodeGeneration(prepareGeneration(path, rawOptions));
 }
 
 /**
@@ -1006,7 +1160,7 @@ export function measureLayout(path: string, rawOptions: GenerateOptions = {}): L
   const category = classifySong(nativeAssignments, activeTrackIndices);
   const smartEnabled = options.smartSelection === true;
   const smartMode = smartEnabled ? smartModeFor(category, midiBounds(base.tracks, activeTrackIndices)) : null;
-  const instrumentMode = smartMode?.mode ?? resolveMode(options);
+  const instrumentMode = smartMode ?? resolveMode(options);
   const assignments = assignTracks(song, instrumentMode);
   const byTrack: Record<number, TrackAssignment> = {};
   for (const assignment of assignments) {
@@ -1015,7 +1169,8 @@ export function measureLayout(path: string, rawOptions: GenerateOptions = {}): L
   // Same routing rules as generate(): the lead track exists for every song and the lanes
   // are ordered by loudness, whether or not smart routing is on.
   const centerLead = options.centerLead !== false;
-  const lanePlan = buildLaneOrder(base.tracks, excluded, options.leadTrackIndex);
+  const { silent, resourcePackRecommended } = inspectVoicing(song, byTrack, excluded, options);
+  const lanePlan = buildLaneOrder(base.tracks, silent, options.leadTrackIndex);
   const baseTps = options.baseTps ?? DEFAULT_LAYOUT_CONFIG.baseTps;
   // The very same planner the generator runs, so the readout cannot describe a file the
   // user would not get: smart decisions, merges and lane sharing all happen here.
@@ -1030,7 +1185,7 @@ export function measureLayout(path: string, rawOptions: GenerateOptions = {}): L
     category,
     smartEnabled,
     instrumentMode,
-    resourcePackRecommended: smartMode?.resourcePackRecommended ?? false,
+    resourcePackRecommended,
   });
   const result = planned.result;
   const slices = sliceRegions(result);
@@ -1065,11 +1220,10 @@ export function measureLayout(path: string, rawOptions: GenerateOptions = {}): L
  * Measure the smart routing without writing anything.
  *
  * The configuration step applies the recommendation before generating, so the values the
- * user sees are the ones the generator will use. This runs the same pipeline and keeps
- * only the routing summary; the litematic bytes are built and discarded.
+ * user sees are the ones the generator will use. Stop after choosing the route.
  */
 export function planSmartSelection(path: string, rawOptions: GenerateOptions = {}): SmartPlanResult {
-  const { result } = generate(path, { ...rawOptions, smartSelection: true });
+  const { result } = prepareGeneration(path, { ...rawOptions, smartSelection: true }, true);
   if (!result.success) return { info: null, error: result.error ?? '生成器没有给出原因。' };
   return { info: result.smartSelection ?? null };
 }
@@ -1079,9 +1233,10 @@ export function generateToFile(
   path: string,
   outputPath: string,
   options: GenerateOptions = {},
+  replace = false,
 ): GenerateResult {
   const { result, buffer } = generate(path, options);
   if (!result.success || buffer === null) return result;
-  writeFileSync(outputPath, buffer);
+  writeSchematic(outputPath, buffer, replace);
   return { ...result, outputPath };
 }

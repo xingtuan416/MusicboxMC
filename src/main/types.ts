@@ -13,17 +13,14 @@ import type { LeadBasis } from '../core/arrangement/prominence';
  * functions, nothing that would not survive structured cloning.
  */
 
-/** A directory the user chose in the main process, and the token that authorizes it. */
-export interface DirectoryGrant {
+/** A path the user accepted in the native save dialog, with its authorization token. */
+export interface OutputGrant {
   path: string;
   token: string;
+  preferencesPersisted?: boolean;
 }
 
-/** The renderer can name a file, but only inside a directory the main process granted. */
-export interface OutputTarget {
-  token: string;
-  fileName: string;
-}
+export type GenerationStage = 'read' | 'layout' | 'preview' | 'encode' | 'write';
 
 export type SmartCategory = 'pure-harp' | 'single-instrument' | 'multi-instrument';
 
@@ -275,15 +272,15 @@ export interface PreviewData {
   /** X/Z of the preview grid's top-left corner in whole-schematic coordinates */
   origin: { x: number; z: number };
   /** Redstone wire / repeaters */
-  wireCells: string[];
-  /** Same length as wireCells: repeater delay (1–4), '' for non-repeaters */
-  repeaterDelays: string[];
+  wireCells: Record<number, string>;
+  /** Repeater delay keyed by row-major cell index. */
+  repeaterDelays: Record<number, string>;
   /** Direction of repeater input, matching Minecraft facing blockstate. */
-  repeaterFacings: string[];
-  /** Note blocks */
-  noteCells: string[];
-  /** Floor (base blocks) */
-  baseCells: string[];
+  repeaterFacings: Record<number, string>;
+  /** Note blocks keyed by row-major cell index. */
+  noteCells: Record<number, string>;
+  /** Floor (base blocks) keyed by row-major cell index. */
+  baseCells: Record<number, string>;
   /** Deduplicated list of block ids that occur, used by the frontend for coloring */
   blocks: string[];
 }
@@ -297,6 +294,8 @@ export interface SongSummary {
   timeSignature: [number, number] | null;
   trackCount: number;
   noteCount: number;
+  /** Tick scale used for this summary and the track tick bounds. */
+  summaryTps: number;
   /** ±½ game tick: the command backend rounds once. */
   commandErrorMs: number;
   /** ±1.5 game ticks: the redstone backend rounds onto the game-tick grid, then again. */
@@ -305,6 +304,8 @@ export interface SongSummary {
 
 export interface AnalyzeResult {
   path: string;
+  /** File revision used by the desktop so track indices stay bound to the imported MIDI. */
+  sourceRevision?: string;
   file: string;
   song: SongSummary;
   tracks: TrackSummary[];
@@ -318,8 +319,10 @@ export interface GenerateResult extends AnalyzeResult {
   success: boolean;
   /** Human-readable reason when generation fails */
   error?: string;
-  /** Schematic path written to disk (only set by generateToFile) */
+  /** Schematic path set after the file has been published. */
   outputPath?: string;
+  /** The destination changed after the native dialog closed. */
+  chooseOutputAgain?: boolean;
   /** Schematic size in bytes */
   bytes: number;
   /** Backend actually used for this generation, not the current UI setting. */
@@ -368,7 +371,14 @@ export interface GenerateResult extends AnalyzeResult {
   laneAnnotation?: LaneAnnotationInfo;
   /** Lanes that borrow power from their neighbour, absent when none do. */
   laneRide?: LaneRideInfo;
-  /** Levers that start the whole song, absent when the layout needs none. */
+  /** External power points for the independent redstone heads, relative to the schematic. */
+  startInputs?: Array<{ x: number; y: number; z: number }>;
+  /** True when surviving notes use a non-harp slot of the extended piano palette. */
+  resourcePackRecommended?: boolean;
+  /** Multiple source tracks in one redstone lane. */
+  mergedAllTracks?: boolean;
   regions: RegionSummary[];
   preview: PreviewData;
+  /** Layout-space start and center row of each redstone lane. */
+  previewLanes?: Array<{ trackIndex: number; x: number; z: number }>;
 }

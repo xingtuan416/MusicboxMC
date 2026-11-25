@@ -46,12 +46,15 @@ const CORE_ERROR_TEXT: Record<CoreErrorCode, (details: CoreErrorDetails) => stri
     `强制合并校验：音符盒 (${value(d, 'position')}) 实际 ${value(d, 'actual')} 游戏刻，` +
     `期望 ${value(d, 'expected')}`,
 
+  MIDI_UNSUPPORTED_FORMAT: () => '只支持 MIDI 格式 0 和 1。请将独立片段分别另存为 MIDI，再逐一导入。',
   MIDI_UNSUPPORTED_TIMEBASE: () =>
     '这个 MIDI 用的是 SMPTE 时间制（按帧计时），暂不支持。请先用其它工具转成按拍计时（PPQ）的 MIDI 再导入。',
   MIDI_INVALID_TIMING: (d) =>
     `第 ${value(d, 'track')} 条音轨里有音符的时间或时长无效（NaN、无穷大，或时间为负），文件可能已损坏。`,
   LAYOUT_SUPPORT_IS_AIR: () => '红石线与中继器的支撑方块不能是空气：它们下方必须有方块才能存在。',
   LAYOUT_INVALID_CONFIG: (d) => `排布配置无效：${value(d, 'field')} 必须是正数。`,
+  LAYOUT_BLOCK_LIMIT: (d) =>
+    `电路超过 ${value(d, 'limit')} 个方块的生成上限，请降低基准 TPS、减少音轨或分段导出。`,
   LAYOUT_INVALID_TICK: (d) =>
     `第 ${value(d, 'track')} 条音轨有音符落在无效的游戏刻（${value(d, 'tick')}），无法排布。`,
 
@@ -63,9 +66,13 @@ const CORE_ERROR_TEXT: Record<CoreErrorCode, (details: CoreErrorDetails) => stri
   NBT_STRING_TOO_LONG: (d) => `NBT 字符串过长：${value(d, 'bytes')} bytes`,
   NBT_READ_OUT_OF_BOUNDS: (d) =>
     `NBT 越界读取: pos=${value(d, 'position')} need=${value(d, 'need')} len=${value(d, 'length')}`,
+  NBT_INVALID_LENGTH: (d) => 'NBT 集合长度无效（位置 ' + value(d, 'position') + '）。',
+  NBT_LIST_TYPE_MISMATCH: () => 'NBT 列表元素类型与声明不一致。',
   NBT_UNREADABLE_END_TAG: () => '无法读取 End 标签的负载',
   NBT_UNKNOWN_TAG_TYPE: (d) => `未知标签类型 ${value(d, 'type')}`,
 
+  LITEMATIC_VOLUME_LIMIT: (d) => '投影超过 ' + value(d, 'limit') + ' 格的存储上限，请分段导出。',
+  LITEMATIC_BLOCK_STATE_LENGTH: () => '投影的方块数据长度与区域尺寸不符。',
   LITEMATIC_ENTITY_OUT_OF_BOUNDS: () => '方块实体坐标越界',
   LITEMATIC_ENTITY_WITHOUT_BLOCK: () => '方块实体缺少对应方块',
   LITEMATIC_DUPLICATE_ENTITY: () => '方块实体坐标重复',

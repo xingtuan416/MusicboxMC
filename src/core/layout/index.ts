@@ -4,10 +4,10 @@ import {
   GAME_TICKS_PER_REDSTONE_TICK,
   gameTickToRedstone,
   chordSideRows,
-  groupByTick,
+  groupFootprint,
   naturalSamples,
   ALIGN_TOLERANCE_CELLS,
-  MAX_REPEATER_DELAY,
+  MAX_LAYOUT_BLOCKS,
   type TrackNote,
   type XPlan,
 } from './track';
@@ -435,13 +435,23 @@ function chooseRide(
   tracks: readonly TrackSkeleton[],
   zBase: number,
   notes: readonly NoteToPlace[],
+  maxChordNotes: number,
   plan: XPlan,
   base: number,
   cells: LaneCells,
 ): RidePlan | null {
   let firstRt = Number.POSITIVE_INFINITY;
-  for (const note of notes) firstRt = Math.min(firstRt, gameTickToRedstone(note.source.tick));
+  let firstNotes = 0;
+  for (const note of notes) {
+    const rt = gameTickToRedstone(note.source.tick);
+    if (rt < firstRt) {
+      firstRt = rt;
+      firstNotes = 0;
+    }
+    if (rt === firstRt) firstNotes++;
+  }
   if (!Number.isFinite(firstRt)) return null;
+  firstNotes = Math.min(firstNotes, maxChordNotes);
   const atRt = firstRt + base;
   const target = plan.targetX(atRt);
   if (target < MIN_RIDE_HEAD) return null;
@@ -474,8 +484,8 @@ function chooseRide(
         }
       }
       if (!clear) continue;
-      const chain = Math.ceil((atRt - prevRt) / MAX_REPEATER_DELAY);
-      if (cell.x + chain + 2 > target) continue;
+      const footprint = groupFootprint(atRt - prevRt, firstNotes, false);
+      if (cell.x + 1 + footprint.noteOffset > target) continue;
       // Latest cell wins; at equal x the shorter corridor wins because it is fewer blocks.
       if (!best || cell.x > best.x || (cell.x === best.x && corridor.length < best.corridor.length)) {
         best = { x: cell.x, hostZ: host.zBase, prevRt, hostTrackIndex: host.trackIndex, corridor, facing };
@@ -492,6 +502,7 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   if (!Number.isFinite(config.baseTps) || config.baseTps <= 0) {
     throw coreError('LAYOUT_INVALID_CONFIG', { field: 'baseTps' });
   }
+  if (!Number.isFinite(config.dMax)) throw coreError('LAYOUT_INVALID_CONFIG', { field: 'dMax' });
   const regions = opts.regions ?? DEFAULT_REGIONS;
   const exclude = new Set(opts.excludeTracks ?? []);
   const resolve = layoutResolver(regions, opts.blocks ?? {});
@@ -645,9 +656,15 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   }
   const maxSideRows = Math.max(1, Math.min(14, Math.floor(config.dMax)));
   const maxChordNotes = chordCapacity(config.dMax);
+  const laneNotes = new Map(
+    trackInputs.map(({ index, sourceIndices }) => [
+      index,
+      sourceIndices.flatMap((source) => mappedNotes.get(source) ?? []),
+    ]),
+  );
   let minRt = Number.POSITIVE_INFINITY;
-  for (const { notes } of trackInputs) {
-    for (const n of notes) minRt = Math.min(minRt, gameTickToRedstone(n.tick));
+  for (const notes of laneNotes.values()) {
+    for (const note of notes) minRt = Math.min(minRt, gameTickToRedstone(note.source.tick));
   }
 
   // A repeater's minimum delay is 1, so a note at rt 0 cannot sound before one
@@ -659,13 +676,16 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   // Multi-track spatial alignment: X follows song time, advancing the shared reference
   // line from every track's reachable position after earlier padding.
   const samples: Array<{ atRt: number; x: number; trackId: number; padCapacity: number }> = [];
-  for (const { index, notes } of trackInputs) {
-    samples.push(
-      ...naturalSamples(notes, base, maxChordNotes).map((sample) => ({
-        ...sample,
-        trackId: index,
-      })),
-    );
+  let sampleLane = 0;
+  for (const notes of laneNotes.values()) {
+    for (const lane of naturalSamples(
+      notes.map((note) => note.source),
+      base,
+      maxChordNotes,
+    )) {
+      for (const sample of lane) samples.push({ ...sample, trackId: sampleLane });
+      sampleLane++;
+    }
   }
   const plan = buildXPlan(samples);
 
@@ -696,17 +716,18 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
   const tracks = [];
   const placed: LayoutResult['placed'] = [];
   let maxTick = 0;
+  let blockBudget = MAX_LAYOUT_BLOCKS;
   // The tap search needs the columns the lanes above already occupy, heads included.
   const laneCells: LaneCells = { used: new Set(), diodes: new Set() };
 
   for (const input of orderedInputs) {
-    const { index, notes } = input;
+    const { index } = input;
     // Groups past the column's chord capacity move to a new track (TRACK_SPLIT). Each
     // track has its own main line and column capacity, and they all start at the same
     // instant: the remaining notes are laid out again on the new track while their
     // trigger times stay unchanged.
     // Mapped once per source track above; a shared lane concatenates its members.
-    let pending = input.sourceIndices.flatMap((source) => mappedNotes.get(source) ?? []);
+    let pending = laneNotes.get(index)!;
     let laneSide: 'above' | 'below' | null = null;
     for (let lane = 0; pending.length > 0; lane++) {
       // The row count only depends on tick and pitch, which the source note still has.
@@ -760,10 +781,14 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
         regions,
         resolve,
         collectOverflow: true,
+        blockBudget,
         base,
         plan,
       };
-      const ride = opts.laneRide === true ? chooseRide(tracks, zBase, pending, plan, base, laneCells) : null;
+      const ride =
+        opts.laneRide === true
+          ? chooseRide(tracks, zBase, pending, maxChordNotes, plan, base, laneCells)
+          : null;
       const hostTrack = ride ? tracks.find((candidate) => candidate.zBase === ride.hostZ) : undefined;
       let built = buildTrack(ride ? { ...buildOptions, ride } : buildOptions);
       // A tap that cannot be padded back onto the reference line would place notes east of
@@ -787,8 +812,12 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
       rangeShiftTotal.notes += laneShift.notes;
       rangeShiftTotal.maxSemitones = Math.max(rangeShiftTotal.maxSemitones, laneShift.maxSemitones);
       tracks.push(track);
+      blockBudget -= track.placements.length;
       rememberLane(track, laneCells);
-      for (const p of pl) placed.push({ trackIndex: index, zBase, ...p });
+      for (const p of pl) {
+        placed.push({ trackIndex: index, zBase, ...p });
+        maxTick = Math.max(maxTick, p.actual);
+      }
 
       if (overflow.length === 0) break;
       pending = overflow.flatMap((o) => o.notes);
@@ -796,8 +825,6 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
         warnings.push({ code: 'TRACK_SPLIT', tick: o.tick, notes: o.notes.length });
       }
     }
-
-    for (const g of groupByTick(notes)) maxTick = Math.max(maxTick, g.tick);
   }
 
   // Bounding box over everything. Region origins are derived from it, so getting this
@@ -825,6 +852,7 @@ export function layout(song: SongModel, opts: LayoutOptions = {}): LayoutResult 
     hearingRadius: spot.hearingRadius,
     min,
     totalTicks: maxTick,
+    startupDelayTicks: base * GAME_TICKS_PER_REDSTONE_TICK,
     warnings,
     placed,
     rangeShift: rangeShiftTotal,

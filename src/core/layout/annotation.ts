@@ -124,7 +124,8 @@ export function planLaneAnnotation(opts: AnnotationOptions): LaneAnnotation | nu
   if (lanes.length === 0) return null;
 
   const singleLane = lanes.length === 1;
-  const lead = singleLane || leadInfo === null ? null : lanes.indexOf(leadInfo);
+  const merged = singleLane && lanes[0]!.sourceTracks.length > 1;
+  const lead = merged || leadInfo === null ? null : lanes.indexOf(leadInfo);
   const leadLane = lead === null || lead < 0 ? null : (lanes[lead] ?? null);
   const playerZ =
     opts.playerZ ??
@@ -140,21 +141,15 @@ export function planLaneAnnotation(opts: AnnotationOptions): LaneAnnotation | nu
   const signs: LaneSign[] = [];
 
   lanes.forEach((lane, index) => {
-    const role: LaneRole = singleLane
-      ? 'merged'
-      : index === lead
-        ? 'lead'
-        : lead === null
-          ? 'lane'
-          : 'secondary';
+    const role: LaneRole = merged ? 'merged' : index === lead ? 'lead' : lead === null ? 'lane' : 'secondary';
     const label = opts.label(lane.sourceTracks);
     const strength = opts.strength(lane.sourceTracks);
     const distance = Math.abs(lane.zBase - playerZ);
     const lines =
       role === 'merged'
-        ? ['全曲主线', label, '站这里', '主线行']
+        ? ['全曲主线', label, '沿主线走', '向东收听']
         : role === 'lead'
-          ? ['主音轨', label, strength ?? '', '站这里']
+          ? ['主音轨', label, strength ?? '', '沿线向东']
           : role === 'secondary'
             ? ['副轨', label, strength ?? '', `距主轨 ${distance}`]
             : ['音轨', label, strength ?? '', '未指定主轨'];

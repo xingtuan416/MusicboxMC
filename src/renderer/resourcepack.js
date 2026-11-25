@@ -34,11 +34,11 @@ async function savePack() {
 /**
  * The reminder, with the save action and a "don't ask again" checkbox inside it.
  *
- * @param {{ onMute?: () => void }} [options] called once when the dialog closes with the
+ * @param {{ onMute?: () => void, onSave: () => void }} [options] called once when the dialog closes with the
  *   checkbox ticked; the caller stores the choice, this module holds no state.
  */
 function showPackNudge(options = {}) {
-  const { onMute } = options;
+  const { onMute, onSave } = options;
   const backdrop = document.createElement('div');
   // `open` is what the stylesheet uses to display the backdrop; without it the nudge is
   // in the DOM and invisible.
@@ -98,7 +98,7 @@ function showPackNudge(options = {}) {
   later.addEventListener('click', close);
   save.addEventListener('click', () => {
     close();
-    void savePack();
+    onSave?.();
   });
   backdrop.addEventListener('click', (event) => {
     if (event.target === backdrop) close();

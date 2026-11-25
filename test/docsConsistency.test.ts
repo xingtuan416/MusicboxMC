@@ -70,7 +70,13 @@ describe('documentation stays in sync with the repository', () => {
   });
 
   it('never brings back the names of removed warnings and thresholds', () => {
-    const removed = ['SMART_Z', 'SMART_WIDTH_UNRESOLVED', 'SMART_CENTER_WIDENS', 'SMART_CENTER_UNREACHED'];
+    const removed = [
+      'SMART_Z',
+      'SMART_WIDTH_UNRESOLVED',
+      'SMART_CENTER_WIDENS',
+      'SMART_CENTER_UNREACHED',
+      'TIMING_ADJUSTED',
+    ];
     const hits: string[] = [];
     for (const doc of CURRENT_DOCS.filter((path) => existsSync(path))) {
       const text = read(doc);

@@ -135,8 +135,7 @@ describe('multi-track spatial alignment: X follows song time', () => {
       }
     }
 
-    // No timing warnings beyond the song-wide lead-in, and no spatial drift reported.
-    expect(res.warnings.filter((w) => w.code === 'TIMING_ADJUSTED').length).toBeLessThanOrEqual(1);
+    // No spatial drift was reported.
     expect(res.warnings.some((w) => w.code === 'SPATIAL_DRIFT')).toBe(false);
   });
 
