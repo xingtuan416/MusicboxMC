@@ -68,7 +68,7 @@ export interface CommandPlaybackOptions {
   commandChainBudget?: number;
 }
 
-/** Coordinates are relative to the schematic origin; identical exports share an objective. */
+/** Coordinates are relative to the schematic origin. Each compilation creates its own objective. */
 export interface CommandPlaybackInfo {
   objective: string;
   playedNotes: number;
@@ -80,7 +80,7 @@ export interface CommandPlaybackInfo {
   distinctVoices: number;
   /** Maximum per-voice simultaneous multiplicities; every original note is preserved. */
   reusableSlots: number;
-  /** Instruments that actually appear in the schedule, for Stop and for reporting. */
+  /** Instruments that actually appear in the schedule. */
   instruments: NoteBlockInstrument[];
   start: Vec3;
   stop: Vec3;

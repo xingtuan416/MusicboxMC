@@ -6,7 +6,7 @@ import {
   mapPitchToInstrument,
   type InstrumentPitch,
 } from '../palette/instrumentPitch';
-import { INSTRUMENTS, isDrumInstrument, type NoteBlockInstrument } from '../palette/instruments';
+import { INSTRUMENTS, type NoteBlockInstrument } from '../palette/instruments';
 import {
   mapPitch,
   DEFAULT_REGIONS,
@@ -37,7 +37,7 @@ export interface ScheduledEvent {
   tick: number;
   sound: string;
   pitch: string;
-  /** The note-block instrument, kept so Stop can silence exactly what was used. */
+  /** The note-block instrument, kept for reporting. */
   instrument: NoteBlockInstrument;
 }
 
@@ -70,8 +70,8 @@ export interface ScheduleOptions {
 /**
  * The pitch argument a `playsound` command needs.
  *
- * A note block sample is recorded at its own note 12, so that value maps to 1.0
- * and everything else is a power of two away from it.
+ * Java Edition tunes note blocks, including drums, by semitones relative to
+ * note 12, which plays the sound event at its base pitch.
  */
 export function playbackPitch(note: number): string {
   return Math.pow(2, (note - 12) / 12)
@@ -193,8 +193,7 @@ export function collectEvents(
       events.push({
         tick,
         sound: `minecraft:${INSTRUMENTS[mapped.instrument].soundEvent}`,
-        // Fixed-pitch drums ignore the note value, so they always play at 1.0.
-        pitch: isDrumInstrument(mapped.instrument) ? '1' : playbackPitch(mapped.note),
+        pitch: playbackPitch(mapped.note),
         instrument: mapped.instrument,
       });
     }

@@ -1,9 +1,9 @@
 /**
  * The sixteen classic note-block instruments.
  *
- * A pitched instrument spans 25 note values (0-24) starting at its own F# anchor.
- * basedrum, snare and hat are fixed-pitch percussion: their note value does not change
- * the sample, so they have no range and every note is written at 0.
+ * Melodic mappings use the 25 note values (0-24) starting at each instrument's F# anchor.
+ * MusicboxMC maps basedrum, snare and hat to note 0 without a MIDI pitch range.
+ * Java Edition also tunes those three sounds based on the note-block note value.
  *
  * Minecraft has no piano instrument. The harp sample (dirt and most other blocks) is
  * the closest thing, and it is what tutorials usually call "piano"; this project keeps
@@ -41,9 +41,9 @@ export type NoteBlockInstrument = (typeof INSTRUMENT_ORDER)[number];
 export interface InstrumentDef {
   /** Block directly under the note block, which selects the sample. */
   baseBlock: string;
-  /** MIDI pitch at note 0; null for fixed-pitch percussion. */
+  /** MIDI pitch at note 0; null for the drum mappings. */
   anchorMidi: number | null;
-  /** Inclusive MIDI range; null for fixed-pitch percussion. */
+  /** Inclusive MIDI range; null for the drum mappings. */
   range: readonly [number, number] | null;
   /** Java sound event used by the command backend. */
   soundEvent: string;
@@ -171,7 +171,7 @@ export const PITCHED_INSTRUMENTS: readonly NoteBlockInstrument[] = [
   'pling',
 ];
 
-/** Fixed-pitch percussion; their note value is ignored by the game. */
+/** Percussion instruments mapped to note 0. */
 export const DRUM_INSTRUMENTS: readonly NoteBlockInstrument[] = ['basedrum', 'snare', 'hat'];
 
 /**

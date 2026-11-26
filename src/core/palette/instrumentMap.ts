@@ -312,7 +312,7 @@ export function instrumentFromName(name: string): NoteBlockInstrument | null {
 }
 
 /**
- * General MIDI percussion notes that map cleanly onto the three fixed-pitch drums.
+ * General MIDI percussion notes that map to the three note-block drum sounds.
  *
  * 56 (cow bell) is deliberately absent: it is a pitched instrument, and a track that
  * actually plays it is normally titled "Cow Bell", which the name fallback catches.

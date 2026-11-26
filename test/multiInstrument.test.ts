@@ -15,7 +15,7 @@ import { generate } from '../src/main/generate';
  * The sixteen-track fixture end to end.
  *
  * This is the song that motivated the feature: one MIDI track per note-block
- * instrument, including the three fixed-pitch drums and a cow bell on channel 9.
+ * instrument, including the three GM drum mappings and a cow bell on channel 9.
  */
 
 const FIXTURE = 'test/fixtures/happy-birthday-16.mid';
@@ -198,7 +198,7 @@ describe('the generated litematic', () => {
 });
 
 describe('command playback', () => {
-  it('uses the real instrument sound events and a fixed pitch for drums', () => {
+  it('matches the exported redstone note-block pitch for all three drums', () => {
     const song = parseMidi(readFileSync(FIXTURE));
     const assignments = assignmentsFor('native');
     const { events } = collectEvents(song, {
@@ -208,9 +208,22 @@ describe('command playback', () => {
     });
     expect(events).toHaveLength(NOTE_COUNT);
 
-    const kick = events.find((event) => event.instrument === 'basedrum')!;
-    expect(kick.sound).toBe('minecraft:block.note_block.basedrum');
-    expect(kick.pitch).toBe('1');
+    const redstone = layout(song, { assignments: byTrack(assignments) });
+    const noteBlocks = redstone.tracks
+      .flatMap((track) => track.placements)
+      .filter((placement) => placement.block === 'minecraft:note_block');
+    for (const drum of ['basedrum', 'snare', 'hat']) {
+      const blocks = noteBlocks.filter((placement) => placement.props?.instrument === drum);
+      const drumEvents = events.filter((event) => event.instrument === drum);
+      expect(blocks.length, drum).toBeGreaterThan(0);
+      expect(drumEvents, drum).toHaveLength(blocks.length);
+      expect(new Set(blocks.map((placement) => placement.props?.note)), drum).toEqual(new Set(['0']));
+      expect(new Set(drumEvents.map((event) => event.sound)), drum).toEqual(
+        new Set([`minecraft:block.note_block.${drum}`]),
+      );
+      // Java 1.20.4 tunes a note block at note 0 to half the sample's base pitch.
+      expect(new Set(drumEvents.map((event) => event.pitch)), drum).toEqual(new Set(['0.5']));
+    }
     expect(events.some((event) => event.sound === 'minecraft:block.note_block.harp')).toBe(true);
     expect(events.some((event) => event.sound === 'minecraft:block.note_block.chime')).toBe(true);
   });
