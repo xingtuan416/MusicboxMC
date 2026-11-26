@@ -18,9 +18,9 @@ command chain has to walk all 46,293 steps on every single game tick.
 Instead, `core/command/index.ts` stores the schedule as data and reuses a
 bounded number of commands:
 
-- **Voice** — a distinct `(sound, pitch)` pair. At most sixteen note-block
-  instruments × 25 note values (the three drums carry one fixed pitch), so a few
-  dozen in practice.
+- **Voice** — a distinct `(sound, pitch)` pair. Java Edition's note-block formula
+  `2 ** ((note - 12) / 12)` converts the mapped note value into the `playsound` pitch.
+  MusicboxMC maps basedrum, snare and hat to note 0, which yields pitch 0.5.
 - **Frame** — one game tick on which anything happens, stored as
   `[tick, countForVoice0, countForVoice1, ...]`.
 - **Slot** — a command per `(voice, occurrence)`. A voice that can sound 5 times

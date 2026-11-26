@@ -128,15 +128,15 @@
 
 ## 十、乐器与音域
 
-| 量                   | 值                                                                                                    | 来源       | 位置                                                                                 |
-| -------------------- | ----------------------------------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------ |
-| 可用乐器             | 13 种带音高 + 3 种鼓（basedrum / snare / hat）                                                        | [游戏事实] | `src/core/palette/instruments.ts:20-37`、`158-175`                                   |
-| 每个乐器起点的音高   | bass / didgeridoo F#1、guitar F#2、harp 一族 F#3、flute 与 cow_bell F#4、bell / chime / xylophone F#5 | [游戏事实] | `src/core/palette/instruments.ts:1-11`（注释）、`src/core/palette/pitchMap.ts:50-56` |
-| 每个乐器的 MIDI 锚点 | bass 30、guitar 42、harp 54 … = 上面的起点按「MIDI 60 = C4」折算出的数字（详见本节说明）              | [仓库约定] | `src/core/palette/instruments.ts:44-45`、`58-155`                                    |
-| 每个乐器覆盖         | 锚点起 24 个半音，共 25 个音高值（note 0..24）                                                        | [游戏事实] | `src/core/palette/instruments.ts:4`、`src/core/palette/pitchMap.ts:47-48`、`:236`    |
-| 钢琴槽（extended）   | A=bass 30 / B=guitar 42 / C=harp 54 / D=flute 66 / E=bell 78 → F#1–F#7（MIDI 30–102）                 | [仓库约定] | `src/core/palette/pitchMap.ts:50-69`                                                 |
-| 单槽钢琴（piano）    | 只有 C 槽（harp），F#3–F#5（54–78），不需要资源包                                                     | [仓库约定] | `src/core/palette/pitchMap.ts:85-88`                                                 |
-| 通道号               | 通道 9（0 基；界面上的第 10 通道）是鼓                                                                | [游戏事实] | `src/core/midi/types.ts:11`、`src/core/midi/parse.ts:65`                             |
+| 量                   | 值                                                                                                    | 来源        | 位置                                                                                 |
+| -------------------- | ----------------------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------ |
+| 可用乐器             | 13 种旋律映射 + 3 种鼓映射（basedrum / snare / hat，项目写 `note=0`）                                 | [仓库约定]  | `src/core/palette/instruments.ts:20-37`、`158-175`                                   |
+| 每个乐器起点的音高   | bass / didgeridoo F#1、guitar F#2、harp 一族 F#3、flute 与 cow_bell F#4、bell / chime / xylophone F#5 | [游戏事实]  | `src/core/palette/instruments.ts:1-11`（注释）、`src/core/palette/pitchMap.ts:50-56` |
+| 每个乐器的 MIDI 锚点 | bass 30、guitar 42、harp 54 … = 上面的起点按「MIDI 60 = C4」折算出的数字（详见本节说明）              | [仓库约定]  | `src/core/palette/instruments.ts:44-45`、`58-155`                                    |
+| 每个乐器覆盖         | 锚点起 24 个半音，共 25 个音高值（note 0..24）                                                        | [游戏事实]  | `src/core/palette/instruments.ts:4`、`src/core/palette/pitchMap.ts:47-48`、`:236`    |
+| 钢琴槽（extended）   | A=bass 30 / B=guitar 42 / C=harp 54 / D=flute 66 / E=bell 78 → F#1–F#7（MIDI 30–102）                 | [仓库约定]  | `src/core/palette/pitchMap.ts:50-69`                                                 |
+| 单槽钢琴（piano）    | 只有 C 槽（harp），F#3–F#5（54–78），不需要资源包                                                     | [仓库约定]  | `src/core/palette/pitchMap.ts:85-88`                                                 |
+| 通道号               | GM 第 10 通道用于打击乐，项目用零基通道号 9                                                           | [MIDI 约定] | `src/core/midi/types.ts:11`、`src/core/midi/parse.ts:65`                             |
 
 音域核对（2026-11-18，来源见第十八节）：标准音域 F#3–F#5，两个八度共 25 个音高，到顶回绕；低音乐器低两个八度（F#1–F#3）、长笛高一个八度（F#4–F#6）、铃 / 风铃 / 木琴高两个八度（F#5–F#7）。
 
@@ -145,7 +145,7 @@
 1. **MIDI 编号约定**：行业习惯把 MIDI 60 记作 C4（也有把 60 记作 C3 的写法），按这个约定 F#1 才落在 30。换一种记法，五个锚点会整体平移 12，与游戏无关。
 2. **本项目的映射选择**：按**绝对八度**决定一个音落到哪个乐器槽，于是五个槽正好铺满 F#1–F#7（MIDI 30–102）；换成「每个乐器都从自己最舒服的八度重新开始」也能出声，但同一首曲子的音域会被压缩或错位。这个选择写在 `src/core/palette/pitchMap.ts:50-69` 的注释里，替代过更早的 dirt / grass_block / bedrock 方案。
 
-所以：**「每个乐器 25 个音高、起点是各乐器自己的 F#」是游戏事实；把起点折算成 MIDI 数字是本仓库的约定**。`Instruments` 表里的 `range` 字段只是 `锚点..锚点+24`（`src/core/palette/instruments.ts:46-47`）。
+所以：**Java 1.20.4 的这 16 种音符盒乐器都按 `note=0..24` 调音。旋律音色的 F# 起点折算成 MIDI 数字、三种鼓统一映射为 `note=0`，是本项目的约定**。`Instruments` 表里的 `range` 字段只是 `锚点..锚点+24`（`src/core/palette/instruments.ts:46-47`）。
 
 ## 十一、导出格式
 

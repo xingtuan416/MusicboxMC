@@ -130,9 +130,9 @@ anything long.
 
 ## Instruments, range, and what the resource pack is for
 
-A note block has two octaves on its own. Vanilla has **16 classic note-block
-instruments** — 13 pitched and 3 fixed-pitch drums — each starting at its own F#
-anchor. The full table, GM map and detection rules are in
+A note block spans two octaves. MusicboxMC supports **16 classic note-block
+instruments**, with 13 melodic mappings starting at their respective F# anchors
+and three drum mappings at note 0. The full table, GM map and detection rules are in
 [the multi-instrument design](multi-instrument.md).
 
 **Minecraft has no piano instrument.** Dirt and most other blocks play the **harp**
@@ -148,8 +148,9 @@ The interface has two modes:
 - **Native instruments**: every track follows its MIDI instrument across its own two
   octaves; a piano track uses harp, **F#3–F#5**.
 
-Detection order is GM program → drum channel → track name → harp, and the track step
-shows what each track was detected as.
+On the percussion channel, detection uses the drum note number and then the track
+name. Other channels use GM program → track name → harp. The track step displays
+the result for each track.
 
 A companion resource pack replaces the five extended-mode sound events with piano
 samples, so the whole range sounds like a single piano. **It is optional**, and the

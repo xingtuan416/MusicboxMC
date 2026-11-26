@@ -98,22 +98,23 @@ CI 在 Node 26 上跑 `npm run check`、`verify:litematic` 与 `resourcepack:che
 
 ## 硬性规则
 
-1. **MUST** 用 `src/core/nbt/modifiedUtf8.ts` 处理所有 NBT 字符串。Java 用 Modified UTF-8 读字符串，普通 UTF-8 会让含 emoji 的文件被拒绝加载，而**中文在两种编码下字节相同**，所以自家读写往返测不出来。
-2. **NEVER** 给轨道对齐的补齐段加中继器。红石粉零延迟、中继器有延迟；对齐依赖"用红石粉在空间上拉长而不动时间轴"，加中继器会让多轨越弹越散，且不报错。
-3. **CRITICAL** 渲染层无法越过自己的目录取文件。`app://` 处理器把任何离开 `src/renderer/` 的路径当作越界并拒绝，界面需要的资源必须由 `scripts/copy-assets.mjs` 拷进去。
-4. **NEVER** 把 URL 交给 `shell.openPath`，它只打开文件；外部链接走 `shell.openExternal`（否则点击毫无反应）。
-5. **MUST** 高频事件里不要直接 `renderPreview`。重绘整张电路在长曲子上远超一帧，要累积增量并用 `requestAnimationFrame` 节流，否则拖动会跟不上光标。
-6. **MUST** 走多乐器路径时把 `assignments` 传给 `layout()` / `buildCommandPlayback()`。不传就走旧的五槽钢琴模式，16 轨文件会全部变成竖琴且不报错。识别优先级固定为 **GM 音色 → 通道 9 鼓 → 轨道名 → 竖琴**；16 种乐器的锚点、底块和替代表见 `docs/multi-instrument.md`。`TrackModel.program` 一旦在 `parseMidi` 里丢掉，GM 优先就静默失效。
-7. **NEVER** 在同时发声的音符行之间留空行，或把和弦音符按两行间隔排。和弦行必须**相邻**：≤3 个音只给内联音符一个中继器，两侧靠音符盒单跳点亮；≥4 个音每行一个同延迟中继器。Minecraft 不会因为相邻音符盒同时被邻格点亮就响两次。强制合并的紧凑路径也用同一拓扑；只有超过紧凑路径容量（`min(2×dMax+1, 27)`，默认 27 音）的极端和弦才退回 staged 两行总线。注意普通布局的单列容量是 `2×dMax+1`（默认 29 音），超过它是拆轨而不是换拓扑。这条曾被改错成"每音隔一格"，既浪费空间又把相邻轨推出 48 格听距。
+1. **MUST** 用 `src/core/nbt/modifiedUtf8.ts` 处理所有 NBT 字符串。Java 用 Modified UTF-8 读字符串，U+0000 写成 `C0 80`，补充平面字符按两个 UTF-16 代理单元各写三字节。常用汉字通常无法区分这两种编码，格式测试要与 Java 的 `writeUTF` 对照。
+2. **NEVER** 给轨道对齐的补齐段加中继器。布局时序把直连红石粉补齐计为零额外游戏刻。插入中继器会改变预定触发刻，导致多轨静默错位。
+3. **CRITICAL** `app://` 处理器只接受解析后位于构建产物 `dist/src/renderer/` 下的路径。渲染页面通过此协议使用的资源必须由 `scripts/copy-assets.mjs` 拷入该目录。
+4. **NEVER** 把 URL 交给 `shell.openPath`。本地路径用 `shell.openPath`，外部链接用 `shell.openExternal`。
+5. **MUST** 高频事件累积视口变更，用 `requestAnimationFrame` 合并每帧的预览重绘。逐事件调用 `renderPreview` 会拖慢长曲子的交互。
+6. **MUST** 走多乐器路径时把 `assignments` 传给 `layout()` / `buildCommandPlayback()`。省略分配会静默回退到按音高选槽的五槽钢琴映射。**通道 9（零基）**按鼓音符表和轨名逐音映射。其他通道按 **GM 音色 → 轨道名 → 竖琴** 识别，必须保留 `TrackModel.program`。锚点、底块和替代表见 `docs/multi-instrument.md`。
+7. **NEVER** 在同时发声的音符行之间留空行，或把和弦音符按两行间隔排。和弦行必须**相邻**：≤3 个音只给内联音符一个中继器，两侧靠音符盒单跳点亮；≥4 个音每行一个同延迟中继器。Java 1.20.4 的音符盒在受电状态从关变开时触发，持续受电期间增加供电来源不会再触发。强制合并的紧凑路径也用同一拓扑；只有超过紧凑路径容量（`min(2×dMax+1, 27)`，默认 27 音）的极端和弦才退回 staged 两行总线。注意普通布局的单列容量是 `2×dMax+1`（默认 29 音），超过它是拆轨而不是换拓扑。这条曾被改错成"每音隔一格"，既浪费空间又把相邻轨推出 48 格听距。
 8. **MUST** 共享 X 参考线从每条轨**实际补齐后的位置**递推，不能只看各轨独立的自然 X。历史补齐会改变后续每组的起点；丢掉它会让曾经补齐的轨超前于参考线且不产生 `SPATIAL_DRIFT`，长多轨音乐的同时音符会重新拉开。
-9. **MUST** 区分文件里没有 `programChange` 与显式 GM 0。Tone 会给两者都填 0，识别前必须保留拆分后每条轨道的原始声明，否则轨名识别会被竖琴静默覆盖。
+9. **MUST** 区分文件里没有 `programChange` 与显式 GM 0。`@tonejs/midi` 的乐器对象对两者都可返回 0。本项目从原始事件保留各逻辑轨的 GM 音色号，未声明时留为 `undefined`，使轨名兜底可达。
 10. **MUST** X 参考线只采样映射后会摆放的音符，并按真实和弦容量分列。借道候选和布线必须同时使用真实取电位置与相同的引线格计算。
 11. **MUST** MIDI 音符在原始轨内按通道和音高配对，再按按下时的 GM program 归组。松开前换音色的音符仍属于按下时的组，同一源轨的每个逻辑轨都继承轨名。
-12. **MUST** 内置资源包只替换 `bass/guitar/harp/flute/bell` 五个声音事件。红石与命令的资源包提示按实际保留的钢琴外侧槽计算，导出前用 `npm run resourcepack:check` 校验。
-13. **MUST** 选轨、推荐、检查和导出使用导入时的同一 MIDI 版本。原路径的文件变化时提示重新导入，避免把旧的音轨下标套到新文件。
-14. **MUST** 命令播放器的新实例使用独立计分板和 storage。停止时只清理自身的时钟和待播帧，禁止输出会影响其它播放器的 `stopsound @a`。
+12. **MUST** 内置资源包只替换 `bass/guitar/harp/flute/bell` 五个声音事件。红石与命令的资源包提示按实际保留的钢琴外侧槽计算，修改或发布资源包前用 `npm run resourcepack:check` 校验。
+13. **MUST** 选轨、推荐、检查和导出使用导入时的同一 MIDI 版本。文件修订标识使用设备、inode、大小和纳秒级修改/状态时间。检测到变化时提示重新导入，避免把旧的音轨下标套到新文件。
+14. **MUST** 每次独立生成的命令播放器分配自己的计分板和 storage 标识。停止时只清理自身的时钟和待播帧，禁止输出会影响其它播放器的 `stopsound @a`。
 15. **MUST** 投影覆盖确认由原生「另存为」处理。只写对话框确认的完整路径。目标在写入前发生变化时，要求重新选择。
-16. **MUST** Windows 打包保留原始 Electron EXE。当前工具链重写 EXE 资源会在已复现的 Windows 11 26300 环境中导致沙箱渲染进程退出。发布前可用 `$env:MUSICBOXMC_SMOKE_EXE = 'release/win-unpacked/MusicboxMC.exe'; npm run smoke` 从成品复验。
+16. **MUST** Windows 打包保留原始 Electron EXE。Electron 45.3.2 / electron-builder 26.18.0 在 Windows 11 26300 上复现了重写 EXE 资源后沙箱渲染进程退出。保留 `signAndEditExecutable: false` 和 `disableAsarIntegrity: true` 的打包配置及渲染沙箱。发布前可用 `$env:MUSICBOXMC_SMOKE_EXE = 'release/win-unpacked/MusicboxMC.exe'; npm run smoke` 从成品复验。
+17. **MUST** 命令播放对所有映射音符使用 Java 1.20.4 的音符盒倍率 `2 ** ((note - 12) / 12)`。本项目将 `basedrum/snare/hat` 写为 `note=0`，相应的命令倍率必须是 `0.5`。
 
 ## 常见故障
 

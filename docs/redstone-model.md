@@ -19,10 +19,10 @@ redstone tick is two game ticks wide. It is also asymmetric — 1.026 s lands on
 1.1 s, an error of +74 ms. The command playback backend rounds once and stays
 within ±25 ms. The interface reports both bounds separately for that reason.
 
-**Redstone dust contributes no delay.** Only repeaters do. This is the single
-most important property of the model: it means a line can be padded with dust to
-make a track travel further in space without changing when anything fires. Every
-spatial-alignment correction in `core/layout/track.ts` relies on it.
+**The layout model assigns no extra game ticks to connected dust padding.**
+This lets a track travel further in space while preserving its scheduled ticks.
+Repeaters add their configured delay. Spatial alignment in `core/layout/track.ts`
+uses this timing model.
 
 ## Signal strength
 
@@ -74,8 +74,9 @@ every row in the column is powered at the same instant; each extra note then get
 its own row with its own repeater, set to the same delay as the main line's
 final repeater. All notes in the group therefore fire on the same redstone tick.
 
-**Rows are adjacent — never leave a blank row between simultaneous notes.** A note
-block that is also lit by its neighbour does not sound twice, so a gap buys nothing.
+**Keep simultaneous rows adjacent.** In Java 1.20.4 a note block triggers on a
+rising edge. An extra power source while the block remains powered leaves that
+state unchanged.
 The earlier forced layout put one empty row between every chord note; it doubled the
 height of a fan-out and pushed the next track beyond the 48-block hearing radius. The
 same adjacency rule applies to the forced single spine: up to three notes use the
@@ -140,8 +141,8 @@ plays the **harp** sample: it is the closest thing to a piano and is what tutori
 usually call "piano". The companion resource pack is what replaces five sound events
 with piano samples; the vanilla game has no piano.
 
-There are sixteen classic note-block instruments: thirteen pitched, each starting at
-its own F# anchor, and three fixed-pitch drums:
+The project maps thirteen of the sixteen classic note-block instruments to MIDI
+pitch ranges and three to drum sounds at note 0.
 
 | Instrument                           | Base block                       | Range   |
 | ------------------------------------ | -------------------------------- | ------- |
@@ -151,7 +152,7 @@ its own F# anchor, and three fixed-pitch drums:
 | flute / cow bell                     | clay / soul sand                 | F#4–F#6 |
 | bell / chime / xylophone             | gold / packed ice / bone block   | F#5–F#7 |
 | iron xylophone / bit / banjo / pling | iron / emerald / hay / glowstone | F#3–F#5 |
-| basedrum / snare / hat               | stone / sand / glass             | fixed   |
+| basedrum / snare / hat               | stone / sand / glass             | note 0  |
 
 The full table, the GM map and the detection rules are in
 [multi-instrument.md](multi-instrument.md).
@@ -191,8 +192,9 @@ is not recommended there.
 Pitches outside a track's instrument go through the out-of-range policy — `warn`,
 `octave`, `clamp` or `drop` — and are reported as `OUT_OF_RANGE`. Before that, the
 whole track is moved by one octave when that lets it fit, so a melody keeps its
-contour (`INSTRUMENT_OCTAVE_SHIFT`). Neither mode drops a note silently. Drums ignore
-the note value, so they are always written at note 0.
+contour (`INSTRUMENT_OCTAVE_SHIFT`). Both modes report dropped notes. MusicboxMC
+writes basedrum, snare and hat at `note=0`. In Java 1.20.4 that note plays at half the
+sound event's base pitch, the same multiplier the command export uses.
 
 ## The redstone simulator
 

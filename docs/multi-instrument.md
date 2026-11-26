@@ -1,13 +1,13 @@
-# 多乐器支持（设计稿，待评审）
+# 多乐器支持
 
-> 状态：已按本设计实现，待用户真机/界面测试后提交。设计记录保留，便于以后查锚点与规则。
-> 最后更新：2026-10-18
+> 设计记录保留在此，便于查锚点、映射和实现规则。
+> 最后更新：2026-11-27
 
 ## 1. 背景
 
-### 1.1 现在怎么工作
+### 1.1 多乐器支持前的钢琴映射
 
-现在生成器不读 MIDI 轨道自己的乐器，而是**按音高**把每个音分给 A–E 五个槽：
+最初的生成器按音高把每个音分给 A–E 五个槽。这个映射仍用于扩展音域中的钢琴轨，也用于省略 `assignments` 的底层调用。
 
 | 槽  | 底块     | 音色   | 锚点           |
 | --- | -------- | ------ | -------------- |
@@ -19,7 +19,7 @@
 
 这套设计是为**纯钢琴曲**服务的：一架钢琴的音域超过两个八度，所以用五个槽拼出 F#1–F#7，再靠配套资源包把这五段统一成钢琴采样。
 
-`TrackModel.instrument` 和 `percussion` 目前只在「同名乐器合并」时用作分组 key（`percussion` 也会显示在选轨页），不会进入音符盒的 `instrument` 属性。
+当前多乐器流程由每条轨的 `assignments` 驱动，具体模式见第 2 节。
 
 ### 1.2 一个容易混淆的事实：Minecraft 没有钢琴音色
 
@@ -29,7 +29,7 @@
 
 ### 1.3 目标
 
-- 让每条 MIDI 轨按它真正的乐器发声，覆盖 16 种原版乐器（13 种有音高 + 3 种固定音高鼓）。
+- 让每条 MIDI 轨按它真正的乐器发声，覆盖 16 种经典音符盒乐器（13 种旋律映射和 3 种鼓映射）。
 - 保留现有的「扩展竖琴音域」能力，纯钢琴文件的行为不变。
 - 两种模式可以在界面上切换，默认「扩展竖琴音域」。
 - 红石后端和命令方块后端都支持。
@@ -87,30 +87,32 @@
 
 数据来源：[Minecraft Wiki: Note Block](https://minecraft.wiki/w/Note_Block)。锚点是 `note=0` 时对应的 MIDI 音高。
 
-| 乐器           | 底块             | 音域    | 锚点 | 有音高 |
-| -------------- | ---------------- | ------- | ---- | ------ |
-| harp           | 泥土（多数方块） | F#3–F#5 | 54   | 是     |
-| bass           | 木头             | F#1–F#3 | 30   | 是     |
-| didgeridoo     | 南瓜             | F#1–F#3 | 30   | 是     |
-| guitar         | 羊毛             | F#2–F#4 | 42   | 是     |
-| flute          | 黏土             | F#4–F#6 | 66   | 是     |
-| cow_bell       | 灵魂沙           | F#4–F#6 | 66   | 是     |
-| bell           | 金块             | F#5–F#7 | 78   | 是     |
-| chime          | 浮冰             | F#5–F#7 | 78   | 是     |
-| xylophone      | 骨块             | F#5–F#7 | 78   | 是     |
-| iron_xylophone | 铁块             | F#3–F#5 | 54   | 是     |
-| bit            | 绿宝石块         | F#3–F#5 | 54   | 是     |
-| banjo          | 干草块           | F#3–F#5 | 54   | 是     |
-| pling          | 萤石             | F#3–F#5 | 54   | 是     |
-| basedrum       | 石头             | 无      | —    | 否     |
-| snare          | 沙子             | 无      | —    | 否     |
-| hat            | 玻璃             | 无      | —    | 否     |
+| 乐器           | 底块             | 音域    | 锚点 | MIDI 旋律映射 |
+| -------------- | ---------------- | ------- | ---- | ------------- |
+| harp           | 泥土（多数方块） | F#3–F#5 | 54   | 是            |
+| bass           | 木头             | F#1–F#3 | 30   | 是            |
+| didgeridoo     | 南瓜             | F#1–F#3 | 30   | 是            |
+| guitar         | 羊毛             | F#2–F#4 | 42   | 是            |
+| flute          | 黏土             | F#4–F#6 | 66   | 是            |
+| cow_bell       | 灵魂沙           | F#4–F#6 | 66   | 是            |
+| bell           | 金块             | F#5–F#7 | 78   | 是            |
+| chime          | 浮冰             | F#5–F#7 | 78   | 是            |
+| xylophone      | 骨块             | F#5–F#7 | 78   | 是            |
+| iron_xylophone | 铁块             | F#3–F#5 | 54   | 是            |
+| bit            | 绿宝石块         | F#3–F#5 | 54   | 是            |
+| banjo          | 干草块           | F#3–F#5 | 54   | 是            |
+| pling          | 萤石             | F#3–F#5 | 54   | 是            |
+| basedrum       | 石头             | 无      | —    | 否            |
+| snare          | 沙子             | 无      | —    | 否            |
+| hat            | 玻璃             | 无      | —    | 否            |
 
-### 3.2 固定音高鼓
+### 3.2 鼓的映射音高
 
-basedrum / snare / hat 的音高由采样固定，`note` 值不影响发声。生成时统一写 `note=0`，命令后端用 `pitch=1`。
+Java 1.20.4 对 basedrum、snare、hat 同样按音符盒的 `note` 值调音。`NoteBlock.triggerEvent` 使用 `2 ** ((note - 12) / 12)`，这三种声音在 `NoteBlockInstrument` 中属于可调音的 `BASE_BLOCK` 类型。[Mojang 1.20.4 版本清单与官方映射](https://piston-meta.mojang.com/v1/packages/4d0b218aac37f052c75d0a5edac9ae9d09674a5d/1.20.4.json)
 
-### 3.3 扩展模式的替代表（待确认）
+本项目把这三种鼓统一映射到 `note=0`。命令后端对应使用 `pitch=0.5`，与红石音符盒的采样倍率一致。
+
+### 3.3 扩展模式的替代表
 
 | 原生乐器 | 扩展模式替代 | 理由                                                                     |
 | -------- | ------------ | ------------------------------------------------------------------------ |
@@ -126,22 +128,19 @@ basedrum / snare / hat 的音高由采样固定，`note` 值不影响发声。�
 
 ### 4.1 优先级
 
-按你的要求，GM 音色优先，其次鼓通道，再其次轨道名，最后 harp。但通道 9 要特殊处理：它的 GM 音色是「架子鼓」，不能拿去查旋律乐器表。
-
-实际规则：
+先识别 GM 打击乐通道（零基 9，通常显示为第 10 通道），其余通道使用旋律 GM 音色表。
 
 1. **通道 9（打击乐）**
    - 音符 35/36 → basedrum
    - 38/40 → snare
    - 42/44/46 → hat
-   - 不在这三组里的音符：查轨道名；名字能识别成有音高乐器就用（例如 Cow Bell → cow_bell）；否则丢弃，并汇总一条警告。
+   - 不在这三组里的音符：查轨道名；名字能识别成乐器就用（例如 Cow Bell → cow_bell）；否则丢弃，并汇总一条警告。
 2. **非通道 9**
    - GM 音色号查 4.4 的表；查到就用。
    - 查不到（音色号缺失或不在表里）→ 查轨道名。
    - 都不行 → harp。
-3. 轨道名为空、叫「主旋律」「伴奏」这类不带乐器名的，不影响 GM 优先；只有在 GM 缺失时才看名字。
 
-补充：`@tonejs/midi` 在解析时已经按 `(program, channel)` 拆分轨道（`splitTracks`），所以 Format 0 里一条 MTrk 含多个乐器时，进入本项目时已经是多条 `TrackModel`，按轨识别仍然成立。
+`parseMidi` 读取原始 MTrk 事件，先按通道和音高配对按下与松开，再按通道和按下时的 program 归组。每个逻辑轨继承源轨名。Format 0 的单条 MTrk 因此也能形成多个 `TrackModel`。
 
 ### 4.2 通道 9 的例外
 
@@ -359,23 +358,22 @@ note = midi + 12 * transpose + 12 * k - A
 
 ### 5.5 打击乐
 
-固定音高，跳过 5.2 的八度选择；`note=0`，命令后端 `pitch=1`。被丢弃的鼓音符按轨汇总成一条警告，不逐音刷屏。
+鼓通道跳过 5.2 的八度选择。映射音写 `note=0`，命令后端换算为 `pitch=0.5`。被丢弃的鼓音符按轨汇总成一条警告。
 
-## 6. 代码改动
+## 6. 实现
 
 ### 6.1 新增模块
 
 - `src/core/palette/instruments.ts`
   - `NoteBlockInstrument` 改为 16 值联合。
-  - `INSTRUMENTS`：底块、锚点、音域、是否固定音高、sound event。
+  - `INSTRUMENTS`：底块、旋律映射的锚点和音域、sound event。
   - `PIANO_SLOTS`、`DRUM_INSTRUMENTS`、`instrumentRange()`。
 - `src/core/palette/instrumentMap.ts`
   - `GM_INSTRUMENTS`：128 项表。
   - `instrumentFromName()`：最长匹配、中英文别名。
   - `drumInstrument()`：35/36、38/40、42/44/46。
-  - `detectInstrument(track)`：返回乐器 + 来源（gm/name/drum/fallback）。
-- `src/core/palette/pitchMap.ts`
-  - 保留现有 `mapPitch`（五槽模式），新增 `mapPitchToInstrument(midi, instrument, policy, transpose)`。
+  - `detectTrack(track)`：返回乐器 + 来源（gm/name/drum/fallback）。
+- `src/core/palette/pitchMap.ts` 的 `mapPitch` 用于五槽模式。`src/core/palette/instrumentPitch.ts` 提供 `mapPitchToInstrument` 和 `mapDrumNote`。
   - `MappedPitch` 保持兼容；新函数返回带 `instrument` 和 `block` 的结构。
 
 ### 6.2 布局
@@ -403,8 +401,8 @@ note = midi + 12 * transpose + 12 * k - A
 
 - `ScheduleOptions` 增加 `assignments`。
 - `collectEvents` 按 voicing 选 `mapPitch`、`mapPitchToInstrument` 或 `mapDrumNote`。
-- `sound = minecraft:block.note_block.<instrument>`；鼓 `pitch=1`，有音高乐器用 `playbackPitch(note)`。
-- `NOTE_BLOCK_INSTRUMENTS` 扩到 16；`buildStopCommands(objective, used)` 只停止实际用到的音色。
+- `sound = minecraft:block.note_block.<instrument>`，所有乐器的 `pitch` 统一用 `playbackPitch(note)`。
+- 每次编译分配独立的计分板与 storage 标识。停止时只清理当前播放器的时钟和待播帧。
 - `CommandPlaybackInfo` 增加 `instruments`。
 
 ### 6.4 主进程
@@ -415,7 +413,7 @@ note = midi + 12 * transpose + 12 * k - A
   - 逐轨 `detectTrack`。
   - native：全部 `kind:'instrument'`（原生）；通道 9 为 `kind:'drums'`。
   - extended：harp/未识别 → `kind:'pitch'`；bass/guitar/flute/bell → 替代；其余 → 原生；通道 9 → `kind:'drums'`。
-- `TrackModel` 增加 `program?: number`（GM 音色号），由 `parseMidi` 从库的 `track.instrument.number` 填入。没有它就无法实现 GM 优先。
+- `TrackModel.program` 记录原始 MIDI 事件中按下音符时的 GM 音色号。没有 `programChange` 时保留 `undefined`，显式 GM 0 保留为 0。
 - `AnalyzeResult.tracks` 增加 `program`、`detectedInstrument`、`detectionSource`，供选轨页显示。
 - `GenerateResult` 增加 `trackInstruments`；`pitchRange` 只在存在五槽钢琴轨时有值，否则为 `undefined`。
 - CLI（`scripts/cli.ts`）只做分析，不生成；它在每轨输出里增加 `GM` 与 `识别=...`，没有 `--mode`。
@@ -507,7 +505,7 @@ note = midi + 12 * transpose + 12 * k - A
 
 ### 10.2 单元
 
-- 16 种乐器的底块/锚点/音域/固定音高。
+- 16 种乐器的底块、旋律映射的锚点和音域、鼓映射的音符值。
 - GM 表 128 项完整、无缺号。
 - 名称别名的最长匹配（Bass Drum 不落 Bass、Iron Xylophone 不落 Xylophone、Cow Bell 不落 Bell）。
 - 通道 9 映射与 Cow Bell 例外。
@@ -522,7 +520,7 @@ note = midi + 12 * transpose + 12 * k - A
   - 音符守恒：除被丢弃的鼓音符外不丢音。
   - 时序不变：沿用 `layout.acceptance` 的不变量。
   - litematic 往返 + `VerifyLitematic.java` 独立校验。
-- 命令后端：每轨 sound event 正确；鼓 `pitch=1`，停止应只清除当前播放器尚未播放的帧。
+- 命令后端：每轨 sound event 正确，鼓 `pitch=0.5` 与红石 `note=0` 一致。停止只清理当前播放器的时钟和待播帧。
 - `warningCoverage`：新警告码都有文案和发射点。
 
 ### 10.4 UI
