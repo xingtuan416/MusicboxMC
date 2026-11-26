@@ -7,6 +7,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-11-27
+
+### Fixed
+
+- Command playback uses the Java 1.20.4 note-block pitch formula for bass drum, snare and hi-hat, matching the redstone export.
+
+### Changed
+
+- Align maintenance and review rules with the verified percussion-channel mapping, MIDI parsing, NBT string encoding and Windows packaging behavior.
+
 ## [0.4.6] - 2026-11-25
 
 ### Added
@@ -477,7 +487,8 @@ First release. Windows x64, Electron 33.
 - Pure TypeScript NBT codec and Litematica bit packing; output is a Java 1.20.4
   `.litematic` that Litematica loads directly.
 
-[Unreleased]: https://github.com/xingtuan416/MusicboxMC/compare/v0.4.6...HEAD
+[Unreleased]: https://github.com/xingtuan416/MusicboxMC/compare/v0.4.7...HEAD
+[0.4.7]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.4.7
 [0.4.6]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.4.6
 [0.4.5]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.4.5
 [0.4.0]: https://github.com/xingtuan416/MusicboxMC/releases/tag/v0.4.0
